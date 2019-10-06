@@ -25,7 +25,7 @@
 
 
 // Self defined headers
-#include "octopus_client.h"
+#include "semeru_cpu.h"
 
 
 

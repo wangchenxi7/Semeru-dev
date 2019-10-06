@@ -27,7 +27,7 @@
  * 
  */
 
-#include "octopus_client.h"
+#include "semeru_cpu.h"
 
 
 MODULE_AUTHOR("Excavator,plsys");
@@ -76,6 +76,11 @@ int octopus_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_even
 	switch (event->event) {
 	case RDMA_CM_EVENT_ADDR_RESOLVED:
 		rdma_session->state = ADDR_RESOLVED;
+
+		#ifdef DEBUG_RDMA_CLIENT
+		printk("%s,  get RDMA_CM_EVENT_ADDR_RESOLVED. Send RDMA_ROUTE_RESOLVE to Memory server \n",__func__);
+		#endif 
+
 		// Go to next step, resolve the rdma route.
 		ret = rdma_resolve_route(cma_id, 2000);
 		if (ret) {
@@ -321,7 +326,7 @@ int octopus_create_rdma_queues(struct rdma_session_context *rdma_session, struct
 
 err:
 	//ib_dealloc_pd(cb->pd);
-  	printk(KERN_ERR "Error in %s \n", __func__);
+  printk(KERN_ERR "Error in %s \n", __func__);
 	return ret;
 }
 
@@ -517,20 +522,21 @@ int octopus_connect_remote_memory_server(struct rdma_session_context *rdma_sessi
 
 /**
  * RDMA  CQ event handler.
- * After invoke the cq_notify, everytime a wc is insert into completion queue entry, notify to the process by invoking "rdma_cq_event_handler".
+ * After invoke the cq_notify, everytime a wc is insert into completion queue entry, 
+ * notify to the process by invoking "rdma_cq_event_handler".
  * 
  * 
- * [?] For the RDMA read/write, is  there also a WC to acknowledge the finish of this ??
+ * [x] For the 1-sided RDMA read/write, there is also a WC to acknowledge the finish of this.
  * 
  * 
  * 
  * 
  */
-void octopus_cq_event_handler(struct ib_cq * cq, void *rdma_ctx)    // cq : kernel_cb->cq;  ctx : cq->context, just the kernel_cb
-{
-	bool 							stop_waiting_on_cq 	= 	false;
-	struct rdma_session_context 	*rdma_session		=	rdma_ctx;
-	struct ib_wc 					wc;
+void octopus_cq_event_handler(struct ib_cq * cq, void *rdma_ctx){    // cq : kernel_cb->cq;  ctx : cq->context, just the kernel_cb
+
+	bool 	 												stop_waiting_on_cq 	= false;
+	struct rdma_session_context 	*rdma_session				=	rdma_ctx;
+	struct ib_wc 									wc;
 	//struct ib_recv_wr 	*bad_wr;
 	int ret = 0;
 	BUG_ON(rdma_session->cq != cq);
@@ -543,28 +549,20 @@ void octopus_cq_event_handler(struct ib_cq * cq, void *rdma_ctx)    // cq : kern
 	printk("%s: Receive cq[%llu] \n", __func__, cq_get_count++);
 	#endif
 
+	// Notify_cq, poll_cq are all both one-shot
+	// Get notification for the next one or several wc.
+	ret = ib_req_notify_cq(rdma_session->cq, IB_CQ_NEXT_COMP);   
+	if (unlikely(ret)) {
+		printk(KERN_ERR "%s: request for cq completion notification failed \n",__func__);
+		goto err;
+	}
+	#ifdef DEBUG_RDMA_CLIENT
+	else{
+		printk("%s: cq_notify_count : %llu , wait for next cq_event \n",__func__, cq_notify_count++);
+	}
+	#endif
 
-	// Get notified by the arriving of next WC.
-	// The action is to trigger current function, rdma_cq_event_handler.
-	//
-	// I tink it's better to call this mannual.
-	//ib_req_notify_cq(rdma_session->cq, IB_CQ_NEXT_COMP);
-
-
-		// Notify_cq, poll_cq are all both one-shot
-		// Get notification for the next wc.
-		ret = ib_req_notify_cq(rdma_session->cq, IB_CQ_NEXT_COMP);   
-		if (unlikely(ret)) {
-			printk(KERN_ERR "%s: request for cq completion notification failed \n",__func__);
-			goto err;
-		}
-		#ifdef DEBUG_RDMA_CLIENT
-		else{
-			printk("%s: cq_notify_count : %llu , wait for next cq_event \n",__func__, cq_notify_count++);
-		}
-		#endif
-
-	// If current function, rdma_cq_event_handler, is invoked, a WC is on the CQE.
+	// If current function, rdma_cq_event_handler, is invoked, one or several WC is on the CQE.
 	// Get the SIGNAL, WC, by invoking ib_poll_cq.
 	//
 	//drivers/infiniband/hw/mlx4/main.c:2707:	ibdev->ib_dev.poll_cq		= mlx4_ib_poll_cq;
@@ -735,8 +733,7 @@ int send_message_to_remote(struct rdma_session_context *rdma_session, int messge
  * 		According to the RDMA message information, rdma_session_context->state, to set some fields.
  * 		FREE_SIZE : set the 
  */
-int handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc)
-{
+int handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc){
 	int ret;
 	int i;		// Some local index
 
@@ -868,7 +865,8 @@ int octupos_requset_for_chunk(struct rdma_session_context* rdma_session, int num
 	#endif
 
 	// Post the send WR
-	ret = send_message_to_remote(rdma_session, num_chunk == 1 ? REQUEST_SINGLE_CHUNK : REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
+//	ret = send_message_to_remote(rdma_session, num_chunk == 1 ? REQUEST_SINGLE_CHUNK : REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
+	ret = send_message_to_remote(rdma_session, REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
 	if(ret) {
 		printk(KERN_ERR "%s, Post 2-sided message to remote server failed.\n", __func__);
 		goto err;
@@ -1554,8 +1552,8 @@ void bind_remote_memory_chunks(struct rdma_session_context *rdma_session ){
 		
 		if(rdma_session->recv_buf->rkey[i]){
 			// Sent chunk, attach to current chunk_list's tail.
-			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey = ntohl(rdma_session->recv_buf->rkey[i]);
-			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr = ntohll(rdma_session->recv_buf->buf[i]);
+			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey = rdma_session->recv_buf->rkey[i];
+			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr = rdma_session->recv_buf->buf[i];
 			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].chunk_state = MAPPED;
 			
 
@@ -1632,37 +1630,37 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	// rdma_cm_event_handler : Register a CM event handler function. Used for RDMA connection.
 	// IB driver_data   	 : rdma_session_context
 	// RDMA connect type 	 : IB_QPT_RC, reliable communication.
-  	rdma_session->cm_id = rdma_create_id(&init_net, octopus_rdma_cm_event_handler, rdma_session, RDMA_PS_TCP, IB_QPT_RC);  // TCP, RC, reliable IB connection 
+  rdma_session->cm_id = rdma_create_id(&init_net, octopus_rdma_cm_event_handler, rdma_session, RDMA_PS_TCP, IB_QPT_RC);  // TCP, RC, reliable IB connection 
   	
 	// Used for a async   
 	rdma_session->state = IDLE;
 
-  	// The number of  on-the-fly wr ?? every cores handle one ?? 
+  // The number of  on-the-fly wr ?? every cores handle one ?? 
 	// This depth is used for CQ entry ? send/receive queue depth ?
-  	rdma_session->txdepth = RDMA_READ_WRITE_QUEUE_DEPTH * num_online_cpus() + 1; //[?] What's this used for ? What's meaning of the value ?
+  rdma_session->txdepth = RDMA_READ_WRITE_QUEUE_DEPTH * num_online_cpus() + 1; //[?] What's this used for ? What's meaning of the value ?
 	rdma_session->freed = 0;	// Flag of functions' called number. 
 
-  	// Setup socket information
+  // Setup socket information
 	// Debug : for test, write the ip:port as 10.0.0.2:9400
-  	rdma_session->port = htons((uint16_t)9400);  // After transffer to big endian, the decimal value is 47140
-  	ret= in4_pton(ip, strlen(ip), rdma_session->addr, -1, NULL);   // char* to ipv4 address ?
-  	if(ret == 0){  		// kernel 4.11.0 , success 1; failed 0.
+  rdma_session->port = htons((uint16_t)9400);  // After transffer to big endian, the decimal value is 47140
+  ret= in4_pton(ip, strlen(ip), rdma_session->addr, -1, NULL);   // char* to ipv4 address ?
+  if(ret == 0){  		// kernel 4.11.0 , success 1; failed 0.
 		printk("Assign ip %s to  rdma_session->addr : %s failed.\n",ip, rdma_session->addr );
 	}
 	rdma_session->addr_type = AF_INET;  //ipv4
 
 
   	// Initialize the queue.
-   	init_waitqueue_head(&rdma_session->sem);
+  init_waitqueue_head(&rdma_session->sem);
 	#ifdef DEBUG_RDMA_CLIENT
   	printk("%s, Initialized rdma_session_context fields successfully.\n", __func__);
 	#endif
 
-  	//2) Resolve address(ip:port) and route to destination IB. 
-   	ret = rdma_resolve_ip_to_ib_device(rdma_session);
+  //2) Resolve address(ip:port) and route to destination IB. 
+  ret = rdma_resolve_ip_to_ib_device(rdma_session);
 	if (unlikely(ret)){
 		printk (KERN_ERR "%s, bind socket error (addr or route resolve error)\n", __func__);
-     	return ret;
+		return ret;
    	}
 	#ifdef DEBUG_RDMA_CLIENT
 	else{
@@ -1670,15 +1668,15 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
    	}
 	#endif
 
-  	// 3) Create the QP,CQ, PD
+  // 3) Create the QP,CQ, PD
 	//  Before we connect to remote memory server, we have to setup the rdma queues, CQ, QP.
 	//	We also need to register the DMA buffer for two-sided communication and configure the Protect Domain, PD.
 	//
 	// Build the rdma queues.
-  	ret = octopus_create_rdma_queues(rdma_session, rdma_session->cm_id);
-  	if(unlikely(ret)){
+  ret = octopus_create_rdma_queues(rdma_session, rdma_session->cm_id);
+  if(unlikely(ret)){
 		printk(KERN_ERR "%s, Create rdma queues failed. \n", __func__);
-  	}
+  }
 
 	// 4) Register some message passing used DMA buffer.
 	// 
@@ -1686,7 +1684,7 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	// 4.1) 2-sided RDMA message intialization
 	//rdma_session->mem = DMA;
 	// !! Do nothing for now.
-  	ret = octopus_setup_buffers(rdma_session);
+  ret = octopus_setup_buffers(rdma_session);
 	if(unlikely(ret)){
 		printk(KERN_ERR "%s, Bind DMA buffer error\n", __func__);
 	}
