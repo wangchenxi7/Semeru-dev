@@ -554,21 +554,16 @@ err:
 
 /**
  * RDMA  CQ event handler.
- * After invoke the cq_notify, everytime a wc is insert into completion queue entry, 
- * notify to the process by invoking "rdma_cq_event_handler".
- * 
+ *  In user space, we have to invoke ibv_get_cq_event() mannual to get the received CQ event.
  * 
  * [x] For the 1-sided RDMA read/write, there is also a WC to acknowledge the finish of this.
- * 
- * 
- * 
- * 
  */
-void octopus_cq_event_handler(struct ibv_cq * cq, void *rdma_ctx){    // cq : kernel_cb->cq;  ctx : cq->context, just the kernel_cb
+int octopus_cq_event_handler(struct rdma_session_context 	*rdma_session){    // cq : kernel_cb->cq;  ctx : cq->context, just the kernel_cb
 
 	bool 	 												stop_waiting_on_cq 	= 	false;
-	struct rdma_session_context 	*rdma_session		=	rdma_ctx;
 	struct ibv_wc 									wc;
+	struct ibv_cq *evt_cq;			// Only used for ack the sender, we received the cq event ?
+	void*		cq_context_null;		// [?] What's this used for ? 
 	//struct ib_recv_wr 	*bad_wr;
 	int ret = 0;
 	//BUG_ON(rdma_session->cq != cq);
@@ -577,9 +572,21 @@ void octopus_cq_event_handler(struct ibv_cq * cq, void *rdma_ctx){    // cq : ke
 		return;
 	}
 
+	// 1) Poll the CQ from CQ channel mannually.
+	if (ibv_get_cq_event(rdma_session->comp_channel ,&evt_cq, &cq_context_null) != 0){
+		printf("%s, ibv_get_cq_event failed.\n",__func__);
+		ret = -1;
+		goto err;
+	}
+
 	#ifdef DEBUG_RDMA_CLIENT
 	printf("%s: Receive cq[%llu] \n", __func__, cq_get_count++);
 	#endif
+
+	// 2) ACK the received CQ
+	// 	This operation is done with mutex, slow.
+	ibv_ack_cq_events(evt_cq, 1);
+
 
 	// Notify_cq, poll_cq are all both one-shot
 	// Get notification for the next one or several wc.
@@ -711,12 +718,12 @@ void octopus_cq_event_handler(struct ibv_cq * cq, void *rdma_ctx){    // cq : ke
 	// 	goto err;
 	// }
 
-	return;
+	return ret;
 err:
 	printf( "ERROR in %s \n",__func__);
 	rdma_session->state = ERROR;
 	octopus_disconenct_and_collect_resource(rdma_session);  // Disconnect and free all the resource.
-	return;
+	return ret;
 }
 
 
@@ -748,7 +755,18 @@ int send_message_to_remote(struct rdma_session_context *rdma_session, int messge
 	}
 	#endif
 
+	// handle the post_send signal.
+	ret = octopus_cq_event_handler(rdma_session);
+	if(ret){
+		printf("%s, octopus_cq_event_handler : SEND_DONE failed. \n",__func__);
+		goto err;
+	}
+
 	return ret;	
+
+err:
+	printf("ERROR in %s \n",__func__);
+	return ret;
 }
 
 
@@ -902,6 +920,13 @@ int octupos_requset_for_chunk(struct rdma_session_context* rdma_session, int num
 	ret = send_message_to_remote(rdma_session, REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
 	if(ret) {
 		printf( "%s, Post 2-sided message to remote server failed.\n", __func__);
+		goto err;
+	}
+
+	// Handle the post_recv signal.
+	ret	=	octopus_cq_event_handler(rdma_session);
+	if(ret){
+		printf("%s, octopus_cq_event_handler : RECEIVED_CHUNKS failed. \n",__func__);
 		goto err;
 	}
 
@@ -1327,8 +1352,8 @@ void bind_remote_memory_chunks(struct rdma_session_context *rdma_session ){
 		
 		if(rdma_session->recv_buf->rkey[i]){
 			// Sent chunk, attach to current chunk_list's tail.
-			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey = ntohl(rdma_session->recv_buf->rkey[i]);
-			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr = ntohll(rdma_session->recv_buf->buf[i]);
+			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey = rdma_session->recv_buf->rkey[i];
+			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr = rdma_session->recv_buf->buf[i];
 			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].chunk_state = MAPPED;
 			
 
@@ -1520,7 +1545,8 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	}
 	#ifdef DEBUG_RDMA_CLIENT
 	else{
-		printf("%s, Connect to remote server successfully \n", __func__);
+		printf("%s, CPU server state should be CONNECTED, actual is  : %s \n", __func__,
+																							rdma_session_context_state_print(rdma_session->state) );
 	}
 	#endif
 
@@ -1547,9 +1573,19 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	}
 	#endif
 
+
+	ret	=	octopus_cq_event_handler(rdma_session);
+	if(ret){
+		printf("%s, octopus_cq_event_handler : FREE_MEM_RECV failed. \n",__func__);
+		goto err;
+	}
+
 	// Sequence controll
 	//wait_event_interruptible( rdma_session->sem, rdma_session->state == FREE_MEM_RECV );
 	sem_wait(&rdma_session->sem);
+	printf("%s,CPU server state should be FREE_MEM_RECV, actual is : %s  \n", 
+																																																						__func__,
+																																		rdma_session_context_state_print(rdma_session->state) );
 
 	// b. Post the receive WR.
 	// Should post this recv WR before connect the RDMA connection ?
@@ -1569,17 +1605,21 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	// 		rdma_session_context : driver data
 	//		number of requeted chunks
 	#ifdef DEBUG_RDMA_CLIENT
-	printf("%s: Got free memory size from remote memory server. Request for Chunks : %u \n",__func__, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);
+	printf("%s: Request for Chunks bind: %u \n",__func__, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);
 	#endif
 	ret = octupos_requset_for_chunk(rdma_session, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);  // 8 chunk, 1 GB/chunk.
 	if(ret){
-		printf("%s, request for chunk failed.\n", __func__);
+		printf("%s, Bind chunks failed.\n", __func__);
 		goto err;
 	}
+
 
 	// Sequence controll
 	//wait_event_interruptible( rdma_session->sem, rdma_session->state == RECEIVED_CHUNKS );
 	sem_wait(&(rdma_session->sem));
+	printf("%s,CPU server state should be RECEIVED_CHUNKS, actual is : %s  \n", 
+																																																						__func__,
+																																		rdma_session_context_state_print(rdma_session->state) );
 
 
 	// SECTION 2
@@ -1876,7 +1916,7 @@ void  octopus_rdma_client_cleanup_module(void){
   	
 	int ret;
 	
-	printf(" Prepare for removing Kernel space IB test module - octopus .\n");
+	printf(" Prepare to disconnect RDMA and free all the resource .\n");
 
 	// 
 	//[?] Should send a disconnect event to remote memory server?
@@ -1897,12 +1937,13 @@ void  octopus_rdma_client_cleanup_module(void){
 	//
 	// 2)  Free the Block Device resource
 	//
-
-
-	printf(" Remove Module OCTOPUS DONE. \n");
-	//
 	// [!!] This cause kernel crashes, not know the reason now.
 	//
+
+
+	// 3) Kill all the running pthreads.
+	printf("%s, Exit all the running pthreads. \n",__func__);
+	pthread_exit(NULL);
 
 
 	return;
@@ -1925,6 +1966,7 @@ int main(int argc, char* argv[]){
 
 	// free resource
 	octopus_rdma_client_cleanup_module();
+
 
 	return 0;
 }

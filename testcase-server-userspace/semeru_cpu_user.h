@@ -140,7 +140,7 @@ enum rdma_session_context_state {
 	ROUTE_RESOLVED,
 	CONNECTED,		// 5,  updated by IS_cma_event_handler()
 
-	FREE_MEM_RECV,
+	FREE_MEM_RECV,		// Received free memory information from Memory server.
 	RECEIVED_CHUNKS,	// get chunks from remote memory server
 	RDMA_BUF_ADV,   // designed for server
 	WAIT_OPS,
@@ -505,18 +505,19 @@ int 	octopus_RDMA_connect(struct rdma_session_context *rdma_session_ptr);
 //int 	octopus_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *event);
 int 	octopus_rdma_cm_event_handler(struct rdma_session_context *rdma_session_ptr);
 
-void 	octopus_cq_event_handler(struct ibv_cq * cq, void *rdma_session_context);
+//void 	octopus_cq_event_handler(struct ibv_cq * cq, void *rdma_session_context);
+int 	octopus_cq_event_handler(struct rdma_session_context 	*rdma_session_ptr);
 int 	handle_recv_wr(struct rdma_session_context *rdma_session, struct ibv_wc *wc);
 int 	send_message_to_remote(struct rdma_session_context *rdma_session, int messge_type  , int size_gb);
-		void 	map_single_remote_memory_chunk(struct rdma_session_context *rdma_session);
+void 	map_single_remote_memory_chunk(struct rdma_session_context *rdma_session_ptr);
 
 
 // 1-sided RDMA message
-int		post_rdma_write(struct rdma_session_context *rdma_session, struct request* io_rq, struct rmem_rdma_queue* rdma_q_ptr,  
+int		post_rdma_write(struct rdma_session_context *rdma_session_ptr, struct request* io_rq, struct rmem_rdma_queue* rdma_q_ptr,  
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offse_within_chunk, uint64_t len );
 int 	rdma_write_done(struct ibv_wc *wc);
 
-int 	post_rdma_read(struct rdma_session_context *rdma_session, struct request* io_rq, struct rmem_rdma_queue* rdma_q_ptr,  
+int 	post_rdma_read(struct rdma_session_context *rdma_session_ptr, struct request* io_rq, struct rmem_rdma_queue* rdma_q_ptr,  
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offse_within_chunk, uint64_t len );
 int 	rdma_read_done(struct ibv_wc *wc);
 
@@ -525,8 +526,8 @@ struct rmem_rdma_command* get_a_free_rdma_cmd_from_rdma_q(struct rmem_rdma_queue
 
 
 // Chunk management
-int 	init_remote_chunk_list(struct rdma_session_context *rdma_session );
-void 	bind_remote_memory_chunks(struct rdma_session_context *rdma_session );
+int 	init_remote_chunk_list(struct rdma_session_context *rdma_session_ptr );
+void 	bind_remote_memory_chunks(struct rdma_session_context *rdma_session_ptr );
 
 
 
@@ -538,7 +539,7 @@ void 	copy_data_to_rdma_buf(struct request *io_rq, struct rmem_rdma_command *rdm
 //
 // Block Device functions
 //
-int   	rmem_init_disk_driver(struct rmem_device_control *rmem_dev_ctl);
+int   rmem_init_disk_driver(struct rmem_device_control *rmem_dev_ctl);
 int 	RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctrl );
 
 //
