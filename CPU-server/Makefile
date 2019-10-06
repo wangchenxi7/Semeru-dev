@@ -12,7 +12,7 @@
 #
 
 
-kernel_rdma_module_dir=/lib/modules/$(shell uname -r)/extra/octopus_client
+kernel_rdma_module_dir=/lib/modules/$(shell uname -r)/extra/semeru_cpu
 
 
 #ccflags-y := -v
@@ -24,10 +24,10 @@ kernel_rdma_module_dir=/lib/modules/$(shell uname -r)/extra/octopus_client
 
 
 # obj-[m] means compile this module but not link it into kernel at startup.
-obj-m += octopus_client.o
+obj-m += semeru_cpu.o
 
-octopus_client-y	:= register_disk.o	# main entry
-octopus_client-y 	+= rdma_client.o	# merged library
+semeru_cpu-y	:= register_disk.o	# main entry
+semeru_cpu-y 	+= rdma_client.o	# merged library
 
 
 all:
@@ -40,8 +40,8 @@ clean:
 
 install:
 	mkdir -p $(kernel_rdma_module_dir)
-	/usr/bin/install -c -m 644 ./octopus_client.ko $(kernel_rdma_module_dir)
+	/usr/bin/install -c -m 644 ./semeru_cpu.ko $(kernel_rdma_module_dir)
 
 uninstall:
-	modprobe -r octopus_client
-	rm $(kernel_rdma_module_dir)/octopus_client.ko
+	modprobe -r semeru_cpu
+	rm $(kernel_rdma_module_dir)/semeru_cpu.ko
