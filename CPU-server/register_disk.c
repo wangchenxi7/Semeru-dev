@@ -37,6 +37,18 @@ int rmem_major_num;
 struct rmem_device_control      rmem_dev_ctrl_global;
 u64 RMEM_SIZE_IN_PHY_SECT =     ONE_GB / RMEM_PHY_SECT_SIZE * MAX_REMOTE_MEMORY_SIZE_GB;    // 16M physical sector, 8GB.
 
+#ifdef DEBUG_LATENCY_CLIENT
+#define NUM_OF_CORES    32
+u32 * cycles_high_before;
+u32 * cycles_high_after;
+u32 * cycles_low_before;
+u32 * cycles_low_after;
+
+// u32 * cycles_high_before  = kzalloc(sizeof(unsigned int) * NUM_OF_CORES, GFP_KERNEL); 
+// u32 * cycles_high_after   = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
+// u32 * cycles_low_before   = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
+// u32 * cycles_low_after    = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
+#endif
 
 /**
  * 1) Define device i/o operation
@@ -139,9 +151,9 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
   #ifdef DEBUG_RDMA_CLIENT
   u64 seg_num   = rq->nr_phys_segments;  // number of bio ??
   u64 byte_len  = blk_rq_bytes(rq);
-  struct bio * bio_ptr;
-    struct bio_vec *bv;
-    int i;
+  struct bio      *bio_ptr;
+  struct bio_vec  *bv;
+  int i;
 
   if(rq_data_dir(rq) == WRITE){
     printk("%s: dispatch_queue[%d], get a write request, tag :%d >>>>>  \n", __func__, hctx->queue_num, rq->tag);
@@ -166,11 +178,11 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
   //     }//for
   // }// only print read for now
-     bio_ptr = rq->bio;
-     bio_for_each_segment_all(bv, bio_ptr, i) {
-        struct page *page = bv->bv_page;
-        printk("%s: handle struct page:0x%llx >> \n", __func__, (u64)page );
-    }
+  bio_ptr = rq->bio;
+  bio_for_each_segment_all(bv, bio_ptr, i) {
+    struct page *page = bv->bv_page;
+      printk("%s: handle struct page:0x%llx >> \n", __func__, (u64)page );
+  }
 
   #endif
 
@@ -180,6 +192,22 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
   cpu = get_cpu();
   
+
+  // start count  the time
+  #ifdef DEBUG_LATENCY_CLIENT
+
+  // Read the rdtsc timestamp and put its value into two 32 bits variables.
+  asm volatile("xorl %%eax, %%eax\n\t"
+              "CPUID\n\t"
+              "RDTSC\n\t"
+              "mov %%edx, %0\n\t"
+              "mov %%eax, %1\n\t"
+              : "=r"(cycles_high_before[rdma_q_ptr->q_index]), "=r"(cycles_low_before[rdma_q_ptr->q_index])::"%rax", "%rbx", "%rcx",
+                "%rdx");
+
+
+  #endif
+
   #ifdef DEBUG_RDMA_CLIENT
   printk("%s: get cpu %d \n",__func__, cpu);
   #endif
@@ -272,7 +300,7 @@ int rmem_end_io(struct bio * bio, int err){
 static struct blk_mq_ops rmem_mq_ops = {
     .queue_rq       = rmem_queue_rq,
     .map_queues     = blk_mq_map_queues,      // Map staging queues to  hardware dispatch queues via the cpu id.
-    .init_hctx        = rmem_init_hctx,
+    .init_hctx      = rmem_init_hctx,
  // .complete       =                       // [?] Do we need to initialize this ?
 };
 
@@ -285,14 +313,21 @@ static struct blk_mq_ops rmem_mq_ops = {
  *    rdma_q_ptr: the corresponding RDMA queue of this dispatch queue.
  *    rq        : the popped requset from dispatch queue.
  * 
+ * 
+ * More Explanation
+ *  [?] In our design, we want the start_addr of file page is equal to the address of virtual pages. 
+ *      How to implement this ?
+ *        When a swapwrite happens, we get a file page having the same address with the virtual page.
+ *         => This needs to modify the Kernel swap mechanism. 
+ * 
  */
 int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct request * rq){
 
   int ret = 0;
-  int write_or_not        = (rq_data_dir(rq) == WRITE);
-  uint64_t  start_addr    = blk_rq_pos(rq) << RMEM_LOGICAL_SECT_SHIFT;    // Calculate the start address of file page. sector_t is u64.
-  uint64_t  bytes_len     = blk_rq_bytes(rq);                             //[??] The request can NOT be contiguous !!! 
-  u64       debug_byte_len = bytes_len;
+  int write_or_not          = (rq_data_dir(rq) == WRITE);
+  uint64_t  start_addr      = blk_rq_pos(rq) << RMEM_LOGICAL_SECT_SHIFT;    // The start address of file page. sector_t is u64.
+  uint64_t  bytes_len       = blk_rq_bytes(rq);                             //[??] The request can NOT be contiguous !!! 
+  u64       debug_byte_len  = bytes_len;
   //u64       bytes_len     = PAGE_SIZE;  // For debug, read fixed 1 page.
   struct rdma_session_context  *rmda_session = rdma_q_ptr->rdma_session;
 
@@ -307,13 +342,14 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
   uint64_t  offset_within_chunk     =  start_addr & CHUNK_MASK; // get the file address offset within chunk.
 
 
-  //debug
-   printk("%s: blk_rq_pos(rq):0x%llx, start_adrr:0x%llx, RMEM_LOGICAL_SECT_SHIFT: 0x%llx, CHUNK_SHIFT : 0x%llx, CHUNK_MASK: 0x%llx \n",
+  #ifdef DEBUG_RDMA_CLINET 
+  printk("%s: blk_rq_pos(rq):0x%llx, start_adrr:0x%llx, RMEM_LOGICAL_SECT_SHIFT: 0x%llx, CHUNK_SHIFT : 0x%llx, CHUNK_MASK: 0x%llx \n",
                                                       __func__,(u64)blk_rq_pos(rq),start_addr, (u64)RMEM_LOGICAL_SECT_SHIFT, 
                                                       (u64)CHUNK_SHIFT, (u64)CHUNK_MASK);
 
 
-  #ifdef DEBUG_RDMA_CLINET 
+
+  
   // Assume all the read/write hits in the same chunk.
   if(start_chunk_index!= end_chunk_index){
     ret =-1;
@@ -580,12 +616,12 @@ int rmem_getgeo(struct block_device * block_device, struct hd_geometry * geo){
  * 
  */
 static struct block_device_operations rmem_device_ops = {
-    .owner            = THIS_MODULE,
-    .open               = rmem_dev_open,
-    .release             = rmem_dev_release,
-    .media_changed    = rmem_dev_media_changed,
-    .revalidate_disk  = rmem_dev_revalidate,
-    .ioctl              = rmem_dev_ioctl,
+  .owner            = THIS_MODULE,
+  .open             = rmem_dev_open,
+  .release          = rmem_dev_release,
+  .media_changed    = rmem_dev_media_changed,
+  .revalidate_disk  = rmem_dev_revalidate,
+  .ioctl            = rmem_dev_ioctl,
   .getgeo           = rmem_getgeo,
 };
 
@@ -626,7 +662,7 @@ int init_gendisk(struct rmem_device_control* rmem_dev_ctrl ){
 
   // RMEM_SIZE_IN_PHY_SECT is just the number of physical sector already.
   //sector_div(remote_mem_sector_num, RMEM_LOGICAL_SECT_SIZE);    // remote_mem_size /=RMEM_SECT_SIZE, return remote_mem_size%RMEM_SECT_SIZE 
-    set_capacity(rmem_dev_ctrl->disk, remote_mem_sector_num);     // size is in remote file state->size, add size info into block device
+  set_capacity(rmem_dev_ctrl->disk, remote_mem_sector_num);     // size is in remote file state->size, add size info into block device
  
  
   // Register Block Device through gendisk(->partition)
@@ -789,6 +825,13 @@ error:
     
   #ifdef  DEBUG_RDMA_CLIENT 
   printk("%s,Load kernel module : register remote block device. \n", __func__);
+  #endif
+
+  #ifdef DEBUG_LATENCY_CLIENT
+  cycles_high_before  = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL); 
+  cycles_high_after   = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
+  cycles_low_before   = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
+  cycles_low_after    = kzalloc(sizeof(u32) * NUM_OF_CORES, GFP_KERNEL);
   #endif
 
   // Become useless since 4.9, maybe removed latter.

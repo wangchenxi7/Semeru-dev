@@ -30,7 +30,7 @@
 // Utilities 
 #include <linux/log2.h>
 #include<linux/spinlock.h>
-
+#include <linux/ktime.h>
 
 //
 // Disk hardware information
@@ -60,8 +60,7 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
 #define ONE_SIEDED_RDMA_BUF_SIZE			MAX_REQUEST_SGL * PAGE_SIZE
 
 
-//Debug
-#define DEBUG_RDMA_CLINET 1
+
 
 
 /**
@@ -102,7 +101,8 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
 //
 // Enable debug information printing 
 //
-#define DEBUG_RDMA_CLIENT 1 
+//#define DEBUG_RDMA_CLIENT 			1 
+#define DEBUG_LATENCY_CLIENT		1
 //#define DEBUG_RDMA_CLINET_DETAIL 1
 //#define DEBUG_BD_RDMA_SEPARATELY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
@@ -286,18 +286,18 @@ struct rmem_rdma_command{
 	//struct mutex ctx_lock;				// Does a single rmem_rdma_cmd need a spin lock ??
  
 	struct ib_rdma_wr 	rdma_sq_wr;			// wr for RDMA write/send.  [?] Send queue wr ??
-	struct ib_sge 		rdma_sgl;			// Points to the data addres
-	char 				*rdma_buf;			// The reserved DMA buffer. Binded to ib_sge. [?] the size of the buffer isn't determined before get the i/o request?
+	struct ib_sge 			rdma_sgl;			// Points to the data addres. Does it support gather ? point to sevral discontigous pages. 
+	char 								*rdma_buf;			// The reserved DMA buffer. Binded to ib_sge. [?] the size of the buffer isn't determined before get the i/o request?
 	//uint32_t 			buffer_len;			// PAGE_SIZE*MAX_SGL_LENGTH
 	//dma_addr_t  		rdma_dma_addr;		// DMA/BUS address of rdma_buf
-	u64					rdma_dma_addr;		// After confirm the IB is 64 bits compatible, use the dma_addr_t.
+	u64									rdma_dma_addr;		// After confirm the IB is 64 bits compatible, use the dma_addr_t.
 	//DECLARE_PCI_UNMAP_ADDR(rdma_mapping)	// [?]
 	//struct ib_mr 		*rdma_mr;			// The memory region. No one use this field. Use the rdma_buf directly.
 	
 	//
 	// I/O request file address
 	//
-	struct request 					*io_rq;			// Pointer to the I/O requset. [!!] Contain Real Offload [!!]
+	struct request 			*io_rq;			// Pointer to the I/O requset. [!!] Contain Real Offload [!!]
 
 	//
 	// Can we delete these fields ?
@@ -307,10 +307,16 @@ struct rmem_rdma_command{
 	//unsigned long 					len;			// Length of the i/o reuqet data, page alignment.
 //	struct remote_chunk_g 			*chunk_ptr;
 	//atomic_t 						free_state; 	//	available = 1, occupied = 0
-	int 							free_state;
+	int 								free_state;
 
 	//struct rmem_device_control 		*rmem_dev_ctx;		// disk driver_data, get from rdma_session-> rmem_dev_ctx;
 	//struct rdma_session_context		*rdma_session;	// RDMA connection context. We use a global rdma_session_global now.
+
+	// fields for debug
+	#ifdef DEBUG_LATENCY_CLIENT
+
+	struct rmem_rdma_queue *rdma_q_ptr;		// points to the rdma queue it belongs to.
+	#endif
 
 };
 
@@ -343,10 +349,10 @@ struct rmem_rdma_command{
  * 
  */
 struct rmem_rdma_queue {
-	struct rmem_rdma_command		*rmem_rdma_cmd_list;	// one-sided RDMA read/write message list, one for each i/o request
-	uint32_t 						rdma_queue_depth;		// length of the rmem_rdma_comannd_list.
-	uint32_t						cmd_ptr;				// Manage the rmem_rdma_cmd_list in a bump pointer way.
-	uint32_t						q_index;				// Assign the hw_index in blk_mq_ops->.init_hctx.
+	struct rmem_rdma_command			*rmem_rdma_cmd_list;	// one-sided RDMA read/write message list, one for each i/o request
+	uint32_t 											rdma_queue_depth;		// length of the rmem_rdma_comannd_list.
+	uint32_t											cmd_ptr;						// Manage the rmem_rdma_cmd_list in a bump pointer way.
+	uint32_t											q_index;						// Assign the hw_index in blk_mq_ops->.init_hctx.
 
 	//struct rmem_device_control		*rmem_dev_ctrl;  		// point to the device driver/context
 	struct rdma_session_context		*rdma_session;			// Record the RDMA session this queue belongs to.
@@ -368,6 +374,10 @@ struct rmem_rdma_queue {
  * 		Queue Pair (QP) : 
  * 		Completion Queue (CQ) :
  * 		
+ * More explanation 
+ * 	In our design, the remote memory driver can have several RDMA sessions connected to
+ * 	differnt Memory server. All the JVM heap constitue the universal Java heap.
+ * 
  */
 struct rdma_session_context {
 
@@ -409,15 +419,15 @@ struct rdma_session_context {
 	struct ib_sge 		send_sgl;
 	struct message		*send_buf;
 	//dma_addr_t 			send_dma_addr;
-	u64 				send_dma_addr;
+	u64 							send_dma_addr;
 	//DECLARE_PCI_UNMAP_ADDR(send_mapping)
 	//struct ib_mr *send_mr;
 
 
 	// [?]Unknown porpuse ??
 	// get lkey from dma_mr->lkey.
-	struct ib_mr 		*dma_mr;  // [?] receive mr to be registered ??
-  	enum mem_type 		mem;		//  only when mem == DMA, we need allocate and intialize dma_mr.
+	struct ib_mr 			*dma_mr;  // [?] receive mr to be registered ??
+  enum mem_type 		mem;		//  only when mem == DMA, we need allocate and intialize dma_mr.
 	    // [?] How to set this value ?
 	//int 				local_dma_lkey;		/* use 0 for lkey */  //[??] No one touch this value, it keeps 0.
 
@@ -635,7 +645,12 @@ extern u64	cq_notify_count;
 extern u64	cq_get_count;
 
 
-
+#ifdef DEBUG_LATENCY_CLIENT
+extern u32 * cycles_high_before; 
+extern u32 * cycles_high_after;
+extern u32 * cycles_low_before;
+extern u32 * cycles_low_after;
+#endif
 
 
 
