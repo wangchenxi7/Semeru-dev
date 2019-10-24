@@ -1724,7 +1724,7 @@ void octopus_free_buffers(struct rdma_session_context *rdma_session) {
 					if(rdma_cmd_ptr->rdma_buf != NULL){
 						free(rdma_cmd_ptr->rdma_buf);
 
-						#ifdef DEBUG_RDMA_CLINET_DETAIL
+						#ifdef DEBUG_RDMA_CLIENT_DETAIL
 						printf("%s: free rdma_queue[%d], rdma_cmd_buf[%d]", __func__,i,j );
 						#endif
 					}

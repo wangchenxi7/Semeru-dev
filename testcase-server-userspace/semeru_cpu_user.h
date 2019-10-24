@@ -59,8 +59,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 #define ONE_SIEDED_RDMA_BUF_SIZE			MAX_REQUEST_SGL * PAGE_SIZE
 
 
-//Debug
-#define DEBUG_RDMA_CLINET 1
+
 
 
 /**
@@ -102,8 +101,8 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 // Enable debug information printing 
 //
 #define DEBUG_RDMA_CLIENT 1 
-//#define DEBUG_RDMA_CLINET_DETAIL 1
-//#define DEBUG_BD_RDMA_SEPARATELY 1			// Build and install BD & RDMA modules, but not connect them.
+//#define DEBUG_RDMA_CLIENT_DETAIL 1
+//#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
 
 // from kernel 
