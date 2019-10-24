@@ -84,32 +84,38 @@ static int rmem_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int h
   int ret  = 0;
 
   struct rmem_device_control  *rmem_dev_ctrl = data;
-  struct rmem_rdma_queue      *rdma_q_ptr = &(rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list[hw_index]);  // Initialize rdma_queue first.
+  struct rmem_rdma_queue      *rdma_q_ptr; 
 
+  #ifdef DEBUG_BD_ONLY
+    // Debug Disk driver module
 
-  #ifdef  DEBUG_RDMA_CLIENT
-  if(rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list == NULL){
-    printk(KERN_ERR "%s, rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list is NULL. Should intialize it before go to here.", __func__);
-    goto err;
-  }
+  #else
+    rdma_q_ptr  = &(rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list[hw_index]);  // Initialize rdma_queue first.
 
+    #ifdef  DEBUG_RDMA_CLIENT
+      if(rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list == NULL){
+        printk(KERN_ERR "%s, rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list is NULL. Should intialize it before go to here.", __func__);
+        goto err;
+      }
+    #endif
+
+    // do some initialization for the  rmem_rdma_queues
+    // 
+    rdma_q_ptr->q_index   = hw_index;
+    //rdma_q_ptr->length  = rmem_dev_ctrl->queue_depth; // Delayed intialization of rdma queue.
+    #ifdef DEBUG_RDMA_CLIENT
+      // Is thre any kernel defined check ?
+      if(rdma_q_ptr->rdma_queue_depth != rmem_dev_ctrl->queue_depth){
+        printk("%s, rdma_q_ptr->rdma_queue_depth != rmem_dev_ctrl->queue_depth \n", __func__);
+        goto err;
+      }
+    #endif
+
+  // end of no-define DEBUG_BD_ONLY
   #endif
-
-  // do some initialization for the  rmem_rdma_queues
-  // 
-  rdma_q_ptr->q_index   = hw_index;
-  //rdma_q_ptr->length  = rmem_dev_ctrl->queue_depth; // Delayed intialization of rdma queue.
-  #ifdef DEBUG_RDMA_CLIENT
-  // Is thre any kernel defined check ?
-  if(rdma_q_ptr->rdma_queue_depth != rmem_dev_ctrl->queue_depth){
-    printk("%s, rdma_q_ptr->rdma_queue_depth != rmem_dev_ctrl->queue_depth \n", __func__);
-    goto err;
-  }
-  #endif
-
-  // Assign rdma_queue to dispatch queue as driver data.
-  // Decide the mapping between dispatch queue and RDMA queues 
-  hctx->driver_data = rdma_q_ptr;  // Assign the RDMA queue as dispatch queue driver data.
+    // Assign rdma_queue to dispatch queue as driver data.
+    // Decide the mapping between dispatch queue and RDMA queues 
+    hctx->driver_data = rdma_q_ptr;  // Assign the RDMA queue as dispatch queue driver data.
 
   return ret;
 
@@ -149,55 +155,64 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
   // TO BE DONE
   //
   #ifdef DEBUG_RDMA_CLIENT
-  u64 seg_num   = rq->nr_phys_segments;  // number of bio ??
-  u64 byte_len  = blk_rq_bytes(rq);
-  struct bio      *bio_ptr;
-  struct bio_vec  *bv;
-  int i;
+    u64 seg_num   = rq->nr_phys_segments;  // For swap bio, each segment should be 4K with 4K alignemtn. 
+    u64 byte_len  = blk_rq_bytes(rq);       // request->_data_len, the sector size to be read/written.
+    // struct bio      *bio_ptr;
+    // struct bio_vec  *bv;
 
-  if(rq_data_dir(rq) == WRITE){
-    printk("%s: dispatch_queue[%d], get a write request, tag :%d >>>>>  \n", __func__, hctx->queue_num, rq->tag);
-  }else{
-    printk("%s: dispatch_queue[%d], get a read  request, tag :%d >>>>>  \n", __func__, hctx->queue_num, rq->tag);
-  }
-  printk("%s: <%llu> segmetns, <%u> segments in fist bio , byte length : 0x%llx \n ",__func__, seg_num,rq->bio->bi_phys_segments, byte_len);
-
-  // printk("  :-->Forward write ?:[%d] request, tag: %d,  <%u> segments， <%u> segments of first bio ,\n",
-  //                                                                                       write_or_not, rq->tag, 
-  //                                                                                       rq->nr_phys_segments, 
-  //                                                                                       rq->bio->bi_phys_segments);
-
-  //
-  // Print the physical information of the bio
-  //
-  // if(!write_or_not){
-  //     
-  //     for(i=0 , j=0 ;i< bio_ptr->bi_io_vec->bv_len; i+= PAGE_SIZE, j++){
-  //       printk("%s, handle struct page:0x%llx \n", __func__, &bio_ptr->bi_io_vec[j] );
+    if(rq_data_dir(rq) == WRITE){
+      printk("%s: dispatch_queue[%d], get a write request, tag :%d >>>>>  \n", __func__, hctx->queue_num, rq->tag);
+    }else{
+      printk("%s: dispatch_queue[%d], get a read  request, tag :%d >>>>>  \n", __func__, hctx->queue_num, rq->tag);
+    }
+    printk("%s: <%llu> segmetns in request, <%u> segments in fist bio , byte length : 0x%llx \n ",__func__, seg_num,rq->bio->bi_phys_segments, byte_len);
 
 
-  //     }//for
-  // }// only print read for now
-  bio_ptr = rq->bio;
-  bio_for_each_segment_all(bv, bio_ptr, i) {
-    struct page *page = bv->bv_page;
-      printk("%s: handle struct page:0x%llx >> \n", __func__, (u64)page );
-  }
+    // #ifdef DEBUG_RDMA_CLIENT_DETAIL
+    //   bio_ptr = rq->bio;
+    //   bio_for_each_segment_all(bv, bio_ptr, i) {
+    //     struct page *page = bv->bv_page;
+    //     printk("%s: handle struct page:0x%llx >> \n", __func__, (u64)page );
+    //  }
+    // #endif
 
-  #endif
+    check_segment_address_of_request(rq);
+
+  #endif  // end of DEBUG_RDMA_CLIENT
 
 
+  // The connection point between Block Layer with RDMA
+  // If no-define DEBUG_BD_ONLY, connect them.
+  #ifdef DEBUG_BD_ONLY 
+    // Debug Disk driver directly
 
-  #ifndef DEBUG_BD_RDMA_SEPARATELY 
+    blk_mq_start_request(rq);
 
-  cpu = get_cpu();
+    // Below is only for debug.
+    // Finish of the i/o request 
+    // [x] Let's just return a NULL data back .
+    // Return or NOT is managed by the driver.
+    // The content is correct OR not is checked by the applcations.
+    // Sometimes, the request is already returned before we reset its request->atomic_flags 
   
+    
+    //blk_mq_complete_request(rq,rq->errors);  // use 0 or rq->errors
 
-  // start count  the time
-  #ifdef DEBUG_LATENCY_CLIENT
+    blk_mq_end_request(rq,rq->errors);
+    printk("%s: End requset->tag : %d <<<<<  \n\n",__func__, rq->tag);
 
-  // Read the rdtsc timestamp and put its value into two 32 bits variables.
-  asm volatile("xorl %%eax, %%eax\n\t"
+  #else
+  // the normal path : Connect to RDMA 
+
+    cpu = get_cpu();  // disable cpu preempt
+    #ifdef DEBUG_RDMA_CLIENT
+      printk(KERN_INFO "%s: get cpu %d \n",__func__, cpu);
+    #endif
+  
+    // start count  the time
+    #ifdef DEBUG_LATENCY_CLIENT
+      // Read the rdtsc timestamp and put its value into two 32 bits variables.
+      asm volatile("xorl %%eax, %%eax\n\t"
               "CPUID\n\t"
               "RDTSC\n\t"
               "mov %%edx, %0\n\t"
@@ -206,60 +221,27 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
                 "%rdx");
 
 
-  #endif
-
-  #ifdef DEBUG_RDMA_CLIENT
-  printk("%s: get cpu %d \n",__func__, cpu);
-  #endif
+    #endif
 
 
 
-  // Transfer I/O request to 1-sided RDMA messages.
-  itnernal_ret = transfer_requet_to_rdma_message(rdma_q_ptr, rq);
-  if(unlikely(itnernal_ret)){
+    // Transfer I/O request to 1-sided RDMA messages.
+    itnernal_ret = transfer_requet_to_rdma_message(rdma_q_ptr, rq);
+    if(unlikely(itnernal_ret)){
       printk(KERN_ERR "%s, transfer_requet_to_rdma_message is failed. \n", __func__);
       goto err;
-  }
+    }
 
-  put_cpu();
+    put_cpu();  // enable cpu preempt 
+    #ifdef DEBUG_RDMA_CLIENT
+      printk(KERN_INFO "%s: put cpu %d \n",__func__, cpu);
+    #endif
  
-  #ifdef DEBUG_RDMA_CLIENT
-  printk("%s: put cpu %d \n",__func__, cpu);
-  #endif
- 
-  #endif
 
-  // Start the reqeust 
-  // [x] Inform some hardware, we are going to handle this request
-  // After the request handling is done, 
-  // we need to invoke blk_mq_complete_request(request,request->errors) to notify the upper layer.
-
-  //  TOO LATE ??
-  // Sometimes, the request is already returned before we reset its request->atomic_flags 
-  //blk_mq_start_request(rq);
+  #endif   // end of no-define DEBUG_BD_ONLY
 
 
 
-
-
-  // 
-  // [?] Handle the bio 
-  //      read/write data into  the disk array.
-  //
-  //
-  // [?] difference between request->request_queue and rmem_dev_ctl_global->request_queue ? Should be the same one ?
-  //
-
-  #ifdef DEBUG_BD_RDMA_SEPARATELY
-  // Below is only for debug.
-  // Finish of the i/o request 
-  // [x] Let's just return a NULL data back .
-  // Return or NOT is managed by the driver.
-  // The content is correct OR not is checked by the applcations.
-  //  
-  //
-  blk_mq_complete_request(rq,rq->errors);  // use 0 or rq->errors
-  #endif
 
 
   return BLK_MQ_RQ_QUEUE_OK;
@@ -323,60 +305,67 @@ static struct blk_mq_ops rmem_mq_ops = {
  */
 int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct request * rq){
 
-  int ret = 0;
-  int write_or_not          = (rq_data_dir(rq) == WRITE);
-  uint64_t  start_addr      = blk_rq_pos(rq) << RMEM_LOGICAL_SECT_SHIFT;    // The start address of file page. sector_t is u64.
-  uint64_t  bytes_len       = blk_rq_bytes(rq);                             //[??] The request can NOT be contiguous !!! 
-  u64       debug_byte_len  = bytes_len;
-  //u64       bytes_len     = PAGE_SIZE;  // For debug, read fixed 1 page.
+  int  ret = 0;
+  int  write_or_not    = (rq_data_dir(rq) == WRITE);
+  u64  start_addr      = blk_rq_pos(rq) << RMEM_LOGICAL_SECT_SHIFT;    // request->_sector. Sector start address, change to bytes.
+  u64  bytes_len       = blk_rq_bytes(rq);                             // request->_data_len. The sector of request should be contiguous ?
   struct rdma_session_context  *rmda_session = rdma_q_ptr->rdma_session;
 
   
   struct remote_mapping_chunk   *remote_chunk_ptr;
-  uint32_t  start_chunk_index   = start_addr >> CHUNK_SHIFT;   // 1GB/chunk in default.
+  u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;   // 1GB/chunk in default.
   //uint32_t  end_chunk_index     = (start_addr + bytes_len - PAGE_SIZE) >> CHUNK_SHIFT;  // Assume start_chunk_index == end_chunk_index.
-  uint32_t  end_chunk_index     = (start_addr + bytes_len - 1) >> CHUNK_SHIFT;
-  //debug
-  //uint32_t  end_chunk_index = start_chunk_index;
+  u64  end_chunk_index          = (start_addr + bytes_len - 1) >> CHUNK_SHIFT;
+  u64  offset_within_chunk      =  start_addr & CHUNK_MASK; // get the file address offset within chunk.
 
-  uint64_t  offset_within_chunk     =  start_addr & CHUNK_MASK; // get the file address offset within chunk.
+  #ifdef DEBUG_RDMA_CLIENT 
+    u64 debug_byte_len  = bytes_len;
+
+    // The sector size can be not equal to th physical memory size,
+    // e.g. the check in function of blk_bio_segment_split
+    //      sometimes, there is hole in physical memory page.
+    //      the usage of physical memory may be 8/16 bytes alignment. 
+    check_sector_and_page_size(rq, __func__);
 
 
-  #ifdef DEBUG_RDMA_CLINET 
-  printk("%s: blk_rq_pos(rq):0x%llx, start_adrr:0x%llx, RMEM_LOGICAL_SECT_SHIFT: 0x%llx, CHUNK_SHIFT : 0x%llx, CHUNK_MASK: 0x%llx \n",
+    printk("%s: blk_rq_pos(rq):0x%llx, start_adrr:0x%llx, RMEM_LOGICAL_SECT_SHIFT: 0x%llx, CHUNK_SHIFT : 0x%llx, CHUNK_MASK: 0x%llx \n",
                                                       __func__,(u64)blk_rq_pos(rq),start_addr, (u64)RMEM_LOGICAL_SECT_SHIFT, 
                                                       (u64)CHUNK_SHIFT, (u64)CHUNK_MASK);
 
 
 
   
-  // Assume all the read/write hits in the same chunk.
-  if(start_chunk_index!= end_chunk_index){
-    ret =-1;
-    printk(KERN_ERR "%s, request start_add:0x%llx, byte_len:0x%llx \n",__func__, start_addr,bytes_len);
-    printk(KERN_ERR "%s, start_chunk_index[%u] != end_chunk_index[%u] \n", __func__,start_chunk_index, end_chunk_index);
-    
-    bytes_len = rq->nr_phys_segments * PAGE_SIZE;
-    printk(KERN_ERR "%s, reset byte_len(0x%llx)  to rq->nr_phys_segments * PAGE_SIZE:0x%llx \n",__func__, debug_byte_len, bytes_len);
-    end_chunk_index     = (start_addr + bytes_len) >> CHUNK_SHIFT;
-
+    // [?] We register all the remote region as RDMA buffer at very fist.
+    //     will this cause any problem ?
     if(start_chunk_index!= end_chunk_index){
-      printk(KERN_ERR "%s :After reset byte_len,  start_chunk_index!= end_chunk_index, error.\n",__func__);
-      goto err;
+      ret =-1;
+      printk(KERN_ERR "%s, request start_add:0x%llx, byte_len:0x%llx \n",__func__, start_addr,bytes_len);
+      printk(KERN_ERR "%s, start_chunk_index[%llu] != end_chunk_index[%llu] \n", __func__,start_chunk_index, end_chunk_index);
+    
+      bytes_len = 4096;     // Limit it to 1 page.
+      printk(KERN_ERR "%s: reset byte_len(0x%llx)  to rq->nr_phys_segments * PAGE_SIZE:0x%llx \n",__func__, debug_byte_len, bytes_len);
+      end_chunk_index     = (start_addr + bytes_len -1) >> CHUNK_SHIFT;
+
+      if(start_chunk_index!= end_chunk_index){
+         printk(KERN_ERR "%s :After reset byte_len,  start_chunk_index!= end_chunk_index, error.\n",__func__);
+         goto err;
+      }
+
+      //goto err;
     }
 
-    //goto err;
-  }
+    //debug
+    // Change all  the memory access to a specific chunk.
+    // if(start_chunk_index == 7)
+    //   start_chunk_index =1;
+    // start_chunk_index   = 0;
+    // offset_within_chunk = 0x1000;
+    // end of debug
+
   #endif
 
 
-  //debug
-  // Change all  the memory access to a specific chunk.
-  // if(start_chunk_index == 7)
-  //   start_chunk_index =1;
-  //start_chunk_index   = 0;
-  //offset_within_chunk = 0x1000;
-  //end of debug
+
 
 
   //Get the remote_chunk information
@@ -386,15 +375,16 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
   
   // printk("%s: TRANSFER TO RDMA MSG:  I/O request start_addr : 0x%llx, byte_length 0x%llx  --> \n ",__func__, start_addr, bytes_len);
 
-  printk("%s: TO RDMA MSG[%llu], remote chunk[%u], chunk_addr 0x%llx, rkey 0x%x offset 0x%llx, byte_len : 0x%llx  \n",  
+  printk("%s: TO RDMA MSG[%llu], remote chunk[%llu], chunk_addr 0x%llx, rkey 0x%x offset 0x%llx, byte_len : 0x%llx  \n",  
                                                       __func__ ,rmda_ops_count,  start_chunk_index,  
                                                       remote_chunk_ptr->remote_addr, remote_chunk_ptr->remote_rkey,    
                                                       offset_within_chunk, bytes_len);
   rmda_ops_count++;
-    #endif
+  #endif
 
  
   // start i/o requset before set it as start.
+  // start i/o request timeout counting ?
   blk_mq_start_request(rq);
 
 
@@ -473,21 +463,26 @@ static int init_blk_mq_tag_set(struct rmem_device_control* rmem_dev_ctrl){
   tag_set->nr_hw_queues = rmem_dev_ctrl->nr_queues;   // hardware dispatch queue == software staging queue == avaible cores
   tag_set->queue_depth = rmem_dev_ctrl->queue_depth;  // [?] staging / dispatch queues have the same queue depth ?? or only staging queues have queue depth ?? 
   tag_set->numa_node  = NUMA_NO_NODE;
-  tag_set->cmd_size = sizeof(struct rmem_rdma_command);     // [?] Send a rdma_request with the normal i/o request to remote memory server ??
-  tag_set->flags = BLK_MQ_F_SHOULD_MERGE;                   // [?]merge the i/o requets ??
+  tag_set->cmd_size = sizeof(struct rmem_rdma_command);     // Reserve RDMA_command space. Get it by blk_mq_rq_to_pdu(struct request*)
+  tag_set->flags = BLK_MQ_F_SHOULD_MERGE;                   // [?]merge the bio i/o requets ??
   tag_set->driver_data = rmem_dev_ctrl;                     // The driver controller, the context 
 
 
   ret = blk_mq_alloc_tag_set(tag_set);      // Check & correct the value within the blk_mq_tag_set.
-    if (unlikely(ret)){
-    pr_err("blk_mq_alloc_tag_set error. \n");
-        goto err;
+  if (unlikely(ret)){
+    printk(KERN_ERR "%s, blk_mq_alloc_tag_set error. \n", __func__);
+    goto err;
   }
+  #ifdef DEBUG_RDMA_CLIENT
+    else{
+      printk(KERN_INFO "%s, blk_mq_alloc_tag_set is done. \n", __func__);
+    }
+  #endif
 
   return ret;
 
 err:
-  pr_err(" Error in  %s \n",__func__);
+  printk(KERN_ERR "Error in  %s \n",__func__);
   return ret;
 }
 
@@ -516,7 +511,7 @@ static int init_blk_mq_queue(struct rmem_device_control* rmem_dev_ctrl){
   rmem_dev_ctrl->queue = blk_mq_init_queue(&rmem_dev_ctrl->tag_set);   // Build the block i/o queue.
     if (unlikely(IS_ERR(rmem_dev_ctrl->queue ))) {
         ret = PTR_ERR(rmem_dev_ctrl->queue );
-    printk(KERN_ERR "%s, create the software staging reqeust queue failed. \n", __func__);
+        printk(KERN_ERR "%s, create the software staging reqeust queue failed. \n", __func__);
         goto err;
     }
 
@@ -757,23 +752,33 @@ int RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctrl
   //  1) Initiaze the fields of rmem_device_control structure 
   //
   if(rmem_dev_ctrl == NULL ){    
-    pr_err("Can not pass a null pointer to initialize. \n");
+    printk(KERN_ERR "Can not pass a null pointer to initialize. \n");
     ret = -1;
-    goto out;
+    goto err;
   }
 
   ret = init_rmem_device_control( dev_name, rmem_dev_ctrl);
   if(ret){
-    pr_err("Intialize rmem_device_control error \n");
-    goto out;
+    printk(KERN_ERR "Intialize rmem_device_control error \n");
+    goto err;
   }
+  #ifdef DEBUG_RDMA_CLIENT
+    else{
+      printk(KERN_INFO "%s,init_rmem_device_control done. \n", __func__);
+    }
+  #endif
 
   // 2) Intialize thte blk_mq_tag_set
   ret = init_blk_mq_tag_set(rmem_dev_ctrl);
   if(ret){
-    printk("Allocate blk_mq_tag_set failed. \n");
-   goto error;
+    printk(KERN_ERR "Allocate blk_mq_tag_set failed. \n");
+   goto err;
   }
+  #ifdef DEBUG_RDMA_CLIENT
+    else{
+      printk(KERN_INFO "%s,init_blk_mq_tag_set done. \n", __func__);
+    }
+  #endif
 
 
   //
@@ -782,8 +787,13 @@ int RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctrl
   ret = init_blk_mq_queue(rmem_dev_ctrl);
   if(ret){
     printk("init_blk_mq_queue failed. \n");
-    goto error;
+    goto err;
   }
+  #ifdef DEBUG_RDMA_CLIENT
+    else{
+      printk(KERN_INFO "%s,init_blk_mq_queue done. \n", __func__);
+    }
+  #endif
   
   //
   // 4) initiate the gendisk (device information) & add the device into kernel list (/dev/) -- Active device..
@@ -791,19 +801,17 @@ int RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctrl
   ret = init_gendisk(rmem_dev_ctrl);
   if(ret){
     pr_err("Init_gendisk failed \n");
-    goto error;
+    goto err;
   }
 
+  #ifdef DEBUG_RDMA_CLIENT
+    printk("RMEM_create_device done. \n");
+  #endif
 
-
-  //debug
-  printk("RMEM_create_device done. \n");
-
-out:
   return ret;
 
-error:
-  pr_err("Error in RMEM_create_device \n");
+err:
+  printk(KERN_ERR "Error in %s \n", __func__);
   return ret;
 }
 
@@ -840,8 +848,8 @@ error:
   // <major_number> <device_name>
   // 252 rmempool
   //
-    rmem_major_num = register_blkdev(0, "rmempool");
-    if (unlikely(rmem_major_num < 0)){
+  rmem_major_num = register_blkdev(0, "rmempool");
+  if (unlikely(rmem_major_num < 0)){
     printk(KERN_ERR "%s, register_blkdev failed. \n",__func__);
     ret = -1;
         goto err;
@@ -945,3 +953,188 @@ int octopus_free_block_devicce(struct rmem_device_control * rmem_dev_ctrl ){
 
 //module_init(RMEM_init_module);
 //module_exit(RMEM_cleanup_module);
+
+
+
+/**
+ * Debug function 
+ */
+
+
+
+/**
+ * BIO check
+ * 
+ *  Check #1, confirm all the segments are contiguous. 
+ *  Because we need to use the scatter/gather characteristics of InfiniBand.
+ *  Scatter/Gather are multiple to one mapping.
+ * 
+ *  Only check the bio built during swap procedure. 
+ *  In this scenario, the size of each segment should be (bv_len) 4K, start at 0 (bv_offset == 0).
+ * 
+ * 
+ *  More Explanation
+ *  echo bio has two components
+ *    1) physical pages;
+ *    2) segments 
+ * 
+ *  For read bio, load data from segments to physical pages.
+ *  For write bio, store data from physical pages to segments.  
+ *  In our design, the address of segmetns are same as the virtual address of the physical pages. 
+ * 
+ * 
+ */
+void check_segment_address_of_request(struct request *io_rq){
+  struct bio        *bio_ptr = io_rq->bio;
+  struct bio_vec    bv;     // iterator for segment in current bio.
+	struct bvec_iter  iter;   // points to current 
+  int count;
+  //u64 sector_size_in_pg;
+  //u64 segment_addr;
+
+  for_each_bio(bio_ptr){
+		printk(KERN_INFO "%s, for bio 0x%llx, sector addr : 0x%lx , sector size(512 bytes) : 0x%x \n", 
+                                      __func__, (u64)bio_ptr, bio_ptr->bi_iter.bi_sector, bio_ptr->bi_iter.bi_size );
+
+    count = 0;
+    bio_for_each_segment(bv, bio_ptr, iter) {
+      // As swap bio, each segment should be 4K alignment (offset = 0) with 4K size.
+      // 1 segment <-> 1 physical page.
+      if(bv.bv_offset!= 0 || bv.bv_len!= 4096){
+        printk(KERN_INFO "%s, non-page alignment segment[%d]  struct page: 0x%llx, offset: 0x%x, length: 0x%x \n", 
+                                        __func__, count++, (u64)bv.bv_page, bv.bv_offset, bv.bv_len );
+      }
+
+
+      // !! map_swap_page isn't a external symbol, need to modify it.
+      // sector_size_in_pg = (u64)map_swap_page(bv.bv_page, &bio_ptr->bi_bdev);
+      // sector_size_in_pg <<= PAGE_SHIFT - 9;
+      // // As swap cache, each physical page should record the swp_entry_t which is equal to segment addr.
+      // printk(KERN_INFO "%s, check sector addr from page->private : 0x%llx \n",
+      //                                   __func__, sector_size_in_pg);
+    }  // segment
+
+
+  } // bio
+
+  printk(KERN_INFO " %s:  done\n\n", __func__);
+}
+
+
+/**
+ * Check if the sector size and physical memory buffer size are equal.
+ *  
+ * request->_data_len // sector size
+ * 
+ * accumulate the physical memory size used by all the segments, bio->bv_vec.
+ * 
+ */
+bool check_sector_and_page_size(struct request *io_rq, const char* message){
+  u64 request_sector_size_in_byte   = 0;
+  u64 sector_size_in_byte           = 0;
+  u64 physical_memory_size_in_bytes = 0;
+  u64 segment_num                   = io_rq->nr_phys_segments;
+  struct bio        *bio_ptr = io_rq->bio;
+  struct bio_vec    bv;     // iterator for segment in current bio.
+	struct bvec_iter  iter;   // points to current 
+  struct page       *page_ptr = NULL;
+  bool ret  = true;
+
+
+  request_sector_size_in_byte = io_rq->__data_len;  // get from bio_sector size
+
+
+  //print the attached message
+  if(message != NULL)
+    printk(KERN_INFO "\n %s \n", message);
+
+
+  for_each_bio(bio_ptr){
+
+    sector_size_in_byte += bio_ptr->bi_iter.bi_size;
+    bio_for_each_segment(bv, bio_ptr, iter) {
+      
+      // assume the segments use physical memory in some order, ascending or descending. 
+      if(bv.bv_page != page_ptr){
+        physical_memory_size_in_bytes += 4096;
+        page_ptr = bv.bv_page;
+      }
+    } // segment
+  } // bio
+
+  if(request_sector_size_in_byte != sector_size_in_byte){
+    printk(KERN_ERR "%s, Error : request_sector_size_in_byte(0x%llx)  != sector_size_in_byte(0x%llx) \n ", 
+                                      __func__,request_sector_size_in_byte, sector_size_in_byte );
+    ret = false;
+  }
+
+  if(sector_size_in_byte!= physical_memory_size_in_bytes){
+     printk(KERN_ERR "%s: Error, sector_size_in_byte(0x%llx) != physical_memory_size_in_bytes(0x%llx)  \n ", 
+                                      __func__, sector_size_in_byte, physical_memory_size_in_bytes );
+    ret = false;
+  }
+
+  if(ret == false)
+    goto err;
+
+  printk(KERN_INFO "%s, [0x%llx] segments, requset->_data_len 0x%llx, sector_size_of_bio 0x%llx, physical memory 0x%llx. \n\n", 
+                                        __func__, segment_num, request_sector_size_in_byte, sector_size_in_byte,  physical_memory_size_in_bytes );
+  return ret;
+
+err:
+  return ret;
+}
+
+
+
+
+/**
+ * Print the physical page address  attached to each io request.
+ * 
+ * => Print information 
+ * 
+ */
+void print_io_request_physical_pages(struct request *io_rq, const char* message){
+
+  struct bio        *bio_ptr = io_rq->bio;
+  struct bio_vec    bv;     // iterate the struct page attached to the bio.
+	struct bvec_iter  iter;
+  u64 phys_addr;
+
+  if(message != NULL)
+    printk(KERN_INFO "\n %s \n", message);
+  
+
+  for_each_bio(bio_ptr)
+		bio_for_each_segment(bv, bio_ptr, iter) {
+      struct page *page = bv.bv_page;   
+      phys_addr = page_to_phys(page);
+      printk(KERN_INFO "%s: handle struct page: 0x%llx , physical address : 0x%llx \n", 
+                          __func__,  (u64)page, (u64)phys_addr );
+    }
+
+  printk(KERN_INFO " %s, done. request->tag %d. \n\n", __func__, io_rq->tag );
+
+}
+
+/**
+ * print the information of this scatterlist
+ */
+void  print_scatterlist_info(struct scatterlist* sl_ptr , int nents ){
+
+  int i;
+
+  printk(KERN_INFO "\n %s, %d entries \n", __func__, nents);
+
+  for(i=0; i< nents; i++){
+   // if(sl_ptr[i] != NULL){   // for array[N], the item can't be NULL.
+      printk(KERN_INFO "%s, \n page_link(struct page*) : 0x%lx \n  offset : 0x%x bytes\n  length : 0x%x bytes \n dma_addr : 0x%llx \n ",
+                        __func__, sl_ptr[i].page_link, sl_ptr[i].offset, sl_ptr[i].length, sl_ptr[i].dma_address );
+  //  }
+  }
+
+  printk(KERN_INFO " %s done\n\n", __func__);
+
+}
+
+

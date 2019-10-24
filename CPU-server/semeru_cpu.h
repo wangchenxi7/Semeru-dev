@@ -18,6 +18,8 @@
 // Block layer 
 #include <linux/blk-mq.h>
 #include <linux/blkdev.h>
+#include <linux/swapfile.h>
+#include <linux/swap.h>
 
 // For infiniband
 #include <rdma/ib_verbs.h>
@@ -25,39 +27,46 @@
 #include <linux/pci-dma.h>
 #include <linux/pci.h>			// Use the dma_addr_t defined in types.h as the DMA/BUS address.
 #include <linux/inet.h>
-
+#include <linux/lightnvm.h>
+#include <linux/sed-opal.h>
 
 // Utilities 
 #include <linux/log2.h>
 #include<linux/spinlock.h>
 #include <linux/ktime.h>
+#include <linux/scatterlist.h>
+
+
 
 //
 // Disk hardware information
 //
-#define RMEM_PHY_SECT_SIZE					512 	// physical sector seize, used by driver (to disk).
-#define RMEM_LOGICAL_SECT_SIZE			512	// logical sector seize, used by kernel (to i/o).
-//#define RMEM_REQUEST_QUEUE_NUM     	2  		// for debug, use the online_cores
-#define RMEM_QUEUE_DEPTH           	16  	// [?]  1 - (-1U), what's the good value ? 
-#define RMEM_QUEUE_MAX_SECT_SIZE		1024 	// The max number of sectors per request, /sys/block/sda/queue/max_hw_sectors_kb is 256
-#define DEVICE_NAME_LEN							32
+
+// According to the implementation of kernle, it aleays assume the (logical ?) sector size to be 512 bytes.
+#define RMEM_PHY_SECT_SIZE					(u64)512 	// physical sector seize, used by driver (to disk).
+#define RMEM_LOGICAL_SECT_SIZE			(u64)512		// logical sector seize, used by kernel (to i/o).
+
+#define RMEM_QUEUE_DEPTH           	(u64)16  	// [?]  1 - (-1U), what's the good value ? 
+#define RMEM_QUEUE_MAX_SECT_SIZE		(u64)1024 	// The max number of sectors per request, /sys/block/sda/queue/max_hw_sectors_kb is 256
+#define DEVICE_NAME_LEN							(u64)32
 
 
 
 //
 // RDMA related macros  
 //
-#define ONE_GB							1024*1024*1024	// byte size of ONE GB
-#define CHUNK_SIZE_GB									1		// Must be a number of 2 to power N.
-#define MAX_REMOTE_MEMORY_SIZE_GB 		32 		// The max remote memory size of current client. For 1 remote memory server, this value eaquals to the remote memory size.
-#define RDMA_READ_WRITE_QUEUE_DEPTH		16		// [?] connection with the Disk dispatch queue depth ??
+#define ONE_GB												((u64)1024*1024*1024)	// byte size of ONE GB, is this safe ? exceed the int.
+#define CHUNK_SIZE_GB									(u64)8			// Must be a number of 2 to power N.
+#define MAX_REMOTE_MEMORY_SIZE_GB 		(u64)32 		// The max remote memory size of current client. For 1 remote memory server, this value eaquals to the remote memory size.
+#define RDMA_READ_WRITE_QUEUE_DEPTH		(u64)16			// [?] connection with the Disk dispatch queue depth ??
 extern u64 RMEM_SIZE_IN_PHY_SECT;
 
 // 1-sieded RDMA Macros
 
 // Each request can have multiple bio, but each bio can only have 1  pages ??
-#define MAX_REQUEST_SGL								64 		// !! Not sure about this, debug.  
-#define ONE_SIEDED_RDMA_BUF_SIZE			MAX_REQUEST_SGL * PAGE_SIZE
+#define MAX_REQUEST_SGL								 32 		// number of segments, get from ibv_query_device.
+#define MAX_SEGMENT_IN_REQUEST				(u64)128 // defined in ? forget  
+#define ONE_SIEDED_RDMA_BUF_SIZE			(u64)MAX_REQUEST_SGL * PAGE_SIZE
 
 
 
@@ -89,7 +98,7 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
  */
 #define GB_SHIFT 			30 
 #define CHUNK_SHIFT			(GB_SHIFT + ilog2(CHUNK_SIZE_GB))	 // Used to calculate the chunk index in Client (File chunk). Initialize it before using.
-#define	CHUNK_MASK			((1 << CHUNK_SHIFT)-1)
+#define	CHUNK_MASK			(u64)((1UL << CHUNK_SHIFT)-1)
 
 #define RMEM_LOGICAL_SECT_SHIFT		(ilog2(RMEM_LOGICAL_SECT_SIZE))  // the power to 2, shift bits.
 
@@ -101,10 +110,10 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
 //
 // Enable debug information printing 
 //
-//#define DEBUG_RDMA_CLIENT 			1 
-#define DEBUG_LATENCY_CLIENT		1
-//#define DEBUG_RDMA_CLINET_DETAIL 1
-//#define DEBUG_BD_RDMA_SEPARATELY 1			// Build and install BD & RDMA modules, but not connect them.
+#define DEBUG_RDMA_CLIENT 			1 
+//#define DEBUG_LATENCY_CLIENT		1
+//#define DEBUG_RDMA_CLIENT_DETAIL 1
+//#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
 
 // from kernel 
@@ -286,10 +295,10 @@ struct rmem_rdma_command{
 	//struct mutex ctx_lock;				// Does a single rmem_rdma_cmd need a spin lock ??
  
 	struct ib_rdma_wr 	rdma_sq_wr;			// wr for RDMA write/send.  [?] Send queue wr ??
-	struct ib_sge 			rdma_sgl;			// Points to the data addres. Does it support gather ? point to sevral discontigous pages. 
+	struct ib_sge 			rdma_sgl;				// Points to the data addres. Does it support gather ? point to sevral discontigous pages. 
 	char 								*rdma_buf;			// The reserved DMA buffer. Binded to ib_sge. [?] the size of the buffer isn't determined before get the i/o request?
-	//uint32_t 			buffer_len;			// PAGE_SIZE*MAX_SGL_LENGTH
-	//dma_addr_t  		rdma_dma_addr;		// DMA/BUS address of rdma_buf
+	//uint32_t 					buffer_len;			// PAGE_SIZE*MAX_SGL_LENGTH
+	//dma_addr_t  			rdma_dma_addr;		// DMA/BUS address of rdma_buf
 	u64									rdma_dma_addr;		// After confirm the IB is 64 bits compatible, use the dma_addr_t.
 	//DECLARE_PCI_UNMAP_ADDR(rdma_mapping)	// [?]
 	//struct ib_mr 		*rdma_mr;			// The memory region. No one use this field. Use the rdma_buf directly.
@@ -305,12 +314,22 @@ struct rmem_rdma_command{
 	//int 							chunk_index;	// Hight 32 bits, the chunk index (Assume 1GB/Chunk)
 	//unsigned long 					offset;			// Offset within the chunk
 	//unsigned long 					len;			// Length of the i/o reuqet data, page alignment.
-//	struct remote_chunk_g 			*chunk_ptr;
+	//struct remote_chunk_g 			*chunk_ptr;
 	//atomic_t 						free_state; 	//	available = 1, occupied = 0
 	int 								free_state;
 
 	//struct rmem_device_control 		*rmem_dev_ctx;		// disk driver_data, get from rdma_session-> rmem_dev_ctx;
 	//struct rdma_session_context		*rdma_session;	// RDMA connection context. We use a global rdma_session_global now.
+
+	// scatterlist
+	// points to the physical pages of i/o requset. 
+	// we need to split this sgl if it exceeds the max s/g number of our hardware.
+	struct scatterlist	sgl[MAX_SEGMENT_IN_REQUEST];
+	u64  								nentry;		// number of the segments, usually one pysical page per segment
+	//ib_mr								*mr;			// the corresponding RDMA MR for the scatterlist.  use ib_sge directly ?
+	//struct ib_reg_wr		*reg_wr;	// wr used to carry the RDMA data
+	
+
 
 	// fields for debug
 	#ifdef DEBUG_LATENCY_CLIENT
@@ -377,6 +396,8 @@ struct rmem_rdma_queue {
  * More explanation 
  * 	In our design, the remote memory driver can have several RDMA sessions connected to
  * 	differnt Memory server. All the JVM heap constitue the universal Java heap.
+ * 
+ * [?] how can we get the device for MR register??
  * 
  */
 struct rdma_session_context {
@@ -562,10 +583,14 @@ int 	octopus_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_eve
 void 	octopus_cq_event_handler(struct ib_cq * cq, void *rdma_session_context);
 int 	handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc);
 int 	send_message_to_remote(struct rdma_session_context *rdma_session, int messge_type  , int size_gb);
-		void 	map_single_remote_memory_chunk(struct rdma_session_context *rdma_session);
+void 	map_single_remote_memory_chunk(struct rdma_session_context *rdma_session);
 
 
 // 1-sided RDMA message
+
+int build_rdma_wr(struct rmem_rdma_queue* rdma_q_ptr, struct rmem_rdma_command *rdma_cmd_ptr, struct request * io_rq, 
+									struct remote_mapping_chunk *	remote_chunk_ptr , uint64_t offse_within_chunk, uint64_t len);
+
 int		post_rdma_write(struct rdma_session_context *rdma_session, struct request* io_rq, struct rmem_rdma_queue* rdma_q_ptr,  
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offse_within_chunk, uint64_t len );
 int 	rdma_write_done(struct ib_wc *wc);
@@ -592,7 +617,7 @@ void 	copy_data_to_rdma_buf(struct request *io_rq, struct rmem_rdma_command *rdm
 //
 // Block Device functions
 //
-int   	rmem_init_disk_driver(struct rmem_device_control *rmem_dev_ctl);
+int   rmem_init_disk_driver(struct rmem_device_control *rmem_dev_ctl);
 int 	RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctrl );
 
 //
@@ -614,6 +639,10 @@ char* rdma_session_context_state_print(int id);
 char* rdma_cm_message_print(int cm_message_id);
 char* rdma_wc_status_name(int wc_status_id);
 
+void 	print_io_request_physical_pages(struct request *io_rq, const char* message);
+void 	print_scatterlist_info(struct scatterlist* sl_ptr , int nents );
+void 	check_segment_address_of_request(struct request *io_rq);
+bool 	check_sector_and_page_size(struct request *io_rq, const char* message);
 /** 
  * ########## Declare some global varibles ##########
  * 

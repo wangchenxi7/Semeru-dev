@@ -242,8 +242,8 @@ int octopus_create_qp(struct rdma_session_context *rdma_session)
 	memset(&init_attr, 0, sizeof(init_attr));
 	init_attr.cap.max_send_wr = rdma_session->txdepth; /*FIXME: You may need to tune the maximum work request */
 	init_attr.cap.max_recv_wr = rdma_session->txdepth;  
-	init_attr.cap.max_recv_sge = 1;					// [?] ib_sge ?  Each wr can only support one buffer ? not use the scatter/gather ?
-	init_attr.cap.max_send_sge = 1;
+	init_attr.cap.max_recv_sge = MAX_REQUEST_SGL;					// enable the scatter
+	init_attr.cap.max_send_sge = MAX_REQUEST_SGL;					// enable the gather 
 	init_attr.sq_sig_type = IB_SIGNAL_REQ_WR;     // Receive WR ?
 	init_attr.qp_type = IB_QPT_RC;                // Queue Pair connect type, Reliable Communication.  [?] Already assign this during create cm_id.
 
@@ -256,7 +256,7 @@ int octopus_create_qp(struct rdma_session_context *rdma_session)
 		// Record this queue pair.
 		rdma_session->qp = rdma_session->cm_id->qp;
   	}else{
-    	printk(KERN_ERR "Create QP falied.");
+    	printk(KERN_ERR "%s:  Create QP falied. errno : %d \n", __func__, ret);
   	}
 
 	return ret;
@@ -931,7 +931,7 @@ int init_rdma_command_list(struct rdma_session_context *rdma_session, uint32_t q
 
 
 	rdma_q_ptr = &(rdma_session->rmem_rdma_queue_list[queue_ind]);
-	rdma_q_ptr->cmd_ptr	= 0;  // Start from 0.
+	rdma_q_ptr->cmd_ptr	= 0;  												// Start from 0.
 	rdma_q_ptr->rdma_queue_depth	= RMEM_QUEUE_DEPTH;	// This value should match "rmem_dev_ctrl->queue_depth" 
 	rdma_q_ptr->q_index	= 0;				// The corresponding dispatch queue index, assigned in blk_mq_ops->.init_hctx.
 	rdma_q_ptr->rdma_session = rdma_session;
@@ -962,17 +962,17 @@ int init_rdma_command_list(struct rdma_session_context *rdma_session, uint32_t q
 		// pci_unmap_addr_set(ctx, rdma_mapping, rdma_q_ptr->rmem_rdma_cmd_list[i]->rdma_dma_addr);
 
 		rdma_cmd_ptr->rdma_sgl.addr = rdma_cmd_ptr->rdma_dma_addr;
-		#ifdef	DEBUG_RDMA_CLINET 
+		#ifdef	DEBUG_RDMA_CLIENT 
 		if(rdma_session->qp->device->local_dma_lkey){
 			rdma_cmd_ptr->rdma_sgl.lkey = rdma_session->qp->device->local_dma_lkey;
 		
-			#ifdef DEBUG_RDMA_CLINET_DETAIL
+			#ifdef DEBUG_RDMA_CLIENT_DETAIL
 			printk("%s, rdma_queue[%d] : rdma_cmd[%d], Get lkey from dma_session->qp->device->local_dma_lkey, 0x%x. \n", __func__, 
 																						queue_ind,i, rdma_cmd_ptr->rdma_sgl.lkey);
 			#endif
 					
 		}else{
-			#ifdef DEBUG_RDMA_CLINET_DETAIL
+			#ifdef DEBUG_RDMA_CLIENT_DETAIL
 			printk("%s, rdma_queue[%d] : rdma_cmd[%d], dma_session->qp->device->local_dma_lkey is 0 (NULL). \n", __func__, 
 																						queue_ind, i);
 			#endif
@@ -1062,21 +1062,20 @@ int post_rdma_write(struct rdma_session_context *rdma_session, struct request* i
 
 	int ret = 0;
 	//int cpu;
-	struct rmem_rdma_command *rdma_cmd_ptr;
-	struct ib_send_wr *bad_wr;
+	struct rmem_rdma_command 	*rdma_cmd_ptr;
+	struct ib_send_wr 				*bad_wr;
 
-	// Confirm this need chunk is mapped.
-  	// OR 
-	// [?] Request to bind this chunk. TO BE DONE.
-  	if(remote_chunk_ptr->chunk_state != MAPPED){
-    	ret =-1;
-    	printk("%s: chunk,rkey (0x%x) isn't mapped to remote memory serveer. \n", __func__, remote_chunk_ptr->remote_rkey);
-    	goto err;
-  	}
+	#ifdef DEBUG_RDMA_CLIENT
+  if(remote_chunk_ptr->chunk_state != MAPPED){
+    ret =-1;
+    printk("%s: chunk,rkey (0x%x) isn't mapped to remote memory serveer. \n", __func__, remote_chunk_ptr->remote_rkey);
+    goto err;
+  }
+	#endif 
 
 	//	cpu = get_cpu();
-	// Get a free WR from this rdma_queue
-	// And fille  i/o data into the RDMA wr.
+	// !! TO BE DONE !!
+	// it's much faster to use blk_mq_rq_to_pdu(request) to get the reserved space as command line. 
 	rdma_cmd_ptr = get_a_free_rdma_cmd_from_rdma_q(rdma_q_ptr);
 	if(unlikely(rdma_cmd_ptr == NULL)){
 		printk(KERN_ERR "%s, No available rmem_rdma_command in this rdma_queue[%d], 0x%llx \n", __func__, 
@@ -1085,25 +1084,18 @@ int post_rdma_write(struct rdma_session_context *rdma_session, struct request* i
 	}
 
 
-	// Is this necessary ??
-	// Seems that it's not necessary 
-		// Stop context switch ??
 
-	rdma_cmd_ptr->io_rq				= io_rq;						// Reserve this i/o request as responds request. 
-	rdma_cmd_ptr->rdma_sq_wr.rkey	= remote_chunk_ptr->remote_rkey;
-	rdma_cmd_ptr->rdma_sq_wr.remote_addr	= remote_chunk_ptr->remote_addr + offse_within_chunk; // only read a page
-	rdma_cmd_ptr->rdma_sq_wr.wr.opcode		= IB_WR_RDMA_WRITE;
-	rdma_cmd_ptr->rdma_sq_wr.wr.sg_list->length = len;				// length of the page, should a page alignment ?
+	// rdma_cmd_ptr->io_rq				= io_rq;						// Reserve this i/o request as responds request. 
+	// rdma_cmd_ptr->rdma_sq_wr.rkey	= remote_chunk_ptr->remote_rkey;
+	// rdma_cmd_ptr->rdma_sq_wr.remote_addr	= remote_chunk_ptr->remote_addr + offse_within_chunk; // only read a page
+	// rdma_cmd_ptr->rdma_sq_wr.wr.opcode		= IB_WR_RDMA_WRITE;
+	// rdma_cmd_ptr->rdma_sq_wr.wr.sg_list->length = len;				// length of the page, should a page alignment ?
 
-	//
-	// [!!] OPTIMIZE HERE  [!!]
-	// [?] Can we register the #define bio_to_phys(bio) + ib_dma_map_sg()  as DMA buffer directly ?
-	
-	//copy_data_to_rdma_buf(io_rq, rdma_cmd_ptr);			// [??]Copy data from i/o request to RDMA buffer.
-	
-	//debug
-	//blk_mq_complete_request(io_rq, io_rq->errors);
 
+	// Register the physical pages attached to i/o requset as RDMA mr directly to save one more data copy.
+	ret = build_rdma_wr( rdma_q_ptr, rdma_cmd_ptr, io_rq, remote_chunk_ptr, offse_within_chunk, len);
+	if(ret == 0)
+		goto err;
 
 	//post the 1-sided RDMA write
 	// Use the global RDMA context, rdma_session_global
@@ -1113,12 +1105,10 @@ int post_rdma_write(struct rdma_session_context *rdma_session, struct request* i
 		goto err;
 	}
 	
-	//put_cpu();
 
-	// debug section
 	// print debug information here.
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s, the data byte size of current i/o request : %llu \n", __func__, len);
+		printk("%s, Post 1-sided RDMA write,  : %llu  bytes \n", __func__, len);
 	#endif
 
 
@@ -1128,6 +1118,112 @@ err:
 	printk(KERN_ERR "ERROR in %s \n",__func__);
 	return ret;
 }
+
+/**
+ * Transfer the data from bio to RDMA message
+ * 1) Get dma address of the physical pages attached to bio.
+ * 2) Register the dma address as RDMA mr.
+ * 3) Fill the information into wr.
+ * 
+ * 
+ * [?] The segments/sector  in the i/o request should be contiguous 
+ * 
+ */
+int build_rdma_wr(struct rmem_rdma_queue* rdma_q_ptr, struct rmem_rdma_command *rdma_cmd_ptr, struct request * io_rq, 
+									struct remote_mapping_chunk *	remote_chunk_ptr , uint64_t offse_within_chunk, uint64_t len){
+	int ret = 0;
+	int i;
+	int dma_entry = 0;
+	struct ib_device	*ibdev	=	rdma_q_ptr->rdma_session->pd->device;  // get the ib_devices
+	//struct bio * 
+
+	// 1) Register the physical pages attached to bio to a scatterlist.
+	//  does the scatterlist->dma_address assigned by ib_dma_map_sg ?
+	rdma_cmd_ptr->nentry = blk_rq_map_sg(io_rq->q, io_rq, rdma_cmd_ptr->sgl );
+
+	// Register all the entries in scatterlist as dma buffer.
+	// This function may merge these dma buffers into one.
+	dma_entry	=	ib_dma_map_sg( ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry,
+											rq_data_dir(io_rq) == WRITE ? DMA_TO_DEVICE : DMA_FROM_DEVICE);  // Inform PCI device the dma address of these scatterlist.
+	ret = dma_entry;
+
+	#ifdef DEBUG_RDMA_CLIENT
+		if( unlikely(dma_entry == 0) ){
+			printk(KERN_ERR "%s, Registered 0 entries to rdma scatterlist \n", __func__);
+			return -1;
+		}
+
+		print_io_request_physical_pages(io_rq, __func__);
+		print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
+	#endif
+
+
+	// 2) Register the DMA area as RDMA MR
+	// Assign the local RDMA buffer informaton to ib_rdma_wr->sg_list directly, no need to resiger the local rdma mr ?
+	//
+	// ret = ib_map_mr_sg(rdma_cmd_ptr->mr, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry, NULL, PAGE_SIZE);
+	// if(ret < rdma_cmd_ptr->nentry ){
+	// 	printk(KERN_ERR "%s, register DMA area as MR failed. \n", __func__);
+	// 	goto err;
+	// }
+
+
+	// 3) fill the wr
+	// Re write some field of the ib_rdma_wr
+	rdma_cmd_ptr->io_rq										= io_rq;						// Reserve this i/o request as responds request. 
+	rdma_cmd_ptr->rdma_sq_wr.rkey					= remote_chunk_ptr->remote_rkey;
+	rdma_cmd_ptr->rdma_sq_wr.remote_addr	= remote_chunk_ptr->remote_addr + offse_within_chunk; // only read a page
+	rdma_cmd_ptr->rdma_sq_wr.wr.opcode		= IB_WR_RDMA_WRITE;
+	
+
+
+		// 3)  one or multiple DMA areas,
+		// Need to use the scatter & gather characteristics of IB.
+		// We need to confirm that all the sectors are contiguous or we have to split the bio into multiple ib_rdma_wr.
+		
+		//
+		// !! Fix this !!
+		//
+		if(dma_entry >= MAX_REQUEST_SGL){
+			printk(KERN_ERR "%s : Too many segments in this i/o request. Limit and reset the number to %d \n", __func__, MAX_REQUEST_SGL);
+			dma_entry = MAX_REQUEST_SGL - 2;   // 32 leads to error, reserver 2 slots.
+		}
+
+		// [Warning] assume all the sectors in this bio is contiguous.
+		// build multiple ib_sge
+		struct ib_sge sge_list[dma_entry];
+		for(i=0; i<dma_entry; i++ ){
+			sge_list[i].addr 		= sg_dma_address(&(rdma_cmd_ptr->sgl[i]));
+			sge_list[i].length	=	sg_dma_len(&(rdma_cmd_ptr->sgl[i]));
+			sge_list[i].lkey		=	rdma_q_ptr->rdma_session->qp->device->local_dma_lkey;
+		}
+
+		rdma_cmd_ptr->rdma_sq_wr.wr.sg_list		= sge_list;  // let wr.sg_list points to the start of the ib_sge array?
+		rdma_cmd_ptr->rdma_sq_wr.wr.num_sge		= dma_entry;
+		
+		
+		// !! TO DO !!
+		// confirm all the sectors are contiguous 
+		// Checked from the bio and the merging policy of request, all the sectors should be contiguous.
+		#ifdef DEBUG_RDMA_CLIENT
+			printk(KERN_INFO "%s, gather. 1-sided RDMA write for %d segmetns.", __func__, dma_entry);
+			check_segment_address_of_request(io_rq);
+	
+			// printk(KERN_INFO "%s,  dma_address : 0x%llx , length 0x%x \n" ,
+			// 											__func__, rdma_cmd_ptr->rdma_sgl.addr,  rdma_cmd_ptr->rdma_sq_wr.wr.sg_list->length );
+
+		#endif
+
+
+
+
+	return ret; 
+
+// err:
+// 	printk(KERN_ERR "ERROR in %s \n", __func__);
+// 	return ret;
+}
+
 
 
 
@@ -1139,7 +1235,7 @@ err:
 int rdma_write_done(struct ib_wc *wc){
 
 	struct rmem_rdma_command 	*rdma_cmd_ptr;
-	struct request 				*io_rq;
+	struct request 						*io_rq;
 
 
 	//Get rdma_command from wr->wr_id
@@ -1157,17 +1253,19 @@ int rdma_write_done(struct ib_wc *wc){
 	//memcpy(bio_data(io_rq->bio), rdma_cmd_ptr->rdma_buf, PAGE_SIZE );
 
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s, Write rquest, tag : %d finished. Return to caller. \n",__func__, rdma_cmd_ptr->io_rq->tag);
+		printk("%s, Write rquest, tag : %d finished. Return to caller. \n",__func__, rdma_cmd_ptr->io_rq->tag);
 	
-	struct bio * bio_ptr = rdma_cmd_ptr->io_rq->bio;
-	struct bio_vec *bv;
-	int i;
+		print_io_request_physical_pages(io_rq, __func__);
+
+		// struct bio * bio_ptr = rdma_cmd_ptr->io_rq->bio;
+		// struct bio_vec *bv;
+		// int i;
 
 
-	bio_for_each_segment_all(bv, bio_ptr, i) {
-        struct page *page = bv->bv_page;
-        printk("%s:  handle struct page:0x%llx  << \n", __func__, (u64)page );
-    }
+		// bio_for_each_segment_all(bv, bio_ptr, i) {
+    //   struct page *page = bv->bv_page;
+    //   printk("%s:  handle struct page:0x%llx  << \n", __func__, (u64)page );
+ 		// }
 	#endif
 
 	// Notify the caller that the i/o request is finished.
@@ -1264,19 +1362,21 @@ int post_rdma_read(struct rdma_session_context *rdma_session, struct request* io
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offset_within_chunk, uint64_t len ){
 
 	int ret = 0;
-	//int cpu;
+	int i;
+	int dma_entry = 0;
 	struct rmem_rdma_command *rdma_cmd_ptr;
 	struct ib_send_wr *bad_wr;
+	struct ib_device	*ibdev	=	rdma_q_ptr->rdma_session->pd->device;  // get the ib_devices
 
 	// Confirm this need chunk is mapped.
   	// OR 
 	// [?] Request to bind this chunk. TO BE DONE.
+	#ifdef DEBUG_RDMA_CLIENT
   	if(unlikely(remote_chunk_ptr->chunk_state != MAPPED)){
-    	ret =-1;
     	printk("%s, Current chunk(rkey 0x%x) isn't mapped to remote memory serveer. \n", __func__, remote_chunk_ptr->remote_rkey);
-    	goto err;
+    	return -1;
   	}
-
+	#endif
 
 	//	cpu = get_cpu();	// Stop context switch ??
 
@@ -1285,21 +1385,65 @@ int post_rdma_read(struct rdma_session_context *rdma_session, struct request* io
 	rdma_cmd_ptr = get_a_free_rdma_cmd_from_rdma_q(rdma_q_ptr);
 	if(unlikely(rdma_cmd_ptr == NULL)){
 		printk(KERN_ERR "%s, No available rmem_rdma_command in this rdma_queue, 0x%llx \n", __func__, (unsigned long long)rdma_q_ptr);
-		goto err;
+		return -1;
 	}
 
+	// 1) Register the physical pages attached to bio to a scatterlist.
+	//  does the scatterlist->dma_address assigned by ib_dma_map_sg, yes.
+	// Make sure that rdma_cmd_ptr->sgl has enough slots for the segments in request. 
+	rdma_cmd_ptr->nentry = blk_rq_map_sg(io_rq->q, io_rq, rdma_cmd_ptr->sgl );
+
+	// 2) Register all the entries in scatterlist as dma buffer.
+	// This function may merge these dma buffers into one.
+	dma_entry	=	ib_dma_map_sg( ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry,
+											rq_data_dir(io_rq) == WRITE ? DMA_TO_DEVICE : DMA_FROM_DEVICE);  // Inform PCI device the dma address of these scatterlist.
+	ret = dma_entry;
+	
+
+	#ifdef DEBUG_RDMA_CLIENT
+		if( unlikely(dma_entry == 0) ){
+			printk(KERN_ERR "%s, Registered 0 entries to rdma scatterlist \n", __func__);
+			return -1;
+		}else{
+			printk(KERN_INFO "%s, Regsitered dma_entry entries as rdma buffer \n", __func__);
+		}
+
+		print_io_request_physical_pages(io_rq, __func__);
+		print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
+	#endif
+
+
 
 	//
-	// read the data into this wr's RDMA buffer.
+	// 3) set the RDMA message 
 	//
-	// Is this necessary ??
-
 
 	rdma_cmd_ptr->io_rq				= io_rq;						// Reserve this i/o request as responds request. 
-	rdma_cmd_ptr->rdma_sq_wr.rkey	= remote_chunk_ptr->remote_rkey;
+	rdma_cmd_ptr->rdma_sq_wr.rkey					= remote_chunk_ptr->remote_rkey;
 	rdma_cmd_ptr->rdma_sq_wr.remote_addr	= remote_chunk_ptr->remote_addr + offset_within_chunk;
 	rdma_cmd_ptr->rdma_sq_wr.wr.opcode		= IB_WR_RDMA_READ;
-	rdma_cmd_ptr->rdma_sq_wr.wr.sg_list->length = len;				// length of the page, should a page alignment ?
+	//rdma_cmd_ptr->rdma_sq_wr.wr.sg_list->length = len;				// length of the page, should a page alignment ?
+
+	//
+	// !! Fix this !!
+	//
+	if(dma_entry >= MAX_REQUEST_SGL){
+		printk(KERN_ERR "%s : Too many segments in this i/o request. Limit and reset the number to %d \n", __func__, MAX_REQUEST_SGL);
+		dma_entry = MAX_REQUEST_SGL - 2;  // 32 leands to error, reserve 2 slots.
+	}
+
+	struct ib_sge sge_list[dma_entry];   // This variable size length of array will disable the goto function.
+
+	// Do we need to handle 1 and multiple dma_entries separately ?
+	for(i=0; i<dma_entry; i++ ){
+		sge_list[i].addr 		= sg_dma_address(&(rdma_cmd_ptr->sgl[i]));
+		sge_list[i].length	=	sg_dma_len(&(rdma_cmd_ptr->sgl[i]));
+		sge_list[i].lkey		=	rdma_q_ptr->rdma_session->qp->device->local_dma_lkey;
+	}
+
+	rdma_cmd_ptr->rdma_sq_wr.wr.sg_list		= sge_list;  // let wr.sg_list points to the start of the ib_sge array?
+	rdma_cmd_ptr->rdma_sq_wr.wr.num_sge		= dma_entry;
+
 
 	//debug
 	// responds the request before post the request.
@@ -1309,17 +1453,14 @@ int post_rdma_read(struct rdma_session_context *rdma_session, struct request* io
 	//post the 1-sided RDMA write
 	// Use the global RDMA context, rdma_session_global
 	ret = ib_post_send(rdma_session->qp, (struct ib_send_wr*)&rdma_cmd_ptr->rdma_sq_wr, &bad_wr);
-	if(unlikely(ret)){
-		printk(KERN_ERR "%s, post 1-sided RDMA read failed, return value :%d \n", __func__, ret);
-		goto err;
-	}
 
-//	put_cpu();
-
-	// debug section
-	// print debug information here.
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s,Post a 1-sided RDMA read done.\n", __func__);
+		if(unlikely(ret)){
+			printk(KERN_ERR "%s, post 1-sided RDMA read failed, return value :%d \n", __func__, ret);
+			return -1;
+		}
+
+		printk("%s,Post a 1-sided RDMA read done.\n", __func__);
 	#endif
 
 
@@ -1363,34 +1504,33 @@ int rdma_read_done(struct ib_wc *wc){
 
 
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s: Should copy 0x%x bytes from RDMA buffer to request. \n",__func__,  blk_rq_bytes(io_rq));
+		//printk("%s: Should copy 0x%x bytes from RDMA buffer to request. \n",__func__,  blk_rq_bytes(io_rq));
 	
-	// Debug part
-	// We need to confirm that all the requested data are sent back. 	
-	// All the physical pages are filled with the right data.
-	if( io_rq->nr_phys_segments  != io_rq->bio->bi_phys_segments ){
-		printk(KERN_ERR "%s: Leave out some bio ! \n",__func__);
-		ret = -1;
-		goto err;
-	}
+		// Debug part
+		// We need to confirm that all the requested data are sent back. 	
+		// All the physical pages are filled with the right data.
+		if( io_rq->nr_phys_segments  != io_rq->bio->bi_phys_segments ){
+			printk(KERN_ERR "%s: not only one bio in this requset.  Leave out some bio ! \n",__func__);
+			ret = -1;
+			goto err;
+		}
 
-	// Check the data length
-	if( io_rq->nr_phys_segments * PAGE_SIZE <= blk_rq_bytes(io_rq) ){
-		//received_byte_len = io_rq->nr_phys_segments * PAGE_SIZE;
-		printk(KERN_ERR "%s, blk_rq_bytes(io_rq) > io_rq->nr_phys_segments*PAGE_SIZE,need to reseet size. \n",__func__);
-	}
+		// Check the data length
+		// for swap bio, each segments should be exactly a page, 4K.
+		check_sector_and_page_size(io_rq, __func__);
 
 
-	struct bio * bio_ptr = rdma_cmd_ptr->io_rq->bio;
-	struct bio_vec *bv;
-	int i;
+		struct bio * bio_ptr = rdma_cmd_ptr->io_rq->bio;
+		struct bio_vec *bv;
+		int i;
 
 
-	bio_for_each_segment_all(bv, bio_ptr, i) {
-        struct page *page = bv->bv_page;
-        printk("%s:  handle struct page:0x%llx  << \n", __func__, (u64)page );
-  }
+		bio_for_each_segment_all(bv, bio_ptr, i) {
+  		struct page *page = bv->bv_page;
+    	printk("%s:  handle struct page:0x%llx , physical page: 0x%llx  << \n", __func__, (u64)page, (u64)page_to_phys(page) );
+  	}
 
+		printk("%s: 1-sided rdma_read finished. requset->tag : %d <<<<<  \n\n",__func__, io_rq->tag);
 	#endif
 
 	//
@@ -1423,14 +1563,6 @@ int rdma_read_done(struct ib_wc *wc){
 	start = (((uint64_t)cycles_high_before[rdma_cmd_ptr->rdma_q_ptr->q_index] << 32) | cycles_low_before[rdma_cmd_ptr->rdma_q_ptr->q_index]);
 	end = (((uint64_t)cycles_high_after[rdma_cmd_ptr->rdma_q_ptr->q_index] << 32) | cycles_low_after[rdma_cmd_ptr->rdma_q_ptr->q_index]);
 	printk(KERN_INFO "1-sided RDMA read lat = %llu cycles, for %d pages \n", (end - start) , io_rq->nr_phys_segments );
-
-
-	#endif
-
-
-	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s: 1-sided rdma_read finished. requset->tag : %d <<<<<  \n\n",__func__, io_rq->tag);
-	//
 
 	#endif
 
@@ -1829,7 +1961,8 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	// 		rdma_session_context : driver data
 	//		number of requeted chunks
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s: Got free memory size from remote memory server. Request for Chunks : %u \n",__func__, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);
+	printk("%s: Got free memory size from remote memory server. Request for Chunks : %llu \n",
+																												__func__, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);
 	#endif
 	ret = octupos_requset_for_chunk(rdma_session, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);  // 8 chunk, 1 GB/chunk.
 	if(unlikely(ret)){
@@ -1944,7 +2077,7 @@ void octopus_free_buffers(struct rdma_session_context *rdma_session) {
 					if(rdma_cmd_ptr->rdma_buf != NULL){
 						kfree(rdma_cmd_ptr->rdma_buf);
 
-						#ifdef DEBUG_RDMA_CLINET_DETAIL
+						#ifdef DEBUG_RDMA_CLIENT_DETAIL
 						printk("%s: free rdma_queue[%d], rdma_cmd_buf[%d]", __func__,i,j );
 						#endif
 					}
@@ -2116,16 +2249,32 @@ int __init octopus_rdma_client_init_module(void)
 	//printk("Do nothing for now. \n");
 	printk("%s, octopus - kernel level rdma client.. \n",__func__);
 
-
-	//main(0,NULL);
-
 	online_cores = num_online_cpus();
 
-	ret = octopus_RDMA_connect(&rdma_session_global);
-	if(ret){
-		printk(KERN_ERR "%s, octopus_RDMA_connect failed. \n", __func__);
-	}
+	#ifdef	DEBUG_BD_ONLY
 
+		// Only debug the Disk driver
+		ret =rmem_init_disk_driver(&rmem_dev_ctrl_global);
+		if(unlikely(ret)){
+			printk("%s, Initialize disk driver failed.\n", __func__);
+			goto err;
+		}
+	
+	#else
+		// Build both the RDMA and Disk driver
+		ret = octopus_RDMA_connect(&rdma_session_global);
+		if(ret){
+			printk(KERN_ERR "%s, octopus_RDMA_connect failed. \n", __func__);
+			goto err;
+		}
+
+	// end of DEBUG_BD_ONLY
+	#endif
+
+	return ret;
+
+err:
+	printk(KERN_ERR "ERROR in %s \n", __func__);
 	return ret;
 }
 
@@ -2148,24 +2297,32 @@ void __exit octopus_rdma_client_cleanup_module(void)
 	//	rdma_disconnect(cb->cm_id);
 	//}
 
-	ret = octopus_disconenct_and_collect_resource(&rdma_session_global);
-	if(unlikely(ret)){
-		printk(KERN_ERR "%s, octopus_disconenct_and_collect_resource  failed.\n",  __func__);
-	}
+	#ifdef	DEBUG_BD_ONLY
 
+		ret = octopus_free_block_devicce(&rmem_dev_ctrl_global);
+		if(unlikely(ret)){
+			printk(KERN_ERR "%s, free block device failed.\n",  __func__);
+		}
 
+	#else
 
+		ret = octopus_disconenct_and_collect_resource(&rdma_session_global);
+		if(unlikely(ret)){
+			printk(KERN_ERR "%s, octopus_disconenct_and_collect_resource  failed.\n",  __func__);
+		}
 
-	//
-	// 2)  Free the Block Device resource
-	//
-	#ifndef DEBUG_RDMA_ONLY
-	ret = octopus_free_block_devicce(&rmem_dev_ctrl_global);
-	if(unlikely(ret)){
-		printk(KERN_ERR "%s, free block device failed.\n",  __func__);
-	}
+		//
+		// 2)  Free the Block Device resource
+		//
+		#ifndef DEBUG_RDMA_ONLY
+		ret = octopus_free_block_devicce(&rmem_dev_ctrl_global);
+		if(unlikely(ret)){
+			printk(KERN_ERR "%s, free block device failed.\n",  __func__);
+		}
+		#endif
+
+		// end ofDEBUG_BD_ONLY
 	#endif
-
 	printk(" Remove Module OCTOPUS DONE. \n");
 
 	//
