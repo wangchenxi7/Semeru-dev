@@ -65,7 +65,7 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
 
 // Each request can have multiple bio, but each bio can only have 1  pages ??
 #define MAX_REQUEST_SGL								 32 		// number of segments, get from ibv_query_device.
-#define MAX_SEGMENT_IN_REQUEST				(u64)128 // defined in ? forget  
+#define MAX_SEGMENT_IN_REQUEST				(u64)128 // defined in ? copy from nvmeof's SG_CHUNK_SIZE
 #define ONE_SIEDED_RDMA_BUF_SIZE			(u64)MAX_REQUEST_SGL * PAGE_SIZE
 
 
@@ -110,8 +110,8 @@ extern u64 RMEM_SIZE_IN_PHY_SECT;
 //
 // Enable debug information printing 
 //
-#define DEBUG_RDMA_CLIENT 			1 
-//#define DEBUG_LATENCY_CLIENT		1
+// #define DEBUG_RDMA_CLIENT 			1 
+#define DEBUG_LATENCY_CLIENT		1
 //#define DEBUG_RDMA_CLIENT_DETAIL 1
 //#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
@@ -289,54 +289,29 @@ struct remote_mapping_chunk_list {
  * 
  */
 struct rmem_rdma_command{
-
-//	struct IS_connection 	*IS_conn;
-//	struct free_ctx_pool 	*free_ctxs;  	// points to its upper structure, free_ctx_pool.
-	//struct mutex ctx_lock;				// Does a single rmem_rdma_cmd need a spin lock ??
  
 	struct ib_rdma_wr 	rdma_sq_wr;			// wr for RDMA write/send.  [?] Send queue wr ??
-	struct ib_sge 			rdma_sgl;				// Points to the data addres. Does it support gather ? point to sevral discontigous pages. 
-	char 								*rdma_buf;			// The reserved DMA buffer. Binded to ib_sge. [?] the size of the buffer isn't determined before get the i/o request?
-	//uint32_t 					buffer_len;			// PAGE_SIZE*MAX_SGL_LENGTH
-	//dma_addr_t  			rdma_dma_addr;		// DMA/BUS address of rdma_buf
-	u64									rdma_dma_addr;		// After confirm the IB is 64 bits compatible, use the dma_addr_t.
-	//DECLARE_PCI_UNMAP_ADDR(rdma_mapping)	// [?]
-	//struct ib_mr 		*rdma_mr;			// The memory region. No one use this field. Use the rdma_buf directly.
 	
 	//
 	// I/O request file address
 	//
 	struct request 			*io_rq;			// Pointer to the I/O requset. [!!] Contain Real Offload [!!]
 
-	//
-	// Can we delete these fields ?
-	//
-	//int 							chunk_index;	// Hight 32 bits, the chunk index (Assume 1GB/Chunk)
-	//unsigned long 					offset;			// Offset within the chunk
-	//unsigned long 					len;			// Length of the i/o reuqet data, page alignment.
-	//struct remote_chunk_g 			*chunk_ptr;
-	//atomic_t 						free_state; 	//	available = 1, occupied = 0
-	int 								free_state;
-
-	//struct rmem_device_control 		*rmem_dev_ctx;		// disk driver_data, get from rdma_session-> rmem_dev_ctx;
-	//struct rdma_session_context		*rdma_session;	// RDMA connection context. We use a global rdma_session_global now.
-
-	// scatterlist
-	// points to the physical pages of i/o requset. 
-	// we need to split this sgl if it exceeds the max s/g number of our hardware.
-	struct scatterlist	sgl[MAX_SEGMENT_IN_REQUEST];
-	u64  								nentry;		// number of the segments, usually one pysical page per segment
-	//ib_mr								*mr;			// the corresponding RDMA MR for the scatterlist.  use ib_sge directly ?
-	//struct ib_reg_wr		*reg_wr;	// wr used to carry the RDMA data
-	
-
+		
+	struct ib_sge sge_list[MAX_REQUEST_SGL]; // scatter-gather entry for 1-sided RDMA read/write WR. 
 
 	// fields for debug
 	#ifdef DEBUG_LATENCY_CLIENT
-
-	struct rmem_rdma_queue *rdma_q_ptr;		// points to the rdma queue it belongs to.
+		struct rmem_rdma_queue *rdma_q_ptr;		// points to the rdma queue it belongs to.
 	#endif
 
+	// scatterlist  - this works like sge_table.
+	// [!!] The scatterlist is temporaty data, we can put in the behind of i/o request and not send them to remote server.
+	// points to the physical pages of i/o requset. 
+	u64  								nentry;		// number of the segments, usually one pysical page per segment
+	struct scatterlist	sgl[];		// Just keep a pointer. The memory is reserved behind the i/o request. 
+	// scatterlist should be at the end of this structure : Variable/Flexible array in structure.
+	// Then it can points to reserved space in i/o requst  after sizeof(struct rmem_rdma_command).
 };
 
 
@@ -347,6 +322,7 @@ struct rmem_rdma_command{
  * Assign a rmem_rdma_queue to each dispatch queue to handle the poped request.
  * 		 rmem_rdma_queue is added to	 blk_mq_hw_ctx->driver_data
  * 
+ * [?] We removed the rmem_rdma_command pool. Then is it necessary to keep this rdma_queue ??
  * 
  * Fields
  * 		struct rmem_rdma_command* rmem_rdma_cmd,  a list of rmem_rdma_command. 
@@ -422,10 +398,10 @@ struct rdma_session_context {
 	uint8_t  	freed;			// some function can only be called once, this is the flag to record this.
 
 	//
-  	// 3) 2-sided RDMA section. 
-  	//		This section is used for RDMA connection and basic information exchange with remote memory server.
+  // 3) 2-sided RDMA section. 
+  //		This section is used for RDMA connection and basic information exchange with remote memory server.
 
-  	// DMA Receive buffer
+  // DMA Receive buffer
   struct ib_recv_wr 	rq_wr;			// receive queue wr
 	struct ib_sge 			recv_sgl;		/* recv single SGE */
   struct message			*recv_buf;
@@ -437,10 +413,10 @@ struct rdma_session_context {
   	// DMA send buffer
 	// ib_send_wr, used for posting a two-sided RDMA message 
   struct ib_send_wr 	sq_wr;			// send queue wr
-	struct ib_sge 		send_sgl;
-	struct message		*send_buf;
+	struct ib_sge 			send_sgl;
+	struct message			*send_buf;
 	//dma_addr_t 			send_dma_addr;
-	u64 							send_dma_addr;
+	u64 								send_dma_addr;
 	//DECLARE_PCI_UNMAP_ADDR(send_mapping)
 	//struct ib_mr *send_mr;
 
@@ -449,21 +425,9 @@ struct rdma_session_context {
 	// get lkey from dma_mr->lkey.
 	struct ib_mr 			*dma_mr;  // [?] receive mr to be registered ??
   enum mem_type 		mem;		//  only when mem == DMA, we need allocate and intialize dma_mr.
-	    // [?] How to set this value ?
-	//int 				local_dma_lkey;		/* use 0 for lkey */  //[??] No one touch this value, it keeps 0.
-
-
+	
 
 	// 4) For 1-sided RDMA read/write
-	// Record the mapped chunk
-	// Should we try to map all the chunk at the start time ?
-
-//	struct ib_mr *rdma_mr;
-
-//  	uint64_t remote_len;		/* remote guys LEN */
-	// Record the mapped chunk information.
-	//
-
 	// I/O request --> 1 sided RDMA message.
 	// rmem_rdma_queue store these reserved 1-sided RDMA wr information.
 	struct rmem_rdma_queue		*rmem_rdma_queue_list; 		// one rdma_queue per dispatch queue.
@@ -471,8 +435,6 @@ struct rdma_session_context {
 
 	// 5) manage the CHUNK mapping.
 	struct remote_mapping_chunk_list remote_chunk_list;
-
-
 
 
 	//

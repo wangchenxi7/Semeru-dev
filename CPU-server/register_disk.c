@@ -147,7 +147,7 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
   int cpu;
   // Get the corresponding RDMA queue of this dispatch queue.
   // blk_mq_hw_ctx->driver_data  stores the RDMA connection context.
-  struct rmem_rdma_queue* rdma_q_ptr = hctx->driver_data;   
+  struct rmem_rdma_queue* rdma_q_ptr = hctx->driver_data;   // [X] RDMA queue is useless now.
   struct request *rq = bd->rq;
   
 
@@ -202,14 +202,14 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
     printk("%s: End requset->tag : %d <<<<<  \n\n",__func__, rq->tag);
 
   #else
-  // the normal path : Connect to RDMA 
+  // The NORMAL path : Connect to RDMA 
 
     cpu = get_cpu();  // disable cpu preempt
     #ifdef DEBUG_RDMA_CLIENT
       printk(KERN_INFO "%s: get cpu %d \n",__func__, cpu);
     #endif
   
-    // start count  the time
+    // start counting the time
     #ifdef DEBUG_LATENCY_CLIENT
       // Read the rdtsc timestamp and put its value into two 32 bits variables.
       asm volatile("xorl %%eax, %%eax\n\t"
@@ -222,8 +222,6 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
 
     #endif
-
-
 
     // Transfer I/O request to 1-sided RDMA messages.
     itnernal_ret = transfer_requet_to_rdma_message(rdma_q_ptr, rq);
@@ -243,7 +241,7 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
 
 
-
+  // i/o request is handled by disk driver successfully.
   return BLK_MQ_RQ_QUEUE_OK;
 
 err:
@@ -297,10 +295,9 @@ static struct blk_mq_ops rmem_mq_ops = {
  * 
  * 
  * More Explanation
- *  [?] In our design, we want the start_addr of file page is equal to the address of virtual pages. 
- *      How to implement this ?
- *        When a swapwrite happens, we get a file page having the same address with the virtual page.
- *         => This needs to modify the Kernel swap mechanism. 
+ *  [x] Universal Java heap : The swap in/out address, start_addr(sector address), should be equal to the virtual memory address. 
+ *      => When a swap out happens, Assign  the same address with the virtual page to the swap out address.
+ *         
  * 
  */
 int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct request * rq){
@@ -313,10 +310,10 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
 
   
   struct remote_mapping_chunk   *remote_chunk_ptr;
-  u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;   // 1GB/chunk in default.
+  u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;    // 1GB/chunk in default.
   //uint32_t  end_chunk_index     = (start_addr + bytes_len - PAGE_SIZE) >> CHUNK_SHIFT;  // Assume start_chunk_index == end_chunk_index.
   u64  end_chunk_index          = (start_addr + bytes_len - 1) >> CHUNK_SHIFT;
-  u64  offset_within_chunk      =  start_addr & CHUNK_MASK; // get the file address offset within chunk.
+  u64  offset_within_chunk      = start_addr & CHUNK_MASK;     // get the file address offset within chunk.
 
   #ifdef DEBUG_RDMA_CLIENT 
     u64 debug_byte_len  = bytes_len;
@@ -463,7 +460,10 @@ static int init_blk_mq_tag_set(struct rmem_device_control* rmem_dev_ctrl){
   tag_set->nr_hw_queues = rmem_dev_ctrl->nr_queues;   // hardware dispatch queue == software staging queue == avaible cores
   tag_set->queue_depth = rmem_dev_ctrl->queue_depth;  // [?] staging / dispatch queues have the same queue depth ?? or only staging queues have queue depth ?? 
   tag_set->numa_node  = NUMA_NO_NODE;
-  tag_set->cmd_size = sizeof(struct rmem_rdma_command);     // Reserve RDMA_command space. Get it by blk_mq_rq_to_pdu(struct request*)
+
+  // Reserve RDMA_command space. Get it by blk_mq_rq_to_pdu(struct request*)
+  // scatterlist is only used as temporary data structure, no need to send the Remote memory pool.
+  tag_set->cmd_size = sizeof(struct rmem_rdma_command) + MAX_SEGMENT_IN_REQUEST * sizeof(struct scatterlist) ;     
   tag_set->flags = BLK_MQ_F_SHOULD_MERGE;                   // [?]merge the bio i/o requets ??
   tag_set->driver_data = rmem_dev_ctrl;                     // The driver controller, the context 
 
@@ -993,7 +993,7 @@ void check_segment_address_of_request(struct request *io_rq){
   //u64 segment_addr;
 
   for_each_bio(bio_ptr){
-		printk(KERN_INFO "%s, for bio 0x%llx, sector addr : 0x%lx , sector size(512 bytes) : 0x%x \n", 
+		printk(KERN_INFO "%s, for bio 0x%llx, sector addr : 0x%lx , sectors size : 0x%x bytes\n", 
                                       __func__, (u64)bio_ptr, bio_ptr->bi_iter.bi_sector, bio_ptr->bi_iter.bi_size );
 
     count = 0;
@@ -1046,7 +1046,7 @@ bool check_sector_and_page_size(struct request *io_rq, const char* message){
 
   //print the attached message
   if(message != NULL)
-    printk(KERN_INFO "\n %s \n", message);
+    printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
 
 
   for_each_bio(bio_ptr){
@@ -1079,6 +1079,10 @@ bool check_sector_and_page_size(struct request *io_rq, const char* message){
 
   printk(KERN_INFO "%s, [0x%llx] segments, requset->_data_len 0x%llx, sector_size_of_bio 0x%llx, physical memory 0x%llx. \n\n", 
                                         __func__, segment_num, request_sector_size_in_byte, sector_size_in_byte,  physical_memory_size_in_bytes );
+ 
+  if(message != NULL)
+     printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
+ 
   return ret;
 
 err:
@@ -1102,7 +1106,7 @@ void print_io_request_physical_pages(struct request *io_rq, const char* message)
   u64 phys_addr;
 
   if(message != NULL)
-    printk(KERN_INFO "\n %s \n", message);
+    printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
   
 
   for_each_bio(bio_ptr)
@@ -1113,8 +1117,11 @@ void print_io_request_physical_pages(struct request *io_rq, const char* message)
                           __func__,  (u64)page, (u64)phys_addr );
     }
 
-  printk(KERN_INFO " %s, done. request->tag %d. \n\n", __func__, io_rq->tag );
+  printk(KERN_INFO " %s, request->tag %d. \n\n", __func__, io_rq->tag );
 
+  if(message != NULL)
+    printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
+  
 }
 
 /**
@@ -1124,7 +1131,7 @@ void  print_scatterlist_info(struct scatterlist* sl_ptr , int nents ){
 
   int i;
 
-  printk(KERN_INFO "\n %s, %d entries \n", __func__, nents);
+  printk(KERN_INFO "\n %s, %d entries , Start\n", __func__, nents);
 
   for(i=0; i< nents; i++){
    // if(sl_ptr[i] != NULL){   // for array[N], the item can't be NULL.
@@ -1133,7 +1140,7 @@ void  print_scatterlist_info(struct scatterlist* sl_ptr , int nents ){
   //  }
   }
 
-  printk(KERN_INFO " %s done\n\n", __func__);
+  printk(KERN_INFO " %s End\n\n", __func__);
 
 }
 
