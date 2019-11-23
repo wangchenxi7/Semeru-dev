@@ -189,7 +189,7 @@ class ObjectSynchronizer : AllStatic {
 class ObjectLocker : public StackObj {
  private:
   Thread*   _thread;
-  Handle    _obj;
+  Handle    _obj;      // the class instance ?
   BasicLock _lock;
   bool      _dolock;   // default true
  public:

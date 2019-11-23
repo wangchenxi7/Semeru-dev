@@ -178,7 +178,10 @@ static ClassFileStream* check_class_file_load_hook(ClassFileStream* stream,
   return stream;
 }
 
-
+/**
+ * Tag : Build klass instance from bytecode
+ *  
+ */
 InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                                 Symbol* name,
                                                 ClassLoaderData* loader_data,
@@ -210,6 +213,11 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                                         CHECK_NULL);
   }
 
+  //
+  // 1) Build  the ClassFileParse and parse the basic information of the Class Fiel
+  //  e.g. Allocate and initialzie the constrance pool, fileds layout, virtual method table etc of the class.
+  //  The klass instance is built in the next by invoking : parser.create_instance_klass
+  //
   ClassFileParser parser(stream,
                          name,
                          loader_data,
@@ -219,6 +227,9 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
                          ClassFileParser::BROADCAST, // publicity level
                          CHECK_NULL);
 
+  //
+  // 2) Use the ClassFileParser information to build the klass instance of this file.
+  //
   InstanceKlass* result = parser.create_instance_klass(old_stream != stream, CHECK_NULL);
   assert(result == parser.create_instance_klass(old_stream != stream, THREAD), "invariant");
 

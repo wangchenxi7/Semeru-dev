@@ -28,12 +28,12 @@
 #include "utilities/globalDefinitions.hpp"
 
 // ReservedSpace is a data structure for reserving a contiguous address range.
-
+// Just reserve it, need to commit it as VirtualSpace before using it.
 class ReservedSpace {
   friend class VMStructs;
  protected:
-  char*  _base;
-  size_t _size;
+  char*  _base;     // start byte address
+  size_t _size;     // byte size 
   size_t _noaccess_prefix;
   size_t _alignment;
   bool   _special;
@@ -131,8 +131,9 @@ class ReservedCodeSpace : public ReservedSpace {
   ReservedCodeSpace(size_t r_size, size_t rs_align, bool large);
 };
 
-// VirtualSpace is data structure for committing a previously reserved address range in smaller chunks.
 
+// VirtualSpace is data structure for committing a previously reserved address range in smaller chunks.
+// Commit Chunks from a ReservedSpace.
 class VirtualSpace {
   friend class VMStructs;
  private:

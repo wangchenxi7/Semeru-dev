@@ -36,6 +36,12 @@
 // They are allocated one per class loader object, and one for the null
 // bootstrap class loader
 //
+//  [?] class loader object ? used to load normal klass instance ?
+//
+//  [?] bootstrap class loader ? load the klass instance for the VM startup ?
+//
+//
+//
 //    block X ---+       +-------------------+
 //               |       |  Virtualspace     |
 //               |       |                   |
@@ -63,6 +69,22 @@ class outputStream;
 
 class CollectedHeap;
 
+/**
+ * Build a namespace, metaspace, for these metaspace related class.
+ * Then we can use the metaspace scope to separate them with global declaration. 
+ * 
+ * [?] What's the connection between ChunkManager, SpaceManager and VirtualSpaceList.
+ * 
+ * More Explanation
+ *  1) Some basic classes don't belong to the metaspace namespace.
+ *    Metaspace,
+ *        => metaspace::VirtualSpaceList
+ *        => metaspace::ChunkManager
+ *       
+ *    ClassLoaderMetaspace,
+ *        => metaspace::SpaceManager    // Manage a list of virtual space (node)
+ *        => define : allocate()       // Allocate data into the ClassLoader's corresponding MetaSpace.
+ */
 namespace metaspace {
   class ChunkManager;
   class ClassLoaderMetaspaceStatistics;
@@ -94,14 +116,20 @@ class Metaspace : public AllStatic {
   friend class MetaspaceShared;
 
  public:
+
+  // 2 types of data can be allocated into metaspace.
+  // 
   enum MetadataType {
     ClassType,
     NonClassType,
     MetadataTypeCount
   };
+
+  // [?] Each Class Loader builds a dedicated metaspace. 
+  //
   enum MetaspaceType {
     ZeroMetaspaceType = 0,
-    StandardMetaspaceType = ZeroMetaspaceType,
+    StandardMetaspaceType = ZeroMetaspaceType,        // Same as Zero metaspace, store klass instance ?
     BootMetaspaceType = StandardMetaspaceType + 1,
     UnsafeAnonymousMetaspaceType = BootMetaspaceType + 1,
     ReflectionMetaspaceType = UnsafeAnonymousMetaspaceType + 1,
@@ -132,11 +160,11 @@ class Metaspace : public AllStatic {
   DEBUG_ONLY(static bool   _frozen;)
 
   // Virtual Space lists for both classes and other metadata
-  static metaspace::VirtualSpaceList* _space_list;
-  static metaspace::VirtualSpaceList* _class_space_list;
+  static metaspace::VirtualSpaceList* _space_list;          // The global VirtualSpaceNode manager for the Metaspace
+  static metaspace::VirtualSpaceList* _class_space_list;    // [x]Only used under CompressedOop mode. Allocated in Native memory pool. 
 
-  static metaspace::ChunkManager* _chunk_manager_metadata;
-  static metaspace::ChunkManager* _chunk_manager_class;
+  static metaspace::ChunkManager* _chunk_manager_metadata;  // [?] What's the chunk for ?
+  static metaspace::ChunkManager* _chunk_manager_class;     // Pari with _class_space_list. [x]Only used under CompressedOop mode.
 
   static const MetaspaceTracer* _tracer;
 
@@ -217,6 +245,7 @@ class Metaspace : public AllStatic {
   static void print_compressed_class_space(outputStream* st, const char* requested_addr = 0) NOT_LP64({});
 
   // Return TRUE only if UseCompressedClassPointers is True.
+  //  UseCompressedClassPointers is True in default.
   static bool using_class_space() {
     return NOT_LP64(false) LP64_ONLY(UseCompressedClassPointers);
   }
@@ -227,13 +256,18 @@ class Metaspace : public AllStatic {
 
 };
 
-// Manages the metaspace portion belonging to a class loader
+/** 
+ * Manages the metaspace portion belonging to a class loader
+ * 
+ * Tag : What' kind of data stored here ?
+ * 
+ */
 class ClassLoaderMetaspace : public CHeapObj<mtClass> {
-  friend class CollectedHeap; // For expand_and_allocate()
-  friend class ZCollectedHeap; // For expand_and_allocate()
-  friend class ShenandoahHeap; // For expand_and_allocate()
+  friend class CollectedHeap;   // For expand_and_allocate()
+  friend class ZCollectedHeap;  // For expand_and_allocate()
+  friend class ShenandoahHeap;  // For expand_and_allocate()
   friend class Metaspace;
-  friend class MetaspaceUtils;
+  friend class MetaspaceUtils;  // Space Manager ?
   friend class metaspace::PrintCLDMetaspaceInfoClosure;
   friend class VM_CollectForMetadataAllocation; // For expand_and_allocate()
 
@@ -292,8 +326,13 @@ class ClassLoaderMetaspace : public CHeapObj<mtClass> {
   // Adds to the given statistic object. Will lock with CLD metaspace lock.
   void add_to_statistics(metaspace::ClassLoaderMetaspaceStatistics* out) const;
 
-}; // ClassLoaderMetaspace
+}; // end of ClassLoaderMetaspace
 
+
+/**
+ * Record space usage information for the metaspace. 
+ * It's friend of ClassLoaderMetaspace
+ */
 class MetaspaceUtils : AllStatic {
 
   // Spacemanager updates running counters.

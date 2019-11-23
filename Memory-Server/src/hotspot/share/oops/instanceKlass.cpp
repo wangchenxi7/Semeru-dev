@@ -362,6 +362,14 @@ bool InstanceKlass::has_nestmate_access_to(InstanceKlass* k, TRAPS) {
   return access;
 }
 
+/**
+ * Tag : allocate space && intialize the klass instance
+ *  
+ * [?] allocate into Native memory pool ?
+ * 
+ * InstanceKlass -> Klass::new , allocate klass instance into Metaspace.
+ * 
+ */
 InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& parser, TRAPS) {
   const int size = InstanceKlass::size(parser.vtable_size(),
                                        parser.itable_size(),
@@ -1290,6 +1298,10 @@ void InstanceKlass::check_valid_for_instantiation(bool throwError, TRAPS) {
   }
 }
 
+/**
+ * Load the Array Klass Instance.
+ *  
+ */
 Klass* InstanceKlass::array_klass_impl(bool or_null, int n, TRAPS) {
   // Need load-acquire for lock-free read
   if (array_klasses_acquire() == NULL) {

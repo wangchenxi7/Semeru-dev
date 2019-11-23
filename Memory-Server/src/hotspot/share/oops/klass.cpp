@@ -186,6 +186,13 @@ Method* Klass::uncached_lookup_method(const Symbol* name, const Symbol* signatur
   return NULL;
 }
 
+/**
+ * Tag : All the klass::new are allocated into  Metaspace. 
+ *  a. Klass instance are allocated into Metaspace
+ *  b. Each Class has a dedicated ClassLoader with an attached ClassLoaderMetaspace to store the related klass instance ?
+ *    [?] How to divide the klass ?
+ * 
+ */
 void* Klass::operator new(size_t size, ClassLoaderData* loader_data, size_t word_size, TRAPS) throw() {
   return Metaspace::allocate(loader_data, word_size, MetaspaceObj::ClassType, THREAD);
 }

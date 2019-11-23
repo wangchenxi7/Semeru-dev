@@ -39,7 +39,11 @@ class Mutex;
 
 namespace metaspace {
 
-//  SpaceManager - used by Metaspace to handle allocations
+/**  
+ * SpaceManager - used by Metaspace to handle allocations
+ *  [?] What's its connection with 
+ * 
+ */ 
 class SpaceManager : public CHeapObj<mtClass> {
   friend class ::ClassLoaderMetaspace;
   friend class Metadebug;

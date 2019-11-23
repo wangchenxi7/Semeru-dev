@@ -59,6 +59,11 @@ constantTag ConstantPool::tag_at(int which) const { return (constantTag)tags()->
 
 void ConstantPool::release_tag_at_put(int which, jbyte t) { tags()->release_at_put(which, t); }
 
+/**
+ * Tag :  A ConstantPool is an array containing class constants as described in the  class file.
+ *  [?] The constant pool is stored in klass instance.
+ * 
+ */
 ConstantPool* ConstantPool::allocate(ClassLoaderData* loader_data, int length, TRAPS) {
   Array<u1>* tags = MetadataFactory::new_array<u1>(loader_data, length, 0, CHECK_NULL);
   int size = ConstantPool::size(length);

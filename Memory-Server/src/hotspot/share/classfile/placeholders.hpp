@@ -142,7 +142,11 @@ public:
 // SystemDictionary_lock, so we don't need special precautions
 // on store ordering here.
 // The system dictionary is the only user of this class.
-
+/**
+ * Tag : Used for inserting an entry into the system dictionay ?
+ * 
+ * 
+ */
 class PlaceholderEntry : public HashtableEntry<Symbol*, mtClass> {
 
  private:

@@ -99,6 +99,9 @@ class OopStorage;
 // in this order. Changing the order may require careful restructuring
 // of the VM start-up sequence.
 //
+// Tag : [?] The well know klass, (Symbol, klass_instance)
+//       [?] Why cal them weak_klass ??
+// 
 #define WK_KLASSES_DO(do_klass)                                                                                 \
   /* well-known classes */                                                                                      \
   do_klass(Object_klass,                                java_lang_Object                                      ) \
@@ -571,7 +574,7 @@ public:
   // Static tables owned by the SystemDictionary
 
   // Hashtable holding placeholders for classes being loaded.
-  static PlaceholderTable*       _placeholders;
+  static PlaceholderTable*       _placeholders;     // [?] the class instance hashTable ?
 
   // Monotonically increasing counter which grows with
   // loading classes as well as hot-swapping and breakpoint setting
@@ -609,6 +612,13 @@ protected:
   static SymbolPropertyTable* invoke_method_table() { return _invoke_method_table; }
 
   // Basic loading operations
+  //
+  //  Tag : Do we need to handle all these path for Memory servers' Klass loading ?
+  //    [?] What's the connection with these klass instance building procedure ?
+  //     e.g.  Invoke find_class first,
+  //           if got null,
+  //              invoke other functions ?
+  //
   static InstanceKlass* resolve_instance_class_or_null_helper(Symbol* name,
                                                               Handle class_loader,
                                                               Handle protection_domain,
@@ -634,6 +644,11 @@ protected:
   static InstanceKlass* load_shared_boot_class(Symbol* class_name,
                                                TRAPS);
   static InstanceKlass* load_instance_class(Symbol* class_name, Handle class_loader, TRAPS);
+
+  //
+  //  End of klass loading.
+  //
+
   static Handle compute_loader_lock_object(Handle class_loader, TRAPS);
   static void check_loader_lock_contention(Handle loader_lock, TRAPS);
   static bool is_parallelCapable(Handle class_loader);
@@ -657,6 +672,9 @@ protected:
   static void add_to_hierarchy(InstanceKlass* k, TRAPS);
 
   // Basic find on loaded classes
+  //
+  //  [?] Try to load the klass instance ? 
+  //
   static InstanceKlass* find_class(unsigned int hash,
                                    Symbol* name, Dictionary* dictionary);
   static InstanceKlass* find_class(Symbol* class_name, ClassLoaderData* loader_data);

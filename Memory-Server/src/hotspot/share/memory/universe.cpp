@@ -299,6 +299,12 @@ void initialize_basic_type_klass(Klass* k, TRAPS) {
 	k->append_to_sibling_list();
 }
 
+
+/**
+ * Tag : genesis of  Java heap ?
+ * 
+ * 
+ */
 void Universe::genesis(TRAPS) {
 	ResourceMark rm;
 
@@ -309,11 +315,13 @@ void Universe::genesis(TRAPS) {
 			java_lang_Class::allocate_fixup_lists();
 
 			// determine base vtable size; without that we cannot create the array klasses
-			compute_base_vtable_size();
+			compute_base_vtable_size();   // Every object should have  a vtable ??
 
-			if (!UseSharedSpaces) {
+			if (!UseSharedSpaces) {  			// Default is true.  [?] What's the meanning ??
+
+				// [??] What's this for ?
 				for (int i = T_BOOLEAN; i < T_LONG+1; i++) {
-					_typeArrayKlassObjs[i] = TypeArrayKlass::create_klass((BasicType)i, CHECK);
+					_typeArrayKlassObjs[i] = TypeArrayKlass::create_klass((BasicType)i, CHECK);  
 				}
 
 				ClassLoaderData* null_cld = ClassLoaderData::the_null_class_loader_data();
@@ -649,6 +657,11 @@ static void initialize_global_behaviours() {
 	CompiledICProtectionBehaviour::set_current(new DefaultICProtectionBehaviour());
 }
 
+
+/**
+ * Tag : entrance for both Java heap and native memory build.
+ * 
+ */
 jint universe_init() {
 	assert(!Universe::_fully_initialized, "called after initialize_vtables");
 	guarantee(1 << LogHeapWordSize == sizeof(HeapWord),
@@ -663,14 +676,14 @@ jint universe_init() {
 
 	initialize_global_behaviours();
 
-	jint status = Universe::initialize_heap();
+	jint status = Universe::initialize_heap();			// Build the Java Heap
 	if (status != JNI_OK) {
 		return status;
 	}
 
-	SystemDictionary::initialize_oop_storage();
+	SystemDictionary::initialize_oop_storage();			// [?] String pool? klass instance pool ?
 
-	Metaspace::global_initialize();
+	Metaspace::global_initialize();									// Build the metaspace 
 
 	// Initialize performance counters for metaspaces
 	MetaspaceCounters::initialize_performance_counters();
@@ -740,7 +753,7 @@ CollectedHeap* Universe::create_heap() {
 
 jint Universe::initialize_heap() {
 	_collectedHeap = create_heap();
-	jint status = _collectedHeap->initialize();
+	jint status = _collectedHeap->initialize();  // Intialize the Java heap.
 	if (status != JNI_OK) {
 		return status;
 	}
@@ -957,8 +970,11 @@ void Universe::initialize_known_methods(TRAPS) {
 													vmSymbols::doStackWalk_signature(), false, CHECK);
 }
 
+/**
+ * Tag : What's genesis ? Start of class loader ? 
+ */
 void universe2_init() {
-	EXCEPTION_MARK;
+	EXCEPTION_MARK;						// [?] hanlde all the exception ? What's kind of exception ?
 	Universe::genesis(CATCH);
 }
 

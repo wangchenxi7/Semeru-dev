@@ -661,6 +661,11 @@ static void post_class_load_event(EventClassLoad* event, const InstanceKlass* k,
 // So be careful to not exit with a CHECK_ macro betweeen these calls.
 //
 // name must be in the form of "java/lang/Object" -- cannot be "Ljava/lang/Object;"
+//
+// Tag : Use speficic classloader to load the class instance for Symbol name ?
+//  
+//    [?] Where to store the class instance ? meta data space ?  OR just as normal objects in heap ?
+//
 InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
                                                                 Handle class_loader,
                                                                 Handle protection_domain,
@@ -675,7 +680,7 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   // Fix for 4474172; see evaluation for more details
   class_loader = Handle(THREAD, java_lang_ClassLoader::non_reflection_class_loader(class_loader()));
   ClassLoaderData* loader_data = register_loader(class_loader);
-  Dictionary* dictionary = loader_data->dictionary();
+  Dictionary* dictionary = loader_data->dictionary();             // [?] Each class loader has a dedicated system dictionary ?
   unsigned int d_hash = dictionary->compute_hash(name);
 
   // Do lookup to see if class already exist and the protection domain
@@ -686,8 +691,12 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   // to allow returning the Klass* and add it to the pd_set if it is valid
   {
     InstanceKlass* probe = dictionary->find(d_hash, name, protection_domain);
-    if (probe != NULL) return probe;
+    if (probe != NULL) return probe;    // Find symbol name's corresponding class instance in the dictionary, return it.
   }
+
+  //
+  // Class instance is missing, need to load it.
+  //
 
   // Non-bootstrap class loaders will call out to class loader and
   // define via jvm/jni_DefineClass which will acquire the
@@ -700,15 +709,15 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   // do not acquire lock here.
   bool DoObjectLock = true;
   if (is_parallelCapable(class_loader)) {
-    DoObjectLock = false;
+    DoObjectLock = false;   // [?] For parallel class loader, no need  to use the lock ?
   }
 
-  unsigned int p_hash = placeholders()->compute_hash(name);
-  int p_index = placeholders()->hash_to_index(p_hash);
+  unsigned int p_hash = placeholders()->compute_hash(name); 
+  int p_index = placeholders()->hash_to_index(p_hash);   
 
   // Class is not in SystemDictionary so we have to do loading.
   // Make sure we are synchronized on the class loader before we proceed
-  Handle lockObject = compute_loader_lock_object(class_loader, THREAD);
+  Handle lockObject = compute_loader_lock_object(class_loader, THREAD);    // [?] What's this lockObject used for ??
   check_loader_lock_contention(lockObject, THREAD);
   ObjectLocker ol(lockObject, THREAD, DoObjectLock);
 
@@ -716,9 +725,9 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
   bool class_has_been_loaded   = false;
   bool super_load_in_progress  = false;
   bool havesupername = false;
-  InstanceKlass* k = NULL;
-  PlaceholderEntry* placeholder;
-  Symbol* superclassname = NULL;
+  InstanceKlass* k = NULL;        // the class instance to be loaded ?
+  PlaceholderEntry* placeholder;  // work as class instance pointer ?
+  Symbol* superclassname = NULL;  // ? connection with the parameter name  ?
 
   assert(THREAD->can_call_java(),
          "can not load classes with compiler thread: class=%s, classloader=%s",
@@ -741,7 +750,7 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
          }
       }
     }
-  }
+  } // end of MutexLocker mu(SystemDictionary_lock, THREAD)
 
   // If the class is in the placeholder table, class loading is in progress
   if (super_load_in_progress && havesupername==true) {
@@ -1073,11 +1082,16 @@ InstanceKlass* SystemDictionary::parse_stream(Symbol* class_name,
   return k;
 }
 
-// Add a klass to the system from a stream (called by jni_DefineClass and
-// JVM_DefineClass).
-// Note: class_name can be NULL. In that case we do not know the name of
-// the class until we have parsed the stream.
-
+/**
+ * Add a klass to the system from a stream (called by jni_DefineClass and
+ * JVM_DefineClass).
+ * Note: class_name can be NULL. In that case we do not know the name of
+ * the class until we have parsed the stream.
+ *
+ *  Tag : One of the paths to build and insert klass instance into SystemDictionary, <Symbol, klass> ?
+ * 
+ *        
+ */
 InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
                                                      Handle class_loader,
                                                      Handle protection_domain,
@@ -1108,8 +1122,10 @@ InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   // throw potential ClassFormatErrors.
  InstanceKlass* k = NULL;
 
+  // [??] What's the CDS ??  -> Default is endabled.
+  //  Shared System dictionary ?
 #if INCLUDE_CDS
-  if (!DumpSharedSpaces) {
+  if (!DumpSharedSpaces) {    // DumpSharedSpaces == false, default
     k = SystemDictionaryShared::lookup_from_stream(class_name,
                                                    class_loader,
                                                    protection_domain,
@@ -1118,6 +1134,12 @@ InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
   }
 #endif
 
+  //
+  // 1) Build the klass instance
+  // The procedure below is same in many functions
+  // e.g. InstanceKlass* SystemDictionary::resolve_from_stream
+  //      InstanceKlass* SystemDictionary::load_instance_class
+  //
   if (k == NULL) {
     if (st->buffer() == NULL) {
       return NULL;
@@ -1128,26 +1150,33 @@ InstanceKlass* SystemDictionary::resolve_from_stream(Symbol* class_name,
                                          protection_domain,
                                          NULL, // unsafe_anonymous_host
                                          NULL, // cp_patches
-                                         CHECK_NULL);
+                                         CHECK_NULL);                   // 1. The real klass instance.
   }
 
   assert(k != NULL, "no klass created");
-  Symbol* h_name = k->name();
+  Symbol* h_name = k->name();   // Get klass instance's Symbol, the name and key
   assert(class_name == NULL || class_name == h_name, "name mismatch");
 
   // Add class just loaded
   // If a class loader supports parallel classloading handle parallel define requests
   // find_or_define_instance_class may return a different InstanceKlass
-  if (is_parallelCapable(class_loader)) {
-    InstanceKlass* defined_k = find_or_define_instance_class(h_name, class_loader, k, THREAD);
+  //
+  // 2) Add klass instance into corresponding ClassLoaderData->Dictionary
+  //
+  //  [?] If defined_k != NULL, means that we have built the klass instance ?
+  //
+  if (is_parallelCapable(class_loader)) {       // Default is yes.
+    // 2.1 Check if the klass is already built
+    InstanceKlass* defined_k = find_or_define_instance_class(h_name, class_loader, k, THREAD);  
     if (!HAS_PENDING_EXCEPTION && defined_k != k) {
       // If a parallel capable class loader already defined this class, register 'k' for cleanup.
       assert(defined_k != NULL, "Should have a klass if there's no exception");
-      loader_data->add_to_deallocate_list(k);
+      loader_data->add_to_deallocate_list(k);   // Delete the current building klass instance.
       k = defined_k;
     }
   } else {
-    define_instance_class(k, THREAD);
+    // 2.2 [?] the real action of building the klass instance ?
+    define_instance_class(k, THREAD);   
   }
 
   // If defining the class throws an exception register 'k' for cleanup.
@@ -1542,6 +1571,11 @@ static void post_class_define_event(InstanceKlass* k, const ClassLoaderData* def
   }
 }
 
+/**
+ * Tag : Define new klass instance for the ClassLoader 
+ *    Insert the built klass instance into the correspinding ClassLoaderData->Dictionary
+ *    
+ */
 void SystemDictionary::define_instance_class(InstanceKlass* k, TRAPS) {
 
   HandleMark hm(THREAD);
@@ -1638,7 +1672,7 @@ InstanceKlass* SystemDictionary::find_or_define_instance_class(Symbol* class_nam
 
   Symbol*  name_h = k->name(); // passed in class_name may be null
   ClassLoaderData* loader_data = class_loader_data(class_loader);
-  Dictionary* dictionary = loader_data->dictionary();
+  Dictionary* dictionary = loader_data->dictionary();               // [?] each class_loader has its own SystemDictionary ?
 
   unsigned int d_hash = dictionary->compute_hash(name_h);
 
@@ -1652,7 +1686,7 @@ InstanceKlass* SystemDictionary::find_or_define_instance_class(Symbol* class_nam
     // First check if class already defined
     if (is_parallelDefine(class_loader)) {
       InstanceKlass* check = find_class(d_hash, name_h, dictionary);
-      if (check != NULL) {
+      if (check != NULL) {   // The klass instance is alreay inserted in class_loader->Dictionary, return it.
         return check;
       }
     }
@@ -1683,7 +1717,8 @@ InstanceKlass* SystemDictionary::find_or_define_instance_class(Symbol* class_nam
     }
   }
 
-  define_instance_class(k, THREAD);
+  // [!!] The real action of inserting newly built klass instance into ClassLoaderData->Dictionary
+  define_instance_class(k, THREAD);   
 
   Handle linkage_exception = Handle(); // null handle
 

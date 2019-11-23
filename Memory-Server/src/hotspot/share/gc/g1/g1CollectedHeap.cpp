@@ -1665,6 +1665,10 @@ jint G1CollectedHeap::initialize_young_gen_sampling_thread() {
 	return JNI_OK;
 }
 
+/**
+ * Tag : Allocate and Intialize the Java heap 
+ * 
+ */
 jint G1CollectedHeap::initialize() {
 	os::enable_vtime();
 

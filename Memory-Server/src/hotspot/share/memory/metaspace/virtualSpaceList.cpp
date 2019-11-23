@@ -196,7 +196,16 @@ size_t VirtualSpaceList::free_bytes() {
   return current_virtual_space()->free_words_in_vs() * BytesPerWord;
 }
 
-// Allocate another meta virtual space and add it to the list.
+/**
+ * Allocate another meta virtual space and add it to the list.
+ *
+ * Tag : Allocate a virtual space (Node) into the VirtualSpaceList.
+ * Use "new" for allocation, so the virtual space Node is allocated into Native Memory pool.
+ * Each VirtualSpaceNode is a small VirtualSpace committed from a ReservedSpace.
+ * 
+ * [x] What's the range for the Native Memory pool ?
+ *  => Check the alloation of VirtualSpaceNode, it requests memory from native memory pool by using : mmap()
+ */
 bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
   assert_lock_strong(MetaspaceExpand_lock);
 
@@ -217,7 +226,7 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
   assert_is_aligned(vs_byte_size, Metaspace::reserve_alignment());
 
   // Allocate the meta virtual space and initialize it.
-  VirtualSpaceNode* new_entry = new VirtualSpaceNode(is_class(), vs_byte_size);
+  VirtualSpaceNode* new_entry = new VirtualSpaceNode(is_class(), vs_byte_size);   // Allocate a new VirtualSpaceNode and added it into list.
   if (!new_entry->initialize()) {
     delete new_entry;
     return false;
@@ -225,7 +234,7 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
     assert(new_entry->reserved_words() == vs_word_size,
         "Reserved memory size differs from requested memory size");
     // ensure lock-free iteration sees fully initialized node
-    OrderAccess::storestore();
+    OrderAccess::storestore();    // [??] What's the storestore instruction used for ?? work as a fence ?
     link_vs(new_entry);
     DEBUG_ONLY(Atomic::inc(&g_internal_statistics.num_vsnodes_created));
     return true;

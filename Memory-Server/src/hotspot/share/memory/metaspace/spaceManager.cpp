@@ -399,6 +399,10 @@ Metachunk* SpaceManager::get_new_chunk(size_t chunk_word_size) {
   return next;
 }
 
+/**
+ * Tag : allocate space for the klass instance from the ClassLoaderMetaspace
+ * 
+ */
 MetaWord* SpaceManager::allocate(size_t word_size) {
   MutexLockerEx cl(lock(), Mutex::_no_safepoint_check_flag);
   size_t raw_word_size = get_allocation_word_size(word_size);
@@ -419,7 +423,7 @@ MetaWord* SpaceManager::allocate(size_t word_size) {
     }
   }
   if (p == NULL) {
-    p = allocate_work(raw_word_size);
+    p = allocate_work(raw_word_size);   // allocate into ClassLoaderMetaspace->_current_chunk
   }
 
   return p;

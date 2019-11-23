@@ -60,13 +60,17 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes) :
     _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
   assert_is_aligned(bytes, Metaspace::reserve_alignment());
   bool large_pages = should_commit_large_pages_when_reserving(bytes);
-  _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);
+  _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);    // Allocate new ReservedSpace for the VirtualSpaceNode.
 
   if (_rs.is_reserved()) {
     assert(_rs.base() != NULL, "Catch if we get a NULL address");
     assert(_rs.size() != 0, "Catch if we get a 0 size");
     assert_is_aligned(_rs.base(), Metaspace::reserve_alignment());
     assert_is_aligned(_rs.size(), Metaspace::reserve_alignment());
+
+    //debug
+    log_debug(heap)("Allocate Metaspace::VirtualSpaceNode [0x%llx, 0x%llx], size: 0x%llx bytes ", 
+                            (unsigned long long)_rs.base(),(unsigned long long)_rs.base()+_rs.size(),(unsigned long long)_rs.size());
 
     MemTracker::record_virtual_memory_type((address)_rs.base(), mtClass);
   }

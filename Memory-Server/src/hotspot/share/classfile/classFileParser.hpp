@@ -45,10 +45,14 @@ class InstanceKlass;
 class Symbol;
 class TempNewSymbol;
 
-// Parser for for .class files
-//
-// The bytes describing the class file structure is read from a Stream object
-
+/**
+ * Parser for for .class files
+ *
+ * The bytes describing the class file structure is read from a Stream object
+ *
+ *  Funcion #1, build the klass instance from  the bytecode . 
+ * 
+ */
 class ClassFileParser {
 
  class ClassAnnotationCollector;
@@ -92,10 +96,10 @@ class ClassFileParser {
   // Metadata created before the instance klass is created.  Must be deallocated
   // if not transferred to the InstanceKlass upon successful class loading
   // in which case these pointers have been set to NULL.
-  const InstanceKlass* _super_klass;
-  ConstantPool* _cp;
-  Array<u2>* _fields;
-  Array<Method*>* _methods;
+  const InstanceKlass* _super_klass;  // klass's super klass
+  ConstantPool* _cp;              // klass constant pool
+  Array<u2>* _fields;             // klass field layout
+  Array<Method*>* _methods;       // klass virtual method table
   Array<u2>* _inner_classes;
   Array<u2>* _nest_members;
   u2 _nest_host;

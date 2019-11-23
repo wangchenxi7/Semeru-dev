@@ -72,6 +72,11 @@ getUTF(JNIEnv *env, jstring str, char* localBuf, int bufSize)
     return utfStr;
 }
 
+/**
+ * Tag : Load the class in Bytecode ? 
+ * 
+ * 
+ */
 JNIEXPORT jclass JNICALL
 Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
                                         jclass cls,
@@ -103,7 +108,7 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
         return 0;
     }
 
-    body = (jbyte *)malloc(length);
+    body = (jbyte *)malloc(length);   // body of bytecode ?
 
     if (body == 0) {
         JNU_ThrowOutOfMemoryError(env, 0);
@@ -116,7 +121,7 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
         goto free_body;
 
     if (name != NULL) {
-        utfName = getUTF(env, name, buf, sizeof(buf));
+        utfName = getUTF(env, name, buf, sizeof(buf));  //Get the name of main Class
         if (utfName == NULL) {
             goto free_body;
         }
@@ -133,7 +138,7 @@ Java_java_lang_ClassLoader_defineClass1(JNIEnv *env,
     } else {
         utfSource = NULL;
     }
-    result = JVM_DefineClassWithSource(env, utfName, loader, body, length, pd, utfSource);
+    result = JVM_DefineClassWithSource(env, utfName, loader, body, length, pd, utfSource);  // Build the Klass instance ?
 
     if (utfSource && utfSource != sourceBuf)
         free(utfSource);

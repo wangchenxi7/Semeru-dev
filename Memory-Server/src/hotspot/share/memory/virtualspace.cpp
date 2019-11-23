@@ -117,6 +117,11 @@ static bool failed_to_reserve_as_requested(char* base, char* requested_address,
   return true;
 }
 
+/**
+ * Request space from kernel and initialize the ReservedSpace to mange the allocated virtual memory.
+ * Both Java heap, metaspace then committed space from their own ReservedSpace.
+ * 
+ */
 void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
                                char* requested_address,
                                bool executable) {
@@ -145,7 +150,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
   // If there is a backing file directory for this space then whether
   // large pages are allocated is up to the filesystem of the backing file.
   // So we ignore the UseLargePages flag in this case.
-  bool special = large && !os::can_commit_large_page_memory();
+  bool special = large && !os::can_commit_large_page_memory();   // huge page support
   if (special && _fd_for_heap != -1) {
     special = false;
     if (UseLargePages && (!FLAG_IS_DEFAULT(UseLargePages) ||
@@ -156,6 +161,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
 
   char* base = NULL;
 
+  // 1. Use huge page 
   if (special) {
 
     base = os::reserve_memory_special(size, alignment, requested_address, executable);
@@ -180,6 +186,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     }
   }
 
+  // 2. Use 4KB default page
   if (base == NULL) {
     // Optimistically assume that the OSes returns an aligned base pointer.
     // When reserving a large address range, most OSes seem to align to at
@@ -189,6 +196,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     // os::attempt_reserve_memory_at() to avoid over mapping something
     // important.  If available space is not detected, return NULL.
 
+      // 2.1 Request fixed start address for this ReservedSpace
     if (requested_address != 0) {
       base = os::attempt_reserve_memory_at(size, requested_address, _fd_for_heap);
       if (failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
@@ -196,9 +204,14 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
         base = NULL;
       }
     } else {
+      // 2.2 Request any available annoymous memory from OS.
+      //
       base = os::reserve_memory(size, NULL, alignment, _fd_for_heap);
     }
 
+    //
+    // Request memory from OS failed. 
+    //
     if (base == NULL) return;
 
     // Check alignment constraints
@@ -220,7 +233,10 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
       }
     }
   }
+
   // Done
+  // Initialize the fields of ReservedSpace
+  //
   _base = base;
   _size = size;
   _alignment = alignment;

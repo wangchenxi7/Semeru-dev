@@ -207,6 +207,10 @@ int ClassLoaderData::ChunkedHandleList::count() const {
   return count;
 }
 
+/**
+ * Taverse the klass objects. 
+ *  
+ */
 inline void ClassLoaderData::ChunkedHandleList::oops_do_chunk(OopClosure* f, Chunk* c, const juint size) {
   for (juint i = 0; i < size; i++) {
     if (c->_data[i] != NULL) {
@@ -559,8 +563,17 @@ ModuleEntryTable* ClassLoaderData::modules() {
 }
 
 const int _boot_loader_dictionary_size    = 1009;
-const int _default_loader_dictionary_size = 107;
+const int _default_loader_dictionary_size = 107;      // [?] is this size enough ? size of HashTable, Dictionary.
 
+
+/**
+ * Tag : Build and return the ClassLoaderData->dictionary
+ *  
+ * [x] Each ClassLoaderData has its own Dictionary to store the loaded klss instance.
+ * [?] What does its connection with the SystemDictionary.
+ *      There is not global SystemDictionary, but lots of operation functions are defined in SystemDictionary.
+ * 
+ */
 Dictionary* ClassLoaderData::create_dictionary() {
   assert(!is_unsafe_anonymous(), "unsafe anonymous class loader data do not have a dictionary");
   int size;
@@ -580,7 +593,7 @@ Dictionary* ClassLoaderData::create_dictionary() {
   if (!DynamicallyResizeSystemDictionaries || DumpSharedSpaces) {
     resizable = false;
   }
-  return new Dictionary(this, size, resizable);
+  return new Dictionary(this, size, resizable);  // Build and return the ClassLoaderData->dictionary
 }
 
 // Tell the GC to keep this klass alive while iterating ClassLoaderDataGraph
@@ -735,20 +748,29 @@ bool ClassLoaderData::is_permanent_class_loader_data() const {
   return is_builtin_class_loader_data() && !is_unsafe_anonymous();
 }
 
+/**
+ * Tag : Depend on the type of class loader (data), return corresponding ClassLoaderMetaspace, ClassLoaderData->_metaspace.
+ *       If it's NULL, allocate one according to its Type.
+ *      
+ *      ClassLoaderMetaspace is a dedicated CHeapObj, allocate it into C-Heap by using os::malloc.
+ *      [?] It manages memory of the Metaspace->_space_list by using ClassLoaderMetaspace->_SpaceManager
+ */
 ClassLoaderMetaspace* ClassLoaderData::metaspace_non_null() {
   // If the metaspace has not been allocated, create a new one.  Might want
   // to create smaller arena for Reflection class loaders also.
   // The reason for the delayed allocation is because some class loaders are
   // simply for delegating with no metadata of their own.
   // Lock-free access requires load_acquire.
-  ClassLoaderMetaspace* metaspace = OrderAccess::load_acquire(&_metaspace);
+  ClassLoaderMetaspace* metaspace = OrderAccess::load_acquire(&_metaspace);  // Check if this ClassLoader alreay has allocated metaspace.
+  
+  // Allocate ClassLoaderMetaspace for the invocation.
   if (metaspace == NULL) {
     MutexLockerEx ml(_metaspace_lock,  Mutex::_no_safepoint_check_flag);
     // Check if _metaspace got allocated while we were waiting for this lock.
     if ((metaspace = _metaspace) == NULL) {
       if (this == the_null_class_loader_data()) {
         assert (class_loader() == NULL, "Must be");
-        metaspace = new ClassLoaderMetaspace(_metaspace_lock, Metaspace::BootMetaspaceType);
+        metaspace = new ClassLoaderMetaspace(_metaspace_lock, Metaspace::BootMetaspaceType);  // allocate a metaspace for specific classloader 
       } else if (is_unsafe_anonymous()) {
         metaspace = new ClassLoaderMetaspace(_metaspace_lock, Metaspace::UnsafeAnonymousMetaspaceType);
       } else if (class_loader()->is_a(SystemDictionary::reflect_DelegatingClassLoader_klass())) {
@@ -759,7 +781,7 @@ ClassLoaderMetaspace* ClassLoaderData::metaspace_non_null() {
       // Ensure _metaspace is stable, since it is examined without a lock
       OrderAccess::release_store(&_metaspace, metaspace);
     }
-  }
+  }  // end of metaspace == NULL
   return metaspace;
 }
 

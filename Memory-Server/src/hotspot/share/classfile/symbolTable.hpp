@@ -217,13 +217,19 @@ public:
   }
 
   // Symbol creation
+  //  Get the symbol in the SymbolTable, a HashTable <hask_key, self-defined Value>.
+  //  if it's null
+  //    Create the Symbol and insert it into SymbolTable
+  //
   static Symbol* new_symbol(const char* utf8_buffer, int length, TRAPS) {
     assert(utf8_buffer != NULL, "just checking");
     return lookup(utf8_buffer, length, THREAD);
   }
+
   static Symbol* new_symbol(const char* name, TRAPS) {
     return new_symbol(name, (int)strlen(name), THREAD);
   }
+
   static Symbol* new_symbol(const Symbol* sym, int begin, int end, TRAPS) {
     assert(begin <= end && end <= sym->utf8_length(), "just checking");
     return lookup(sym, begin, end, THREAD);

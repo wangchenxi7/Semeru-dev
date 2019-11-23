@@ -855,6 +855,7 @@ JVM_ENTRY(jclass, JVM_FindClassFromClass(JNIEnv *env, const char *name,
                        name);
     return 0;
   }
+
   TempNewSymbol h_name = SymbolTable::new_symbol(name, CHECK_NULL);
   oop from_class_oop = JNIHandles::resolve(from);
   Klass* from_class = (from_class_oop == NULL)
@@ -904,7 +905,22 @@ static void is_lock_held_by_thread(Handle loader, PerfCounter* counter, TRAPS) {
   }
 }
 
-// common code for JVM_DefineClass() and JVM_DefineClassWithSource()
+/** 
+ * common code for JVM_DefineClass() and JVM_DefineClassWithSource()
+ * 
+ * [?] Build the Symbol Table for the Class.
+ * 
+ * [?] All the Class name, variable name are stored in the SymbolTable->_the_table.
+ * OR different contents have different SymbolTable ? 
+ * 
+ * [?] What's the connection between SymbolTable and Klass ?
+ *    => object instance -> object header -> klass instance ?  
+ *    if Null, 
+ *      get the symbol from SymbolTable to load the class ?
+ *    else
+ *      get klass instance
+ * 
+ */
 static jclass jvm_define_class_common(JNIEnv *env, const char *name,
                                       jobject loader, const jbyte *buf,
                                       jsize len, jobject pd, const char *source,
@@ -928,7 +944,7 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
   // Since exceptions can be thrown, class initialization can take place
   // if name is NULL no check for class name in .class stream has to be made.
   TempNewSymbol class_name = NULL;
-  if (name != NULL) {
+  if (name != NULL) {         // Class name, e.g. Simple, is not NULL.
     const int str_len = (int)strlen(name);
     if (str_len > Symbol::max_length()) {
       // It's impossible to create this class;  the name cannot fit
@@ -940,7 +956,7 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
                          name);
       return 0;
     }
-    class_name = SymbolTable::new_symbol(name, str_len, CHECK_NULL);
+    class_name = SymbolTable::new_symbol(name, str_len, CHECK_NULL);   //[?] get or insert the Symbol into SymbolTable
   }
 
   ResourceMark rm(THREAD);
@@ -956,13 +972,13 @@ static jclass jvm_define_class_common(JNIEnv *env, const char *name,
                                                    class_loader,
                                                    protection_domain,
                                                    &st,
-                                                   CHECK_NULL);
+                                                   CHECK_NULL);   //[?] Get the klass instance via the Symbol.
 
   if (log_is_enabled(Debug, class, resolve) && k != NULL) {
     trace_class_resolution(k);
   }
 
-  return (jclass) JNIHandles::make_local(env, k->java_mirror());
+  return (jclass) JNIHandles::make_local(env, k->java_mirror());   //[?] What's the jclass ?
 }
 
 
@@ -973,6 +989,13 @@ JVM_ENTRY(jclass, JVM_DefineClass(JNIEnv *env, const char *name, jobject loader,
 JVM_END
 
 
+/**
+ * Read Class information from Java source code ?
+ * 
+ * The Klass instance is loaded/built on demand, 
+ * here is only to build  the Symbol ?
+ * 
+ */
 JVM_ENTRY(jclass, JVM_DefineClassWithSource(JNIEnv *env, const char *name, jobject loader, const jbyte *buf, jsize len, jobject pd, const char *source))
   JVMWrapper("JVM_DefineClassWithSource");
 

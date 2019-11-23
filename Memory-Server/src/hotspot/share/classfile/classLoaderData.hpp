@@ -62,12 +62,22 @@ class PackageEntryTable;
 class DictionaryEntry;
 class Dictionary;
 
-// ClassLoaderData class
-
+/** 
+ * ClassLoaderData class
+ * 
+ * Tag : Used for class loading ?
+ * 
+ */
 class ClassLoaderData : public CHeapObj<mtClass> {
   friend class VMStructs;
 
  private:
+
+  /**
+   * The space to store the klass instance.
+   * [?] metaspace::allocate() allocates object into this ChunkedHandleList ???
+   * 
+   */
   class ChunkedHandleList {
     struct Chunk : public CHeapObj<mtClass> {
       static const size_t CAPACITY = 32;
@@ -89,7 +99,7 @@ class ClassLoaderData : public CHeapObj<mtClass> {
 
     // Only one thread at a time can add, guarded by ClassLoaderData::metaspace_lock().
     // However, multiple threads can execute oops_do concurrently with add.
-    oop* add(oop o);
+    oop* add(oop o);          // [?] Add klass instance into the chunkedHandleList.
     bool contains(oop p);
     NOT_PRODUCT(bool owner_of(oop* p);)
     void oops_do(OopClosure* f);
@@ -106,14 +116,16 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   friend class MetaDataFactory;
   friend class Method;
 
-  static ClassLoaderData * _the_null_class_loader_data;
+  static ClassLoaderData * _the_null_class_loader_data;     // [?] the defualt and global class loader for each class ?
 
   WeakHandle<vm_class_loader_data> _holder; // The oop that determines lifetime of this class loader
   OopHandle _class_loader;    // The instance of java/lang/ClassLoader associated with
                               // this ClassLoaderData
 
-  ClassLoaderMetaspace * volatile _metaspace;  // Meta-space where meta-data defined by the
-                                    // classes in the class loader are allocated.
+  // Each class loader data has its own defined ClassLoaderMetaspace.
+  // This is null at default. We need to allocate and intialize it at the first invocation.
+  ClassLoaderMetaspace * volatile _metaspace;   // Meta-space where meta-data defined by the
+                                                // classes in the class loader are allocated.
   Mutex* _metaspace_lock;  // Locks the metaspace for allocations and setup.
   bool _unloading;         // true if this class loader goes away
   bool _is_unsafe_anonymous; // CLD is dedicated to one class and that class determines the CLDs lifecycle.
@@ -130,6 +142,8 @@ class ClassLoaderData : public CHeapObj<mtClass> {
 
   volatile int _claim; // non-zero if claimed, for example during GC traces.
                        // To avoid applying oop closure more than once.
+
+                              // [?] klass instane pool ??
   ChunkedHandleList _handles; // Handles to constant pool arrays, Modules, etc, which
                               // have the same life cycle of the corresponding ClassLoader.
 
@@ -139,8 +153,10 @@ class ClassLoaderData : public CHeapObj<mtClass> {
   PackageEntryTable* volatile _packages; // The packages defined by the class loader.
   ModuleEntryTable*  volatile _modules;  // The modules defined by the class loader.
   ModuleEntry* _unnamed_module;          // This class loader's unnamed module.
-  Dictionary*  _dictionary;              // The loaded InstanceKlasses, including initiated by this class loader
 
+                                         // [?] The loaded klass instance isn't in SystemDictionary ??
+  Dictionary*  _dictionary;              // [!!] The loaded InstanceKlasses, including initiated by this class loader
+                                          
   // These method IDs are created for the class loader and set to NULL when the
   // class loader is unloaded.  They are rarely freed, only for redefine classes
   // and if they lose a data race in InstanceKlass.

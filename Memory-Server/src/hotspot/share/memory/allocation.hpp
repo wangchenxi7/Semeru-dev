@@ -176,6 +176,11 @@ char* ReallocateHeap(char *old,
 
 void FreeHeap(void* p);
 
+/**
+ * Tag : rewrite new Operator for Class CHeapObj.
+ *  e.g. Allocate objects into normal C-Heap by using os::mallocc OR allocate into some ReservedSpace of JVM. 
+ * 
+ */
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
  public:
   ALWAYSINLINE void* operator new(size_t size) throw() {

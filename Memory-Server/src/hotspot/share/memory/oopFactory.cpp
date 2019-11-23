@@ -78,7 +78,13 @@ typeArrayOop oopFactory::new_typeArray_nozero(BasicType type, int length, TRAPS)
   return result;
 }
 
-
+/**
+ * Tag : Slowpath of objectArray allocation. Interpreter path.
+ * 
+ *  [?] Difference of ArrayKlass and InstanceKlass ? 
+ *    primitive array 
+ *    object array ?
+ */
 objArrayOop oopFactory::new_objArray(Klass* klass, int length, TRAPS) {
   assert(klass->is_klass(), "must be instance class");
   if (klass->is_array_klass()) {

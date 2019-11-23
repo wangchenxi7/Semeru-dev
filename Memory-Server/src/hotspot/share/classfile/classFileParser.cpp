@@ -1538,8 +1538,28 @@ class ClassFileParser::FieldAllocationCount : public ResourceObj {
   }
 };
 
-// Side-effects: populates the _fields, _fields_annotations,
-// _fields_type_annotations fields
+/** 
+ * Side-effects: populates the _fields, _fields_annotations,
+ * _fields_type_annotations fields
+ * 
+ * Tag : Build the fild layout of the klass.
+ *    e.g.
+ *        field#1: [access, name index, sig index, initial value index, low_offset, high_offset]
+ *        field#2: ..
+ * 
+ *  Parameters:
+ *    ClassFileStream : the input source.
+ *    is_interface    : Handle interface class separately ?
+ *    FiledAllocationCount : cound the allocated filed ?
+ *    ConstantPool    : the built constant pool
+ *    cp_size         :
+ *    java_fields_count_ptr ? 
+ *    TRAPS : ?
+ * 
+ *  More explanation
+ * 
+ * 
+ */ 
 void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
                                    bool is_interface,
                                    FieldAllocationCount* const fac,
@@ -1557,9 +1577,9 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
   assert(NULL == _fields_annotations, "invariant");
   assert(NULL == _fields_type_annotations, "invariant");
 
-  cfs->guarantee_more(2, CHECK);  // length
+  cfs->guarantee_more(2, CHECK);    // length
   const u2 length = cfs->get_u2_fast();
-  *java_fields_count_ptr = length;
+  *java_fields_count_ptr = length;  // number of fields ?
 
   int num_injected = 0;
   const InjectedField* const injected = JavaClasses::get_injected(_class_name,
@@ -1724,6 +1744,9 @@ void ClassFileParser::parse_fields(const ClassFileStream* const cfs,
 
   assert(NULL == _fields, "invariant");
 
+  //
+  // Allocate space for klass->_fields from _loader_data's Metaspace.
+  //
   _fields =
     MetadataFactory::new_array<u2>(_loader_data,
                                    index * FieldInfo::field_slots + num_generic_signature,
@@ -5482,13 +5505,23 @@ static void check_methods_for_intrinsics(const InstanceKlass* ik,
   }
 }
 
+/**
+ * Tag Build the klass instance from the basic information from ClassFileParser.
+ *  The ClassFileParser already has all the class information :
+ *    Contant pool,
+ *    Field layout (array),
+ *    Virtual method table 
+ *    etc 
+ *  
+ * 
+ */
 InstanceKlass* ClassFileParser::create_instance_klass(bool changed_by_loadhook, TRAPS) {
   if (_klass != NULL) {
     return _klass;
   }
 
   InstanceKlass* const ik =
-    InstanceKlass::allocate_instance_klass(*this, CHECK_NULL);
+    InstanceKlass::allocate_instance_klass(*this, CHECK_NULL);   // Allocate and Intialize the klass instance (into Metaspace)
 
   fill_instance_klass(ik, changed_by_loadhook, CHECK_NULL);
 
@@ -5919,7 +5952,7 @@ ClassFileParser::ClassFileParser(ClassFileStream* stream,
   // Do not restrict it to jdk1.0 or jdk1.1 to maintain backward compatibility (4982376)
   _relax_verify = relax_format_check_for(_loader_data);
 
-  parse_stream(stream, CHECK);
+  parse_stream(stream, CHECK);   // Parse the Class file and build basic information.
 
   post_process_parsed_stream(stream, _cp, CHECK);
 }
@@ -5998,6 +6031,21 @@ ClassFileParser::~ClassFileParser() {
   }
 }
 
+
+/**
+ * Tag : Build klass instance from bytecode(stream) ?
+ * 
+ * [?] Not build the klass instance, 
+ * only parse the Class filed and put the parsed information into ClassFileParser fields.
+ * 
+ * 
+ * The layout of a klass instance:
+ *  1) Constant pool  : ClassFileParser->_cp
+ *  2) Super class    : ClassFileParser->_super_class
+ *  3) Filed          : ClassFileParser->_fileds
+ *  4) Virtual method table : ClassFileParser->_methods
+ * 
+ */
 void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                                    TRAPS) {
 
@@ -6013,6 +6061,9 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                      magic, CHECK);
 
   // Version numbers
+  // [?] The version of JDK ?
+  //  Does klass instance have different implementation versions ? 
+  //
   _minor_version = stream->get_u2_fast();
   _major_version = stream->get_u2_fast();
 
@@ -6031,6 +6082,9 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
   // Check version numbers - we check this even with verifier off
   verify_class_version(_major_version, _minor_version, _class_name, CHECK);
 
+  //
+  // 1) Build  the klass constant pool ?
+  //
   stream->guarantee_more(3, CHECK); // length, first cp tag
   u2 cp_size = stream->get_u2_fast();
 
@@ -6046,7 +6100,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
 
   _cp = ConstantPool::allocate(_loader_data,
                                cp_size,
-                               CHECK);
+                               CHECK);          // [?]Build the ConstantPool. It's in Metaspace ??
 
   ConstantPool* const cp = _cp;
 
@@ -6180,22 +6234,30 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
 #endif
   }
 
-  // SUPERKLASS
+
+  // 2) SUPERKLASS
   _super_class_index = stream->get_u2_fast();
   _super_klass = parse_super_class(cp,
                                    _super_class_index,
                                    _need_verify,
-                                   CHECK);
+                                   CHECK);   
 
-  // Interfaces
+  // 3) Interfaces
   _itfs_len = stream->get_u2_fast();
   parse_interfaces(stream,
                    _itfs_len,
                    cp,
                    &_has_nonstatic_concrete_methods,
-                   CHECK);
+                   CHECK);   
 
   assert(_local_interfaces != NULL, "invariant");
+
+  //
+  // 4) Build the fileds layout information of Klass
+  //    It's a array like constant pool with layout:
+  //    field#1: [access, name index, sig index, initial value index, low_offset, high_offset]    
+  //
+
 
   // Fields (offsets are filled in later)
   _fac = new FieldAllocationCount();
@@ -6205,11 +6267,11 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
                cp,
                cp_size,
                &_java_fields_count,
-               CHECK);
+               CHECK); // Build the field layout of supper class.
 
   assert(_fields != NULL, "invariant");
 
-  // Methods
+  // 5) Methods
   AccessFlags promoted_flags;
   parse_methods(stream,
                 _access_flags.is_interface(),

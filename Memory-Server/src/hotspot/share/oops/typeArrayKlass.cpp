@@ -77,12 +77,19 @@ TypeArrayKlass* TypeArrayKlass::create_klass(BasicType type,
   return ak;
 }
 
+/**
+ * Tag : Allocate a typeArray klass ?
+ *  
+ * Where to store ??  MetaData space or normal space ? 
+ * 
+ */
 TypeArrayKlass* TypeArrayKlass::allocate(ClassLoaderData* loader_data, BasicType type, Symbol* name, TRAPS) {
   assert(TypeArrayKlass::header_size() <= InstanceKlass::header_size(),
       "array klasses must be same size as InstanceKlass");
 
   int size = ArrayKlass::static_size(TypeArrayKlass::header_size());
 
+  // "new" ?? c++ new ? allocate into native memory pool ?
   return new (loader_data, size, THREAD) TypeArrayKlass(type, name);
 }
 

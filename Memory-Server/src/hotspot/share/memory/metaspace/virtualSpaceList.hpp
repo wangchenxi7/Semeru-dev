@@ -36,6 +36,7 @@ class Metachunk;
 class ChunkManager;
 
 // List of VirtualSpaces for metadata allocation.
+// The basic content of the VirtualSpaceList is VirtualSpaceNode. 
 class VirtualSpaceList : public CHeapObj<mtClass> {
   friend class VirtualSpaceNode;
 

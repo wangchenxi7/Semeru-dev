@@ -39,6 +39,7 @@ class ChunkManager;
 class OccupancyMap;
 
 // A VirtualSpaceList node.
+// A list of VirtualSpaceNode can form the VirtualSpaceList.
 class VirtualSpaceNode : public CHeapObj<mtClass> {
   friend class VirtualSpaceList;
 

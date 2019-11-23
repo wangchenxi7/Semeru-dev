@@ -75,6 +75,15 @@ class ParCompactionManager;
 class PSPromotionManager;
 class vtableEntry;
 
+
+/**
+ * Tag : The class for class.
+ *        Each class has a klass instance. 
+ *  [?] Where to store the klass ?? 
+ *      A native memory pool ? It's C++ class.
+ *      The Meta data Space ?? 
+ * 
+ */
 class Klass : public Metadata {
   friend class VMStructs;
   friend class JVMCIVMStructs;
@@ -189,6 +198,8 @@ protected:
   Klass(KlassID id);
   Klass() : _id(KlassID(-1)) { assert(DumpSharedSpaces || UseSharedSpaces, "only for cds"); }
 
+  // override the operator, new. 
+  // Allocate klass instance into ClassLoaderData->metaspace
   void* operator new(size_t size, ClassLoaderData* loader_data, size_t word_size, TRAPS) throw();
 
  public:

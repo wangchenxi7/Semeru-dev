@@ -332,6 +332,11 @@ Symbol* SymbolTable::lookup_common(const char* name,
   return sym;
 }
 
+/**
+ * Tag : Get the Symbol from SymbolTable->_sysmbol_table,
+ *      If it's NULL, build and insert this Symbol.
+ * 
+ */
 Symbol* SymbolTable::lookup(const char* name, int len, TRAPS) {
   unsigned int hash = hash_symbol(name, len, SymbolTable::_alt_hash);
   Symbol* sym = SymbolTable::the_table()->lookup_common(name, len, hash);

@@ -994,7 +994,16 @@ bool Metaspace::can_use_cds_with_metaspace_addr(char* metaspace_base, address cd
 }
 #endif
 
-// Try to allocate the metaspace at the requested addr.
+
+/** 
+ * Try to allocate the metaspace at the requested addr.
+ * 
+ * Tag : is this only for compressed space ??
+ * 
+ * [?] What's the behavior of initialize_class_space() for compressedOop and non-compressed ?
+ * 
+ * 
+ */ 
 void Metaspace::allocate_metaspace_compressed_klass_ptrs(char* requested_addr, address cds_base) {
   assert(!DumpSharedSpaces, "compress klass space is allocated by MetaspaceShared class.");
   assert(using_class_space(), "called improperly");
@@ -1009,6 +1018,7 @@ void Metaspace::allocate_metaspace_compressed_klass_ptrs(char* requested_addr, a
   bool large_pages = false;
 
 #if !(defined(AARCH64) || defined(AIX))
+  // x86/x86_64, get a ReservedSpace as compressed_class_space.
   ReservedSpace metaspace_rs = ReservedSpace(compressed_class_space_size(),
                                              _reserve_alignment,
                                              large_pages,
@@ -1109,7 +1119,8 @@ void Metaspace::allocate_metaspace_compressed_klass_ptrs(char* requested_addr, a
   set_narrow_klass_base_and_shift((address)metaspace_rs.base(),
                                   UseSharedSpaces ? (address)cds_base : 0);
 
-  initialize_class_space(metaspace_rs);
+  // Use the got reserved class space to initialize Metaspace->_class_space_list and Metaspace->_chunk_manager_class
+  initialize_class_space(metaspace_rs);  
 
   LogTarget(Trace, gc, metaspace) lt;
   if (lt.is_enabled()) {
@@ -1135,6 +1146,9 @@ void Metaspace::print_compressed_class_space(outputStream* st, const char* reque
 
 // For UseCompressedClassPointers the class space is reserved above the top of
 // the Java heap.  The argument passed in is at the base of the compressed space.
+//
+// [!!] Only CompressedOop mode reaches here.
+//
 void Metaspace::initialize_class_space(ReservedSpace rs) {
   // The reserved space size may be bigger because of alignment, esp with UseLargePages
   assert(rs.size() >= CompressedClassSpaceSize,
@@ -1142,6 +1156,11 @@ void Metaspace::initialize_class_space(ReservedSpace rs) {
   assert(using_class_space(), "Must be using class space");
   _class_space_list = new VirtualSpaceList(rs);
   _chunk_manager_class = new ChunkManager(true/*is_class*/);
+
+  //debug
+  // This class space is only built in compressedOop mode.
+  log_debug(heap)("Use ReservedSpace [0x%llx, 0x%llx] to initialize (compressed) class space.  _class_space_list",
+                                        (unsigned long long)rs.base(), (unsigned long long)rs.end() );
 
   if (!_class_space_list->initialization_succeeded()) {
     vm_exit_during_initialization("Failed to setup compressed class space virtual space list.");
@@ -1207,6 +1226,14 @@ void Metaspace::ergo_initialize() {
   set_compressed_class_space_size(CompressedClassSpaceSize);
 }
 
+/**
+ * Tag : Build the metaspace handler
+ *  
+ *  Metaspace->_space_list
+ *  
+ *  Metaspace->_chunk_manager_metadata
+ * 
+ */
 void Metaspace::global_initialize() {
   MetaspaceGC::initialize();
 
@@ -1276,6 +1303,24 @@ size_t Metaspace::align_word_size_up(size_t word_size) {
   return ReservedSpace::allocation_align_size_up(byte_size) / wordSize;
 }
 
+
+/**
+ * Allocate data into Metaspace
+ * 
+ * [?] What's range of the metaspace ??
+ * 
+ * Parameters
+ *    loader_data : 
+ *    word_size   : ? alignment to word ?
+ *    MetaspaceObj: ClassType or Not, only 2 types of object in metaspace ?? 
+ * 
+ * e.g.
+ *  1) klass instance.
+ *      1.1) loader_data ? 
+ *  2) NonClassType ? 
+ *      What's this ?
+ * 
+ */
 MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
                               MetaspaceObj::Type type, TRAPS) {
   assert(!_frozen, "sanity");
@@ -1289,9 +1334,9 @@ MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
   assert(loader_data != NULL, "Should never pass around a NULL loader_data. "
         "ClassLoaderData::the_null_class_loader_data() should have been used.");
 
-  MetadataType mdtype = (type == MetaspaceObj::ClassType) ? ClassType : NonClassType;
+  MetadataType mdtype = (type == MetaspaceObj::ClassType) ? ClassType : NonClassType;  // data type
 
-  // Try to allocate metadata.
+  // Try to allocate metadata ? Allocate Klass instance into a ClassLoaderMetaspace ??
   MetaWord* result = loader_data->metaspace_non_null()->allocate(word_size, mdtype);
 
   if (result == NULL) {
@@ -1416,7 +1461,7 @@ bool Metaspace::contains_non_shared(const void* ptr) {
 }
 
 // ClassLoaderMetaspace
-
+// Contructor.
 ClassLoaderMetaspace::ClassLoaderMetaspace(Mutex* lock, Metaspace::MetaspaceType type)
   : _space_type(type)
   , _lock(lock)
@@ -1435,23 +1480,44 @@ ClassLoaderMetaspace::~ClassLoaderMetaspace() {
   }
 }
 
+
+/**
+ * Tag : get  chunk from global Metaspace->_space_list and fill into local freelist, ClassLoaderMetaspace->_vsm
+ * 
+ */
 void ClassLoaderMetaspace::initialize_first_chunk(Metaspace::MetaspaceType type, Metaspace::MetadataType mdtype) {
   Metachunk* chunk = get_initialization_chunk(type, mdtype);
   if (chunk != NULL) {
     // Add to this manager's list of chunks in use and make it the current_chunk().
-    get_space_manager(mdtype)->add_chunk(chunk, true);
+    get_space_manager(mdtype)->add_chunk(chunk, true);   // Add chunk to local chunk freelist, ClassLoaderMetaspace->_vsm
   }
 }
 
+/**
+ *  Tag : ClassLoaderMetaspace gets chunk from glocal Metaspace.
+ *  If compressedOop
+ *      get chunks from Metaspace->_chunk_manager_class 
+ *  Or
+ *      get chunks from Metaspace->_chunk_manager_metadata
+ * 
+ * 
+ * If the above chunk freelist is null.
+ * Get MetaSpaceNode to space_list ( AND fill it into correponding  chunk freelist )
+ *  If compressedOop
+ *      get from Metaspace->_class_space_list
+ *  Or
+ *      get chunks from Metaspace->_space_list
+ * 
+ */ 
 Metachunk* ClassLoaderMetaspace::get_initialization_chunk(Metaspace::MetaspaceType type, Metaspace::MetadataType mdtype) {
-  size_t chunk_word_size = get_space_manager(mdtype)->get_initial_chunk_size(type);
+  size_t chunk_word_size = get_space_manager(mdtype)->get_initial_chunk_size(type);  // Get the size of Chunk.
 
   // Get a chunk from the chunk freelist
   Metachunk* chunk = Metaspace::get_chunk_manager(mdtype)->chunk_freelist_allocate(chunk_word_size);
 
   if (chunk == NULL) {
     chunk = Metaspace::get_space_list(mdtype)->get_new_chunk(chunk_word_size,
-                                                  get_space_manager(mdtype)->medium_chunk_bunch());
+                                                  get_space_manager(mdtype)->medium_chunk_bunch());  // Get chunks from Glocal Metaspace->_space_list
   }
 
   return chunk;
@@ -1465,7 +1531,7 @@ void ClassLoaderMetaspace::initialize(Mutex* lock, Metaspace::MetaspaceType type
   // Allocate SpaceManager for metadata objects.
   _vsm = new SpaceManager(Metaspace::NonClassType, type, lock);
 
-  if (Metaspace::using_class_space()) {
+  if (Metaspace::using_class_space()) {  // Only used for CompressedOop mode.
     // Allocate SpaceManager for classes.
     _class_vsm = new SpaceManager(Metaspace::ClassType, type, lock);
   }
@@ -1473,7 +1539,7 @@ void ClassLoaderMetaspace::initialize(Mutex* lock, Metaspace::MetaspaceType type
   MutexLockerEx cl(MetaspaceExpand_lock, Mutex::_no_safepoint_check_flag);
 
   // Allocate chunk for metadata objects
-  initialize_first_chunk(type, Metaspace::NonClassType);
+  initialize_first_chunk(type, Metaspace::NonClassType);  // get chunk from global freelist ? Metaspace->_space_list ?
 
   // Allocate chunk for class metadata objects
   if (Metaspace::using_class_space()) {
@@ -1481,6 +1547,11 @@ void ClassLoaderMetaspace::initialize(Mutex* lock, Metaspace::MetaspaceType type
   }
 }
 
+
+/** 
+ * Allocate space for the klass instance from the corresponding ClassLoaderMetaspace->_vsm  
+ * 
+ */
 MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataType mdtype) {
   Metaspace::assert_not_frozen();
 
@@ -1488,9 +1559,9 @@ MetaWord* ClassLoaderMetaspace::allocate(size_t word_size, Metaspace::MetadataTy
 
   // Don't use class_vsm() unless UseCompressedClassPointers is true.
   if (Metaspace::is_class_space_allocation(mdtype)) {
-    return  class_vsm()->allocate(word_size);
+    return  class_vsm()->allocate(word_size);   // ClassType && Jvm runs in CompessedOop mode.
   } else {
-    return  vsm()->allocate(word_size);
+    return  vsm()->allocate(word_size);         // Allocate into the normal path, ClassLoaderMetaspace->_vsm    
   }
 }
 

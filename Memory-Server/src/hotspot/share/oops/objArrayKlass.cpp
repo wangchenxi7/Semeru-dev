@@ -54,6 +54,12 @@ ObjArrayKlass* ObjArrayKlass::allocate(ClassLoaderData* loader_data, int n, Klas
   return new (loader_data, size, THREAD) ObjArrayKlass(n, k, name);
 }
 
+
+/**
+ * Tag : build a objArray klass instance.
+ *  Use the ClassLoaderData to load the needed klass instance. 
+ * 
+ */
 Klass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_data,
                                                 int n, Klass* element_klass, TRAPS) {
 
@@ -124,6 +130,7 @@ Klass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_data,
   }
 
   // Initialize instance variables
+  // Build the klass instance ?
   ObjArrayKlass* oak = ObjArrayKlass::allocate(loader_data, n, element_klass, name, CHECK_0);
 
   // Add all classes to our internal class loader list here,

@@ -98,6 +98,9 @@ class ClassFileStream: public ResourceObj {
   }
 
   // Read u2 from stream
+  //
+  // [?] What's the meaning of the u2 ??
+  //
   u2 get_u2(TRAPS) const;
   u2 get_u2_fast() const {
     u2 res = Bytes::get_Java_u2((address)_current);
