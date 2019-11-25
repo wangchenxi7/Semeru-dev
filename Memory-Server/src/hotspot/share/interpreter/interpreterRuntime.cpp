@@ -265,8 +265,23 @@ IRT_ENTRY(void, InterpreterRuntime::newarray(JavaThread* thread, BasicType type,
 IRT_END
 
 
+/**
+ * Entrance of object array allocation, Interpreter.
+ * 
+ * 1) Get the related klass instance 
+ *    [?] Get klass from a Constant Pool ?
+ *          Use constant reference to index the klass instance ?
+ *          [?] There is only a global ConstantPool ? or it's per-class pool ?
+ *        OR, there is only a Symbol,
+ *          Get the klass instance from ClassLoaderData->dictionary.
+ *        
+ *        
+ * 2) Request memory from Java heap
+ * 3) Initialize the object header 
+ * 
+ */
 IRT_ENTRY(void, InterpreterRuntime::anewarray(JavaThread* thread, ConstantPool* pool, int index, jint size))
-  Klass*    klass = pool->klass_at(index, CHECK);
+  Klass*    klass = pool->klass_at(index, CHECK);     // Why does here go into ConstantPool to search the klass instance ?
   objArrayOop obj = oopFactory::new_objArray(klass, size, CHECK);
   thread->set_vm_result(obj);
 IRT_END

@@ -424,6 +424,10 @@ void InterpreterMacroAssembler::check_and_handle_earlyret(Register java_thread) 
   }
 }
 
+/**
+ * Get some index for the value stored in reg ?
+ * 
+ */
 void InterpreterMacroAssembler::get_unsigned_2_byte_index_at_bcp(Register reg, int bcp_offset) {
   assert(bcp_offset >= 0, "bcp is still pointing to start of bytecode");
   load_unsigned_short(reg, Address(_bcp_register, bcp_offset));

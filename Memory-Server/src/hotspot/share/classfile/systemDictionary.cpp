@@ -256,7 +256,14 @@ Klass* SystemDictionary::resolve_or_null(Symbol* class_name, Handle class_loader
   }
 }
 
-// name may be in the form of "java/lang/Object" or "Ljava/lang/Object;"
+/**
+ * Tag : Retrieve the klass instance from class_loader based on the symbol, class_name.
+ * 
+ * name may be in the form of "java/lang/Object" or "Ljava/lang/Object;"
+ *   InstanceKlass :: Klass, we the return value can be casted to Klass.
+ * 
+ * 
+ */
 InstanceKlass* SystemDictionary::resolve_instance_class_or_null_helper(Symbol* class_name,
                                                                        Handle class_loader,
                                                                        Handle protection_domain,
@@ -266,10 +273,10 @@ InstanceKlass* SystemDictionary::resolve_instance_class_or_null_helper(Symbol* c
     ResourceMark rm(THREAD);
     // Ignore wrapping L and ;.
     TempNewSymbol name = SymbolTable::new_symbol(class_name->as_C_string() + 1,
-                                   class_name->utf8_length() - 2, CHECK_NULL);
-    return resolve_instance_class_or_null(name, class_loader, protection_domain, THREAD);
+                                   class_name->utf8_length() - 2, CHECK_NULL);   // [?] Why can't we use the class_name directly ?
+    return resolve_instance_class_or_null(name, class_loader, protection_domain, THREAD);       // class_name is obj
   } else {
-    return resolve_instance_class_or_null(class_name, class_loader, protection_domain, THREAD);
+    return resolve_instance_class_or_null(class_name, class_loader, protection_domain, THREAD); // class_name isn't obj ??
   }
 }
 
@@ -662,9 +669,12 @@ static void post_class_load_event(EventClassLoad* event, const InstanceKlass* k,
 //
 // name must be in the form of "java/lang/Object" -- cannot be "Ljava/lang/Object;"
 //
-// Tag : Use speficic classloader to load the class instance for Symbol name ?
-//  
-//    [?] Where to store the class instance ? meta data space ?  OR just as normal objects in heap ?
+// Tag : Get Klass instance from the specific ClassLoaderData->dictionary.
+//      if get the klass instance 
+//            return it to upper caller (Insert the ConstantPool)
+//      else
+//            Build the klass instance based on the Symbol (name) && Insert it into ClassLoaderData->dictionary  
+//            return klass
 //
 InstanceKlass* SystemDictionary::resolve_instance_class_or_null(Symbol* name,
                                                                 Handle class_loader,

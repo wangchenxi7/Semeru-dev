@@ -450,6 +450,18 @@ void ConstantPool::trace_class_resolution(const constantPoolHandle& this_cp, Kla
   }
 }
 
+/**
+ * Tag : Get klass from the dedicated ConstantPool.
+ * 
+ * [?] Not from ClassLoaderData->dictionary ?
+ * 
+ *  if the value if klass
+ *      reutnr it
+ *  else if value is Symbol,
+ *      need to load the klass into Constant Pool.
+ * 
+ * 
+ */
 Klass* ConstantPool::klass_at_impl(const constantPoolHandle& this_cp, int which,
                                    bool save_resolution_error, TRAPS) {
   assert(THREAD->is_Java_thread(), "must be a Java thread");
@@ -464,7 +476,7 @@ Klass* ConstantPool::klass_at_impl(const constantPoolHandle& this_cp, int which,
 
   Klass* klass = this_cp->resolved_klasses()->at(resolved_klass_index);
   if (klass != NULL) {
-    return klass;
+    return klass;     // Get the klass, return it.
   }
 
   // This tag doesn't change back to unresolved class unless at a safepoint.
@@ -482,10 +494,12 @@ Klass* ConstantPool::klass_at_impl(const constantPoolHandle& this_cp, int which,
   }
 
   Handle mirror_handle;
-  Symbol* name = this_cp->symbol_at(name_index);
+  Symbol* name = this_cp->symbol_at(name_index);   // The Corresponding value is a Symbol, not a klass
   Handle loader (THREAD, this_cp->pool_holder()->class_loader());
   Handle protection_domain (THREAD, this_cp->pool_holder()->protection_domain());
-  Klass* k = SystemDictionary::resolve_or_fail(name, loader, protection_domain, true, THREAD);
+
+  // Load the klass from ClassLoaderData->dictionary
+  Klass* k = SystemDictionary::resolve_or_fail(name, loader, protection_domain, true, THREAD);  
   if (!HAS_PENDING_EXCEPTION) {
     // preserve the resolved klass from unloading
     mirror_handle = Handle(THREAD, k->java_mirror());

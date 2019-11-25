@@ -60,6 +60,12 @@ class FieldType: public AllStatic {
   // Testing
   static bool is_array(Symbol* signature) { return signature->utf8_length() > 1 && signature->char_at(0) == '[' && is_valid_array_signature(signature); }
 
+  /**
+   * Tag : check if this is a Symbol of object instance
+   *  LXXX;
+   *  e.g.  LobjItem;
+   * 
+   */
   static bool is_obj(Symbol* signature) {
      int sig_length = signature->utf8_length();
      // Must start with 'L' and end with ';'

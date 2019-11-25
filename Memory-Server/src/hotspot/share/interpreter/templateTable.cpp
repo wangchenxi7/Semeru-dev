@@ -54,7 +54,7 @@ Bytecodes::Code Template::bytecode() const {
   return Bytecodes::cast(i);
 }
 
-
+/** Translare bytecode/macrocode to binary code. */
 void Template::generate(InterpreterMacroAssembler* masm) {
   // parameter passing
   TemplateTable::_desc = this;

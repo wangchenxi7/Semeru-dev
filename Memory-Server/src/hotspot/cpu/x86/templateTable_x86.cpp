@@ -4146,6 +4146,17 @@ void TemplateTable::newarray() {
           rarg1, rax);
 }
 
+/**
+ * Tag : Interprter translare the bytecode::anewarray into binary code.
+ *  
+ *  The callee function:
+ *    InterpreterRuntime::anewarray(JavaThread* thread, ConstantPool* pool, int index, jint size) 
+ *      para #1 : JavaThread
+ *      para #2 : rarg1, ConstantPool,  // [?] a global ConstantPool ??
+ *      para #3 : rarg2,  index for the klass in the ConstantPool. [?] Calculate the index by Class_name Symbol ?
+ *      para #4 : rax, the size
+ * 
+ */
 void TemplateTable::anewarray() {
   transition(itos, atos);
 

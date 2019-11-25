@@ -373,7 +373,7 @@ void MemAllocator::mem_clear(HeapWord* mem) const {
   oopDesc::set_klass_gap(mem, 0);
   Copy::fill_to_aligned_words(mem + hs, _word_size - hs);
 }
-
+/** Post object allocation. Object header initialization. */
 oop MemAllocator::finish(HeapWord* mem) const {
   assert(mem != NULL, "NULL object pointer");
   if (UseBiasedLocking) {
@@ -385,7 +385,7 @@ oop MemAllocator::finish(HeapWord* mem) const {
   // Need a release store to ensure array/class length, mark word, and
   // object zeroing are visible before setting the klass non-NULL, for
   // concurrent collectors.
-  oopDesc::release_set_klass(mem, _klass);
+  oopDesc::release_set_klass(mem, _klass);   // Store the klass into the object header ?
   return oop(mem);
 }
 

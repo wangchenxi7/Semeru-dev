@@ -6098,6 +6098,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
   }
   cp_size += _max_num_patched_klasses;
 
+  // classFileParse->_cp, this is a not a global ConstantPool ?
   _cp = ConstantPool::allocate(_loader_data,
                                cp_size,
                                CHECK);          // [?]Build the ConstantPool. It's in Metaspace ??

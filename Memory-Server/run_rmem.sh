@@ -29,9 +29,10 @@ gc_mode="-XX:+UseG1GC"
 #disable compressed oops
 oop_mode="-XX:-UseCompressedOops"
 
-
+log_mode="-Xlog:heap=debug,gc+marking=debug"
+#log_mode=""
 
 ## Do  the excution
 
-echo "java  ${gc_mode} ${oop_mode}   -Xms${mem} -Xmx${mem} -cp ${testcase_dir} ${bench}"
-java  ${gc_mode} ${oop_mode}   -Xms${mem} -Xmx${mem} -cp ${testcase_dir} ${bench}
+echo "java  ${gc_mode} ${oop_mode}   -Xms${mem} -Xmx${mem} ${log_mode}  -cp ${testcase_dir} ${bench}"
+java  ${gc_mode} ${oop_mode}   -Xms${mem} -Xmx${mem} ${log_mode}  -cp ${testcase_dir} ${bench}

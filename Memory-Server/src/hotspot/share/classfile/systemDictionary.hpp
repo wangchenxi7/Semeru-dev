@@ -574,7 +574,7 @@ public:
   // Static tables owned by the SystemDictionary
 
   // Hashtable holding placeholders for classes being loaded.
-  static PlaceholderTable*       _placeholders;     // [?] the class instance hashTable ?
+  static PlaceholderTable*       _placeholders;     // [?] a wrapper for the Klass instance insertion.
 
   // Monotonically increasing counter which grows with
   // loading classes as well as hot-swapping and breakpoint setting
