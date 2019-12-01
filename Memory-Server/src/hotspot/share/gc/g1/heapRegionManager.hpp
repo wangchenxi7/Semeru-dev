@@ -72,12 +72,12 @@ class G1HeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
 // Tag : G1 Heap Region Management  
 // 
 // [x] What's the difference between "commited regions" and "allocated regions" ?
-//    => commited  : The heap size of current heap. 
+//    => Commited  : The heap size of current heap. 
 //                    For octupus, we limit the commited regions range for each Memory server heap.
-//    => Allocated : Regions which are allocated to young/old space.
+//    => Allocated : Regions which are allocated to young/old space. Resrved space.
 //
-//  Overview:
-//    |--- Allocated to Young/Old space --- | --- commited regions --- |----- Xmx size of heap --- | 
+// Overview:
+//    |--- Reserved regions --- | --- commited regions --- |----- Reserved regions  Xmx size of heap --- | 
 //
 class HeapRegionManager: public CHeapObj<mtGC> {
   friend class VMStructs;
@@ -89,7 +89,7 @@ class HeapRegionManager: public CHeapObj<mtGC> {
 
   // Each bit in this bitmap indicates that the corresponding region is available
   // for allocation.
-  CHeapBitMap _available_map;
+  CHeapBitMap _available_map;         // [?] Record which Region is committed
 
    // The number of regions committed in the heap.
   uint _num_committed;
@@ -121,11 +121,11 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1HeapRegionTable _regions;
+  G1HeapRegionTable _regions;                 // Region handler for all the Regions for current G1 Heap.
   G1RegionToSpaceMapper* _heap_mapper;
   G1RegionToSpaceMapper* _prev_bitmap_mapper;
   G1RegionToSpaceMapper* _next_bitmap_mapper;
-  FreeRegionList _free_list;
+  FreeRegionList _free_list;                  // [?] Connection with the _regions ?
 
   void make_regions_available(uint index, uint num_regions = 1, WorkGang* pretouch_gang = NULL);
   void uncommit_regions(uint index, size_t num_regions = 1);
@@ -186,6 +186,10 @@ public:
     _free_list.add_ordered(list);
   }
 
+  /**
+   * Tag : Request a Free Region from HeapRegionManager->_free_list
+   *  
+   */
   virtual HeapRegion* allocate_free_region(HeapRegionType type) {
     HeapRegion* hr = _free_list.remove_region(!type.is_young());
 

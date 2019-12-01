@@ -92,7 +92,7 @@ class G1Policy: public CHeapObj<mtGC> {
   // for the first time during initialization.
   uint   _reserve_regions;
 
-  G1YoungGenSizer* _young_gen_sizer;
+  G1YoungGenSizer* _young_gen_sizer;      // [?] How can this control the young gen ?
 
   uint _free_regions_at_end_of_collection;
 

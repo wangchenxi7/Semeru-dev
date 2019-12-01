@@ -71,7 +71,7 @@ inline HeapWord* G1ContiguousSpace::allocate_impl(size_t min_word_size,
 
 /**
  * Tag : concurrent object allocation in a G1 Heap Region
- * 
+ * 		=> Allocate into current Region, or return NULL.
  * While loop + Atomic::cmpxchg(new_val, mem/dest_var, cmp/old_val)
  * 
  */

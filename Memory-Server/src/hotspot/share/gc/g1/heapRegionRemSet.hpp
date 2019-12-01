@@ -216,7 +216,7 @@ private:
 	// [?] Meaning of the RemSet state ?
 	//
 	enum RemSetState {
-		Untracked,
+		Untracked,				// No need to Rebuild RemSet for it. e.g. Old Regions and not in CSet.
 		Updating,
 		Complete
 	};

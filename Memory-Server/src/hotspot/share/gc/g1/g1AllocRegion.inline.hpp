@@ -67,7 +67,7 @@ inline HeapWord* G1AllocRegion::par_allocate(HeapRegion* alloc_region,
   assert(alloc_region != NULL, "pre-condition");
   assert(!alloc_region->is_empty(), "pre-condition");
 
-  if (!_bot_updates) {  // [?] BOT updates ??
+  if (!_bot_updates) {  // [?] BOT updates ?? False during the mutator allocation.
     return alloc_region->par_allocate_no_bot_updates(min_word_size, desired_word_size, actual_word_size);
   } else {
     return alloc_region->par_allocate(min_word_size, desired_word_size, actual_word_size);   // [?] 3 parameter par_allocate function ??
@@ -129,12 +129,16 @@ inline HeapWord* G1AllocRegion::attempt_allocation_locked(size_t min_word_size,
   // First we have to redo the allocation, assuming we're holding the
   // appropriate lock, in case another thread changed the region while
   // we were waiting to get the lock.
+  //
+  // 1) Retry to allocate objects/TLABs into current Region.
   HeapWord* result = attempt_allocation(min_word_size, desired_word_size, actual_word_size);
   if (result != NULL) {
     return result;
   }
 
-  retire(true /* fill_up */);  //[?] Use fake oop fill up current region ?
+  // 2) Retire current Region and allocate a new Region (for Eden space).
+  //
+  retire(true /* fill_up */);  // Use fake oop fill up current region
   result = new_alloc_region_and_allocate(desired_word_size, false /* force */);
   if (result != NULL) {
     *actual_word_size = desired_word_size;

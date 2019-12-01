@@ -357,8 +357,8 @@ private:
   } while (0)
 
   // The young region list.
-  G1EdenRegions _eden;
-  G1SurvivorRegions _survivor;
+  G1EdenRegions _eden;          // G1CollectedHeap->_eden Region list.
+  G1SurvivorRegions _survivor;  // survivor Region list
 
   STWGCTimer* _gc_timer_stw;
 

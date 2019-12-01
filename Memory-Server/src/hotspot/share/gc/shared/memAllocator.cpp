@@ -313,7 +313,7 @@ HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const 
   // Allocate a new TLAB requesting new_tlab_size. Any size
   // between minimal and new_tlab_size is accepted.
   size_t min_tlab_size = ThreadLocalAllocBuffer::compute_min_size(_word_size);
-  mem = _heap->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);
+  mem = _heap->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);  // [?] May lead requset new Regions ?
   if (mem == NULL) {
     assert(allocation._allocated_tlab_size == 0,
            "Allocation failed, but actual size was updated. min: " SIZE_FORMAT
@@ -343,6 +343,15 @@ HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const 
   return mem;
 }
 
+/**
+ * Tag : normal/array object instance allocation main entry.
+ * 
+ * Request memory from TLAB or Java heap.
+ * 
+ * [?] Is this specific path for Mutators ?
+ *    What's the GC space allocation path ? 
+ * 
+ */
 HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
   if (UseTLAB) {
     HeapWord* result = allocate_inside_tlab(allocation);
@@ -354,6 +363,10 @@ HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
   return allocate_outside_tlab(allocation);
 }
 
+/**
+ * Tag : normal object allocation path ?
+ * 
+ */
 oop MemAllocator::allocate() const {
   oop obj = NULL;
   {

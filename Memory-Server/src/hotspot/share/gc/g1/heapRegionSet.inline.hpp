@@ -121,6 +121,17 @@ inline HeapRegion* FreeRegionList::remove_from_tail_impl() {
   return result;
 }
 
+/**
+ * Tag : Request a Region from Region FreeList.
+ * 
+ *  if type.is_young()
+ *      remove Region from tail
+ *  else // type.is_old() or humonguous
+ *      remove Region from head
+ * 
+ * [?] Why ??
+ *  
+ */
 inline HeapRegion* FreeRegionList::remove_region(bool from_head) {
   check_mt_safety();
   verify_optional();
@@ -133,9 +144,9 @@ inline HeapRegion* FreeRegionList::remove_region(bool from_head) {
   HeapRegion* hr;
 
   if (from_head) {
-    hr = remove_from_head_impl();
+    hr = remove_from_head_impl();   // Other Space
   } else {
-    hr = remove_from_tail_impl();
+    hr = remove_from_tail_impl();   // Young Space
   }
 
   if (_last == hr) {

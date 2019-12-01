@@ -154,6 +154,11 @@ void HeapRegion::calc_gc_efficiency() {
   _gc_efficiency = (double) reclaimable_bytes() / region_elapsed_time_ms;
 }
 
+/**
+ * Tag : Commit a Region to a dedicated Sapce : Eden, Survivor, Old, Humongugous spaces.
+ *  
+ */
+
 void HeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
   _type.set_free();

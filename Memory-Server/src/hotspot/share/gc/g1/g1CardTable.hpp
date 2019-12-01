@@ -58,6 +58,7 @@ public:
   G1CardTable(MemRegion whole_heap): CardTable(whole_heap, /* scanned concurrently */ true), _listener() {
     _listener.set_card_table(this);
   }
+  
   bool is_card_dirty(size_t card_index) {
     return _byte_map[card_index] == dirty_card_val();
   }

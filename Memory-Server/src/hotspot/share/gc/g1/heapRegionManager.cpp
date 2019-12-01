@@ -235,10 +235,23 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* pretou
 	return expanded;
 }
 
+
+/**
+ * Tag : Find NUM contiguous empty Regions for allocation.
+ * 
+ * [x] Young/Old/Humonguous spaces share the same Region freelist, HeapRegionManager->_free_list.
+ * 		After received the free Region, mark it with different tag : Eden, Survivor, Old, Humonguous etc.
+ * 
+ * [x] Scanning start from index, 0. 
+ * 		Different scan the free_list from different direction:
+ * 		=> Young Space (Eden, Suvivor) scan from tail.
+ * 		=> Old/Single humongous Region, scan from head.
+ * 		=> Multiple humonguous Regions, scan from head.
+ */
 uint HeapRegionManager::find_contiguous(size_t num, bool empty_only) {
-	uint found = 0;
+	uint found = 0;						// Same as cur.
 	size_t length_found = 0;
-	uint cur = 0;
+	uint cur = 0;							// Start from 0 ? nor from current index ?
 
 	while (length_found < num && cur < max_length()) {
 		HeapRegion* hr = _regions.get_by_index(cur);
@@ -247,8 +260,8 @@ uint HeapRegionManager::find_contiguous(size_t num, bool empty_only) {
 			length_found++;
 		} else {
 			// This region is not a candidate. The next region is the next possible one.
-			found = cur + 1;
-			length_found = 0;
+			found = cur + 1;		// Record the founded first Region index.
+			length_found = 0;		
 		}
 		cur++;
 	}

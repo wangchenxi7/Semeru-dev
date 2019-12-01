@@ -227,7 +227,7 @@ class HeapRegion: public G1ContiguousSpace {
   // The index of this region in the heap region sequence.
   uint  _hrm_index;
 
-  HeapRegionType _type;
+  HeapRegionType _type;     // Free(Reserved, but not commited), Eden, Survivor, Old, Humonguous 
 
   // For a humongous region, region in which it starts.
   HeapRegion* _humongous_start_region;
@@ -320,7 +320,7 @@ class HeapRegion: public G1ContiguousSpace {
   static int    LogOfHRGrainWords;
 
   static size_t GrainBytes;
-  static size_t GrainWords;
+  static size_t GrainWords;     // [?] The Region size is fixed to this, 128K words, 1MB ??
   static size_t CardsPerRegion;
 
   static size_t align_up_to_region_byte_size(size_t sz) {

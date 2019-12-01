@@ -342,12 +342,19 @@ const char* Runtime1::name_for_address(address entry) {
   return pd_name_for_address(entry);
 }
 
-
+/**
+ * Tag : Entrance of object instance allocation, JIT C1.
+ * 
+ * [?] The (normal) object instance allocation path is at least C1 ? no Interpreter level ? 
+ * 
+ * [?] Klass instance is got by JIT C1 compiler.
+ * 
+ */
 JRT_ENTRY(void, Runtime1::new_instance(JavaThread* thread, Klass* klass))
   NOT_PRODUCT(_new_instance_slowcase_cnt++;)
 
   assert(klass->is_klass(), "not a class");
-  Handle holder(THREAD, klass->klass_holder()); // keep the klass alive
+  Handle holder(THREAD, klass->klass_holder()); // keep the klass alive. This is the purpose of holder ?
   InstanceKlass* h = InstanceKlass::cast(klass);
   h->check_valid_for_instantiation(true, CHECK);
   // make sure klass is initialized

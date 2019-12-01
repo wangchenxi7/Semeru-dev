@@ -40,7 +40,7 @@ inline SurvivorGCAllocRegion* G1Allocator::survivor_gc_alloc_region() {
 inline OldGCAllocRegion* G1Allocator::old_gc_alloc_region() {
   return &_old_gc_alloc_region;
 }
-
+/** Tag : try to allocate size from current Mutators' occupied Region , if no enough space , return NULL  */
 inline HeapWord* G1Allocator::attempt_allocation(size_t min_word_size,
                                                  size_t desired_word_size,
                                                  size_t* actual_word_size) {

@@ -162,7 +162,7 @@ HeapRegion* G1CollectedHeap::new_heap_region(uint hrs_index,
 //  Private methods.
 
 /**
- * Tag : Allocate a new region 
+ * Tag : Allocate a new region - Mutator allocation path
  * 
  *  If allocate new region failed, try to expand the heap size to Xmx#G.
  *  Can't trigger GC here.
@@ -197,6 +197,16 @@ HeapRegion* G1CollectedHeap::new_region(size_t word_size, HeapRegionType type, b
 	return res;
 }
 
+
+
+/**
+ *  Tag : Allocate huge object into the got humonguous Regions.
+ * 			Start from : index first,
+ * 			end at 		 : first + num_regions.
+ * 			
+ * 			The allocated huge object: word_size.
+ * 
+ */
 HeapWord*
 G1CollectedHeap::humongous_obj_allocate_initialize_regions(uint first,
 																													 uint num_regions,
@@ -215,6 +225,11 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(uint first,
 	// those cards (this can happen shortly after a cleanup; see CR
 	// 6991377). So we have to set up the region(s) carefully and in
 	// a specific order.
+	//
+	// [?] Why does the Refinement process can affect the humonguous object allocation ?
+	//		 It only transfer mutator dirty cards to HeapRegion ?
+	//			It can scan the thesee humonguous Regions ?
+	//
 
 	// The word size sum of all the regions we will allocate.
 	size_t word_size_sum = (size_t) num_regions * HeapRegion::GrainWords;
@@ -270,7 +285,7 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(uint first,
 	HeapRegion* hr = NULL;
 	for (uint i = first + 1; i <= last; ++i) {
 		hr = region_at(i);
-		hr->set_continues_humongous(first_hr);
+		hr->set_continues_humongous(first_hr);			// Mark the Regions as Humonguous 
 		_g1_policy->remset_tracker()->update_at_allocate(hr);
 	}
 
@@ -315,7 +330,11 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(uint first,
 
 	return new_obj;
 }
-
+/** 
+ * Tag : Calculate the needed Region number.     
+ * 
+ * 
+ */
 size_t G1CollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
 	assert(is_humongous(word_size), "Object of size " SIZE_FORMAT " must be humongous here", word_size);
 	return align_up(word_size, HeapRegion::GrainWords) / HeapRegion::GrainWords;
@@ -329,26 +348,30 @@ HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size) {
 
 	_verifier->verify_region_sets_optional();
 
-	uint first = G1_NO_HRM_INDEX;
+	uint first = G1_NO_HRM_INDEX;    // uint -1, Max index of the Region index. Meanning end, NULL.
 	uint obj_regions = (uint) humongous_obj_size_in_regions(word_size);
 
 	if (obj_regions == 1) {
 		// Only one region to allocate, try to use a fast path by directly allocating
 		// from the free lists. Do not try to expand here, we will potentially do that
 		// later.
-		HeapRegion* hr = new_region(word_size, HeapRegionType::Humongous, false /* do_expand */);
+		HeapRegion* hr = new_region(word_size, HeapRegionType::Humongous, false /* do_expand */); //Single Region,same as Old Space path.
 		if (hr != NULL) {
 			first = hr->hrm_index();
 		}
 	} else {
 		// Policy: Try only empty regions (i.e. already committed first). Maybe we
 		// are lucky enough to find some.
-		first = _hrm->find_contiguous_only_empty(obj_regions);
+		first = _hrm->find_contiguous_only_empty(obj_regions);			// Multiple Regions, Scan from head, index 0.
 		if (first != G1_NO_HRM_INDEX) {
-			_hrm->allocate_free_regions_starting_at(first, obj_regions);
+			_hrm->allocate_free_regions_starting_at(first, obj_regions);  // Remove the found Regions from HeapRegionManager->_free_list
 		}
 	}
 
+	/**
+	 * Can't find proper Region to allocate this humoungous objects 
+	 *  
+	 */
 	if (first == G1_NO_HRM_INDEX) {
 		// Policy: We could not find enough regions for the humongous object in the
 		// free list. Look through the heap to find a mix of free and uncommitted regions.
@@ -377,6 +400,11 @@ HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size) {
 		}
 	}
 
+	/**
+	 * Get the free Regions successfully, allocate objects into them.
+	 * 	Allocate object into the received Regions and mark the Regions as Humonguous.
+	 * 
+	 */
 	HeapWord* result = NULL;
 	if (first != G1_NO_HRM_INDEX) {
 		result = humongous_obj_allocate_initialize_regions(first, obj_regions, word_size);
@@ -464,7 +492,7 @@ HeapWord* G1CollectedHeap::attempt_allocation_slow(size_t word_size) {
 		if (should_try_gc) {
 			bool succeeded;
 			result = do_collection_pause(word_size, gc_count_before, &succeeded,
-																	 GCCause::_g1_inc_collection_pause);
+																	 GCCause::_g1_inc_collection_pause);                  // Try to trigger GC
 			if (result != NULL) {
 				assert(succeeded, "only way to get back a non-NULL result");
 				log_trace(gc, alloc)("%s: Successfully scheduled collection returning " PTR_FORMAT,
@@ -745,7 +773,7 @@ inline HeapWord* G1CollectedHeap::attempt_allocation(size_t min_word_size,
 
 	if (result == NULL) {
 		*actual_word_size = desired_word_size;
-		result = attempt_allocation_slow(desired_word_size);
+		result = attempt_allocation_slow(desired_word_size);   // Request new Region for the Mutator 
 	}
 
 	assert_heap_not_locked();
@@ -1668,6 +1696,10 @@ jint G1CollectedHeap::initialize_young_gen_sampling_thread() {
 /**
  * Tag : Allocate and Intialize the Java heap 
  * 
+ * 1) Get heap space from OS by mmap.
+ * 
+ * 2) Initialize the heap to be 2 regions, Young and Old ?
+ * 
  */
 jint G1CollectedHeap::initialize() {
 	os::enable_vtime();
@@ -1711,7 +1743,7 @@ jint G1CollectedHeap::initialize() {
 	initialize_reserved_region((HeapWord*)heap_rs.base(), (HeapWord*)(heap_rs.base() + heap_rs.size()));
 
 	// Create the barrier set for the entire reserved region.
-	G1CardTable* ct = new G1CardTable(reserved_region());
+	G1CardTable* ct = new G1CardTable(reserved_region());     // c++ new ? or override operator ?
 	ct->initialize();
 	G1BarrierSet* bs = new G1BarrierSet(ct);
 	bs->initialize();
@@ -1801,10 +1833,10 @@ jint G1CollectedHeap::initialize() {
 	// start within the first card.
 	guarantee(g1_rs.base() >= (char*)G1CardTable::card_size, "Java heap must not start within the first card.");
 	// Also create a G1 rem set.
-	_g1_rem_set = new G1RemSet(this, _card_table, _hot_card_cache);
+	_g1_rem_set = new G1RemSet(this, _card_table, _hot_card_cache);   // G1CollectedHeap->CardTable->ByteMap
 	_g1_rem_set->initialize(max_reserved_capacity(), max_regions());
 
-	size_t max_cards_per_region = ((size_t)1 << (sizeof(CardIdx_t)*BitsPerByte-1)) - 1;
+	size_t max_cards_per_region = ((size_t)1 << (sizeof(CardIdx_t)*BitsPerByte-1)) - 1;  // (1<<4*8)-1 = 4G -1 ?
 	guarantee(HeapRegion::CardsPerRegion > 0, "make sure it's initialized");
 	guarantee(HeapRegion::CardsPerRegion < max_cards_per_region,
 						"too many cards per region");
@@ -1832,7 +1864,7 @@ jint G1CollectedHeap::initialize() {
 
 	// Create the G1ConcurrentMark data structure and thread.
 	// (Must do this late, so that "max_regions" is defined.)
-	_cm = new G1ConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);
+	_cm = new G1ConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
 	if (_cm == NULL || !_cm->completed_initialization()) {
 		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
 		return JNI_ENOMEM;
@@ -1840,7 +1872,7 @@ jint G1CollectedHeap::initialize() {
 	_cm_thread = _cm->cm_thread();
 
 	// Now expand into the initial heap size.
-	if (!expand(init_byte_size, _workers)) {
+	if (!expand(init_byte_size, _workers)) {   // [?] Adjust the Young/Old Generation ?
 		vm_shutdown_during_initialization("Failed to allocate initial heap.");
 		return JNI_ENOMEM;
 	}
@@ -4615,8 +4647,8 @@ bool G1CollectedHeap::is_old_gc_alloc_region(HeapRegion* hr) {
 }
 
 void G1CollectedHeap::set_region_short_lived_locked(HeapRegion* hr) {
-	_eden.add(hr);
-	_g1_policy->set_region_eden(hr);
+	_eden.add(hr);										// Add newly allocated Region into G1CollectedHeap->_eden list
+	_g1_policy->set_region_eden(hr);	// Set Region as Eden Space.
 }
 
 #ifdef ASSERT
@@ -4781,8 +4813,12 @@ bool G1CollectedHeap::is_in_closed_subset(const void* p) const {
 	return hr->is_in(p);
 }
 
-// Methods for the mutator alloc region
-
+/** 
+ * Methods for the mutator alloc region
+ *
+ * Tag : Allocate a new Region for Mutator - Eden Space 
+ * 
+ */ 
 HeapRegion* G1CollectedHeap::new_mutator_alloc_region(size_t word_size,
 																											bool force) {
 	assert_heap_locked_or_at_safepoint(true /* should_be_vm_thread */);
@@ -4790,12 +4826,12 @@ HeapRegion* G1CollectedHeap::new_mutator_alloc_region(size_t word_size,
 	if (force || should_allocate) {
 		HeapRegion* new_alloc_region = new_region(word_size,
 																							HeapRegionType::Eden,
-																							false /* do_expand */);
+																							false /* do_expand */);    // Eden Space.
 		if (new_alloc_region != NULL) {
-			set_region_short_lived_locked(new_alloc_region);
+			set_region_short_lived_locked(new_alloc_region);			// Set Region as Eden Space
 			_hr_printer.alloc(new_alloc_region, !should_allocate);
 			_verifier->check_bitmaps("Mutator Region Allocation", new_alloc_region);
-			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);
+			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);			// [?] Set HeapRegion Remember set status?
 			return new_alloc_region;
 		}
 	}

@@ -53,6 +53,14 @@ inline HeapWord* ThreadLocalAllocBuffer::allocate(size_t size) {
   return NULL;
 }
 
+/**
+ * Tag : Compute the newly allocated TLAB size.
+ *  
+ * [?] The size of TLAB isn't fixed ?
+ *    min(available_size, desired_size + aligned_obj, max_size());
+ *    => What's the meaning of desired_size() + align_object_size() ?
+ *  
+ */
 inline size_t ThreadLocalAllocBuffer::compute_size(size_t obj_size) {
   // Compute the size for the new TLAB.
   // The "last" tlab may be smaller to reduce fragmentation.

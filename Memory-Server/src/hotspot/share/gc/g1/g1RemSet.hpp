@@ -72,7 +72,7 @@ private:
   G1CollectedHeap* _g1h;
   size_t _num_conc_refined_cards; // Number of cards refined concurrently to the mutator.
 
-  G1CardTable*           _ct;
+  G1CardTable*           _ct;     // The real content is _byte_map 
   G1Policy*              _g1p;
   G1HotCardCache*        _hot_card_cache;
 

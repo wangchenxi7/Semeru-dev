@@ -38,19 +38,24 @@ bool G1RemSetTrackingPolicy::needs_scan_for_rebuild(HeapRegion* r) const {
   return !(r->is_young() || r->is_closed_archive() || r->is_free());
 }
 
+/**
+ * Set HeapRegion->_rem_set->_state.
+ *  This value decides the behavior of RemSet Rebuilding procesures.
+ *  
+ */
 void G1RemSetTrackingPolicy::update_at_allocate(HeapRegion* r) {
   if (r->is_young()) {
     // Always collect remembered set for young regions.
-    r->rem_set()->set_state_complete();
+    r->rem_set()->set_state_complete();       // Young Space : Eden, Survivor, Rebuild RemSet
   } else if (r->is_humongous()) {
     // Collect remembered sets for humongous regions by default to allow eager reclaim.
-    r->rem_set()->set_state_complete();
+    r->rem_set()->set_state_complete();       // Humonguous Space : Rebuild RemSet. [?] Always added into CSet ?
   } else if (r->is_archive()) {
     // Archive regions never move ever. So never build remembered sets for them.
-    r->rem_set()->set_state_empty();
+    r->rem_set()->set_state_empty();          // [?] Archived Region ?
   } else if (r->is_old()) {
     // By default, do not create remembered set for new old regions.
-    r->rem_set()->set_state_empty();
+    r->rem_set()->set_state_empty();          // Old Space : Select partial Regions to Rebuild (CSet), based on garbage ratio.
   } else {
     guarantee(false, "Unhandled region %u with heap region type %s", r->hrm_index(), r->get_type_str());
   }

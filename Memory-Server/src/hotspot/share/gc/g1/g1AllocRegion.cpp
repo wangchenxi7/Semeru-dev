@@ -156,14 +156,14 @@ HeapWord* G1AllocRegion::new_alloc_region_and_allocate(size_t word_size,
 		new_alloc_region->reset_pre_dummy_top();
 		// Need to do this before the allocation
 		_used_bytes_before = new_alloc_region->used();
-		HeapWord* result = allocate(new_alloc_region, word_size);
+		HeapWord* result = allocate(new_alloc_region, word_size);  // Allocate objects into the newly received Region.
 		assert_alloc_region(result != NULL, "the allocation should succeeded");
 
 		OrderAccess::storestore();
 		// Note that we first perform the allocation and then we store the
 		// region in _alloc_region. This is the reason why an active region
 		// can never be empty.
-		update_alloc_region(new_alloc_region);
+		update_alloc_region(new_alloc_region);		// Asign the newly got Region to G1AllocRegion->_alloc_region.
 		trace("region allocation successful");
 		return result;
 	} else {

@@ -23,13 +23,15 @@ fi
 
 # JVM configuration
 
-mem="32g"
+## RDMA Buffer size + Memory server reserved size, i.e. 1GB.
+mem="33g"
 gc_mode="-XX:+UseG1GC"
 
 #disable compressed oops
 oop_mode="-XX:-UseCompressedOops"
 
-log_mode="-Xlog:heap=debug,gc+marking=debug"
+#log_mode="-Xlog:heap=debug,gc+marking=debug"
+log_mode="-Xlog:heap=debug"
 #log_mode=""
 
 ## Do  the excution
