@@ -1408,11 +1408,13 @@ HeapWord* G1CollectedHeap::expand_and_allocate(size_t word_size) {
 /**
  * Tag : expand current heap until reach the limits setted by -Xmx#G/M/K
  * 
+ * Inital size is setted by -Xms, the reserved size is setted by -Xmx.
+ * 
  */
 bool G1CollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_workers, double* expand_time_ms) {
-	size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);
+	size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);	// Frist align up to page size.
 	aligned_expand_bytes = align_up(aligned_expand_bytes,
-																			 HeapRegion::GrainBytes);
+																			 HeapRegion::GrainBytes);  // Second, align up to Regions size. 
 
 	log_debug(gc, ergo, heap)("Expand the heap. requested expansion amount: " SIZE_FORMAT "B expansion amount: " SIZE_FORMAT "B",
 														expand_bytes, aligned_expand_bytes);
@@ -1423,10 +1425,10 @@ bool G1CollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_workers, do
 	}
 
 	double expand_heap_start_time_sec = os::elapsedTime();
-	uint regions_to_expand = (uint)(aligned_expand_bytes / HeapRegion::GrainBytes);
+	uint regions_to_expand = (uint)(aligned_expand_bytes / HeapRegion::GrainBytes);  // Expanding Region numbers.
 	assert(regions_to_expand > 0, "Must expand by at least one region");
 
-	uint expanded_by = _hrm->expand_by(regions_to_expand, pretouch_workers);
+	uint expanded_by = _hrm->expand_by(regions_to_expand, pretouch_workers);					// Do the expansion operation.
 	if (expand_time_ms != NULL) {
 		*expand_time_ms = (os::elapsedTime() - expand_heap_start_time_sec) * MILLIUNITS;
 	}
@@ -1697,8 +1699,8 @@ jint G1CollectedHeap::initialize_young_gen_sampling_thread() {
  * Tag : Allocate and Intialize the Java heap 
  * 
  * 1) Get heap space from OS by mmap.
- * 
- * 2) Initialize the heap to be 2 regions, Young and Old ?
+ * 2) Split the Heap into Regions.
+ * 3) Build RemSet for the Java heap.
  * 
  */
 jint G1CollectedHeap::initialize() {
@@ -1725,7 +1727,8 @@ jint G1CollectedHeap::initialize() {
 	Universe::check_alignment(max_byte_size, heap_alignment, "g1 heap");
 
 	// Reserve the maximum.
-
+	// [x] Get virtual space from OS.
+	//
 	// When compressed oops are enabled, the preferred heap base
 	// is calculated by subtracting the requested size from the
 	// 32Gb boundary and using the result as the base address for
@@ -1817,9 +1820,17 @@ jint G1CollectedHeap::initialize() {
 	G1RegionToSpaceMapper* next_bitmap_storage =
 		create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
 
+	//
+	// [x] Split the reserved space into Heap Region and manage it by HeapRegionManager->_regions/_free_list.
+	//
 	_hrm = HeapRegionManager::create_manager(this, g1_collector_policy());
 
 	_hrm->initialize(heap_storage, prev_bitmap_storage, next_bitmap_storage, bot_storage, cardtable_storage, card_counts_storage);
+	
+	
+	//
+	// [x] RememberSet related structures
+	//
 	_card_table->initialize(cardtable_storage);
 	// Do later initialization work for concurrent refinement.
 	_hot_card_cache->initialize(card_counts_storage);
@@ -1845,6 +1856,9 @@ jint G1CollectedHeap::initialize() {
 
 	_bot = new G1BlockOffsetTable(reserved_region(), bot_storage);
 
+	//
+	// [x] Collection Set related structures ?
+	//
 	{
 		HeapWord* start = _hrm->reserved().start();
 		HeapWord* end = _hrm->reserved().end();
@@ -1854,6 +1868,10 @@ jint G1CollectedHeap::initialize() {
 		_humongous_reclaim_candidates.initialize(start, end, granularity);
 	}
 
+	//
+	// [x] Initialize the GC threads,
+	//		Both Parallel and Concurrent GC threads.
+	//
 	_workers = new WorkGang("GC Thread", ParallelGCThreads,
 													true /* are_GC_task_threads */,
 													false /* are_ConcurrentGC_threads */);
@@ -1871,7 +1889,11 @@ jint G1CollectedHeap::initialize() {
 	}
 	_cm_thread = _cm->cm_thread();
 
+	//
+	// [x] Commit Java Heap size according to -Xms from reserved Space, -Xmx.
+	//		 Add the committed Regions into HeapRegionManager->_free_list. 
 	// Now expand into the initial heap size.
+	//
 	if (!expand(init_byte_size, _workers)) {   // [?] Adjust the Young/Old Generation ?
 		vm_shutdown_during_initialization("Failed to allocate initial heap.");
 		return JNI_ENOMEM;
@@ -1896,6 +1918,9 @@ jint G1CollectedHeap::initialize() {
 		dcqs.set_max_completed_buffers(concurrent_refine()->red_zone());
 	}
 
+	//
+	// [?] What's the dummy Region,index 0 , used for ? sentinel ?
+	//
 	// Here we allocate the dummy HeapRegion that is required by the
 	// G1AllocRegion class.
 	HeapRegion* dummy_region = _hrm->get_dummy_region();
@@ -1923,6 +1948,32 @@ jint G1CollectedHeap::initialize() {
 
 	return JNI_OK;
 }
+
+
+/**
+ *	Semeru 
+ *  Main entrance for Java Heap build.
+ *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_reserved_memory_pool 
+ * 
+ */
+jint G1CollectedHeap::initialize_memory_pool() {
+	//
+	// Build Semeru Memory Pool by using G1SemeruCollectedHeap class.
+	//
+	tty->print("%s, Should not reach here. \n", __func__);
+
+	return JNI_OK;
+}
+
+
+
+
+
+
+
+
+
+
 
 void G1CollectedHeap::stop() {
 	// Stop all concurrent threads. We do this to make sure these threads

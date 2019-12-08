@@ -63,6 +63,11 @@ public:
   virtual void initialize_serviceability();
   virtual void stop();
 
+  //
+  // Semeru
+  //
+  virtual jint initialize_memory_pool();
+
   virtual CollectorPolicy* collector_policy() const;
   virtual SoftRefPolicy* soft_ref_policy();
 

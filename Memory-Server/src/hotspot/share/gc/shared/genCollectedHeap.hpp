@@ -167,6 +167,10 @@ public:
 
   // Returns JNI_OK on success
   virtual jint initialize();
+
+  // Semeru
+  virtual jint initialize_memory_pool();
+
   virtual CardTableRS* create_rem_set(const MemRegion& reserved_region);
 
   void initialize_size_policy(size_t init_eden_size,

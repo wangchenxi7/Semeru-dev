@@ -140,6 +140,11 @@ class ParallelScavengeHeap : public CollectedHeap {
   void post_initialize();
   void update_counters();
 
+  //
+  // Semeru
+  //
+  virtual jint initialize_memory_pool();
+
   // The alignment used for the various areas
   size_t space_alignment()      { return _collector_policy->space_alignment(); }
   size_t generation_alignment() { return _collector_policy->gen_alignment(); }

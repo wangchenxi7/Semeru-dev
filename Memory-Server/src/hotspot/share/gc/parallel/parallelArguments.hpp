@@ -34,6 +34,10 @@ public:
   virtual void initialize();
   virtual size_t conservative_max_heap_alignment();
   virtual CollectedHeap* create_heap();
+
+  // Semeru
+  virtual CollectedHeap* create_semeru_heap();
+
 };
 
 #endif // SHARE_GC_CMS_PARALLELARGUMENTS_HPP

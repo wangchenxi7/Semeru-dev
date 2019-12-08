@@ -43,6 +43,10 @@ class G1OldTracer;
 class G1RegionToSpaceMapper;
 class G1SurvivorRegions;
 
+// Semeru
+class G1SemeruCollectedHeap;
+
+
 #ifdef _MSC_VER
 #pragma warning(push)
 // warning C4522: multiple assignment operators specified
@@ -108,17 +112,37 @@ typedef GenericTaskQueueSet<G1CMTaskQueue, mtGC> G1CMTaskQueueSet;
 // reference processor as the _is_alive_non_header field
 class G1CMIsAliveClosure : public BoolObjectClosure {
   G1CollectedHeap* _g1h;
+
+  // Semeru
+  G1SemeruCollectedHeap *_g1_semeru_h;
+
 public:
   G1CMIsAliveClosure(G1CollectedHeap* g1h) : _g1h(g1h) { }
   bool do_object_b(oop obj);
+
+  // Semeru
+  G1CMIsAliveClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  bool semeru_do_object_b(oop obj);
 };
+
 
 class G1CMSubjectToDiscoveryClosure : public BoolObjectClosure {
   G1CollectedHeap* _g1h;
+
+  // Semeru
+  G1SemeruCollectedHeap *_g1_semeru_h;
+
 public:
   G1CMSubjectToDiscoveryClosure(G1CollectedHeap* g1h) : _g1h(g1h) { }
   bool do_object_b(oop obj);
+
+    // Semeru
+  G1CMSubjectToDiscoveryClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  bool semeru_do_object_b(oop obj);
 };
+
+
+
 
 // Represents the overflow mark stack used by concurrent marking.
 //

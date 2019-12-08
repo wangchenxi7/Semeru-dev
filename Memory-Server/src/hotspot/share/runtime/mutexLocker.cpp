@@ -59,6 +59,7 @@ Mutex*   JfieldIdCreation_lock        = NULL;
 Monitor* JNICritical_lock             = NULL;
 Mutex*   JvmtiThreadState_lock        = NULL;
 Monitor* Heap_lock                    = NULL;
+Monitor* Memory_Pool_lock             = NULL;   // Semeru 
 Mutex*   ExpandHeap_lock              = NULL;
 Mutex*   AdapterHandlerLibrary_lock   = NULL;
 Mutex*   SignatureHandlerLibrary_lock = NULL;
@@ -233,6 +234,10 @@ void mutex_init() {
     def(MarkStackChunkList_lock    , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
 
     def(MonitoringSupport_lock     , PaddedMutex  , native   ,   true,  Monitor::_safepoint_check_never);      // used for serviceability monitoring support
+  
+    // Semeru
+    def(Memory_Pool_lock              , PaddedMonitor, nonleaf+1,   false, Monitor::_safepoint_check_sometimes);
+  
   }
   if (UseShenandoahGC) {
     def(SATB_Q_FL_lock             , PaddedMutex  , access,      true,  Monitor::_safepoint_check_never);

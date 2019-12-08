@@ -29,6 +29,9 @@
 #include "gc/g1/heapRegion.hpp"
 #include "logging/log.hpp"
 
+// Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
 G1YoungGenSizer::G1YoungGenSizer() : _sizer_kind(SizerDefaults),
   _adaptive_size(true), _min_desired_young_length(0), _max_desired_young_length(0) {
 
@@ -131,6 +134,18 @@ void G1YoungGenSizer::heap_size_changed(uint new_number_of_heap_regions) {
 }
 
 G1YoungGenSizer* G1YoungGenSizer::create_gen_sizer(G1CollectorPolicy* policy) {
+  if (policy->is_hetero_heap()) {
+    return new G1HeterogeneousHeapYoungGenSizer();
+  } else {
+    return new G1YoungGenSizer();
+  }
+}
+
+/**
+ *  Semeru 
+ */
+
+G1YoungGenSizer* G1YoungGenSizer::create_gen_sizer(G1SemeruCollectorPolicy* policy) {
   if (policy->is_hetero_heap()) {
     return new G1HeterogeneousHeapYoungGenSizer();
   } else {

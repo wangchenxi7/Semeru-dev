@@ -69,6 +69,11 @@ inline HeapRegion* HeapRegionManager::next_region_in_humongous(HeapRegion* hr) c
   }
 }
 
+/**
+ * Tag : Insert a Region into HeapRegionManager->_free_list.
+ *  This procedure usually happenned during commit/expand the spaces, young/old. 
+ * 
+ */
 inline void HeapRegionManager::insert_into_free_list(HeapRegion* hr) {
   _free_list.add_ordered(hr);
 }

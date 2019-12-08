@@ -637,6 +637,27 @@ void HeapRegionRemSet::setup_remset_size() {
 	guarantee(G1RSetSparseRegionEntries > 0 && G1RSetRegionEntries > 0 , "Sanity");
 }
 
+/**
+ * Semeru
+ *  
+ */
+
+// Semeru Region's RemSet.
+void HeapRegionRemSet::setup_semeru_remset_size() {
+	// Setup sparse and fine-grain tables sizes.
+	// table_size = base * (log(region_size / 1M) + 1)
+	const int LOG_M = 20;
+	int region_size_log_mb = MAX2(HeapRegion::LogOfHRGrainBytes - LOG_M, 0);
+	if (FLAG_IS_DEFAULT(G1RSetSparseRegionEntries)) {
+		G1RSetSparseRegionEntries = G1RSetSparseRegionEntriesBase * (region_size_log_mb + 1);
+	}
+	if (FLAG_IS_DEFAULT(G1RSetRegionEntries)) {
+		G1RSetRegionEntries = G1RSetRegionEntriesBase * (region_size_log_mb + 1);
+	}
+	guarantee(G1RSetSparseRegionEntries > 0 && G1RSetRegionEntries > 0 , "Sanity");
+}
+
+
 void HeapRegionRemSet::clear(bool only_cardset) {
 	MutexLockerEx x(&_m, Mutex::_no_safepoint_check_flag);
 	clear_locked(only_cardset);

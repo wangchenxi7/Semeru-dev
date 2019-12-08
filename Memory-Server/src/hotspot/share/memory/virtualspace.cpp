@@ -246,6 +246,159 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
   }
 }
 
+
+/**
+ * Semeru
+ * 
+ * Get virtual memory from OS for the Semeru Memory pool.
+ * 1) Start at fixed address, requested_address.
+ * 2) Region size alignment, alignment. 
+ * 3) Initialize the fields of Reserved Heap space.
+ * 
+ */ 
+void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
+                               char* requested_address,
+                               bool executable) {
+  const size_t granularity = os::vm_allocation_granularity();    // 4KB ?
+  assert((size & (granularity - 1)) == 0,
+         "size not aligned to os::vm_allocation_granularity()");
+  assert((alignment & (granularity - 1)) == 0,
+         "alignment not aligned to os::vm_allocation_granularity()");
+  assert(alignment == 0 || is_power_of_2((intptr_t)alignment),
+         "not a power of 2");
+
+  alignment = MAX2(alignment, (size_t)os::vm_page_size());
+
+  _base = NULL;
+  _size = 0;
+  _special = false;             // Huge page, file backed heap 
+  _executable = executable;
+  _alignment = 0;
+  _noaccess_prefix = 0;
+
+  // Reserve at lease 1 Region for Semeru memory pool
+  if (size < alignment){
+    log_info(heap)("%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
+                                                           (unsigned long long)size, (unsigned long long)alignment);
+    return;
+  }
+
+  // If OS doesn't support demand paging for large page memory, we need
+  // to use reserve_memory_special() to reserve and pin the entire region.
+  // If there is a backing file directory for this space then whether
+  // large pages are allocated is up to the filesystem of the backing file.
+  // So we ignore the UseLargePages flag in this case.
+  bool special = large && !os::can_commit_large_page_memory();   // huge page support
+  if (special && _fd_for_heap != -1) {
+    special = false;
+    if (UseLargePages && (!FLAG_IS_DEFAULT(UseLargePages) ||
+      !FLAG_IS_DEFAULT(LargePageSizeInBytes))) {
+      log_debug(gc, heap)("Ignoring UseLargePages since large page support is up to the file system of the backing file for Java heap");
+    }
+  }
+
+  char* base = NULL;
+
+  // 1. Use huge page 
+  if (special) {
+    
+    //debug
+    assert(false, "%s - special path ,Can't reach here.", __func__);
+
+    base = os::reserve_memory_special(size, alignment, requested_address, executable);
+
+    if (base != NULL) {
+      if (failed_to_reserve_as_requested(base, requested_address, size, true)) {
+        // OS ignored requested address. Try different address.
+        return;
+      }
+      // Check alignment constraints.
+      assert((uintptr_t) base % alignment == 0,
+             "Large pages returned a non-aligned address, base: "
+             PTR_FORMAT " alignment: " SIZE_FORMAT_HEX,
+             p2i(base), alignment);
+      _special = true;
+    } else {
+      // failed; try to reserve regular memory below
+      if (UseLargePages && (!FLAG_IS_DEFAULT(UseLargePages) ||
+                            !FLAG_IS_DEFAULT(LargePageSizeInBytes))) {
+        log_debug(gc, heap, coops)("Reserve regular memory without large pages");
+      }
+    }
+  }
+
+  // 2. Use 4KB default page
+  if (base == NULL) {
+    // Optimistically assume that the OSes returns an aligned base pointer.
+    // When reserving a large address range, most OSes seem to align to at
+    // least 64K.
+
+    // If the memory was requested at a particular address, use
+    // os::attempt_reserve_memory_at() to avoid over mapping something
+    // important.  If available space is not detected, return NULL.
+
+      // 2.1 Request fixed start address for this ReservedSpace
+    if (requested_address != NULL) {
+      base = os::attempt_reserve_memory_pool_at(size, requested_address, alignment, _fd_for_heap );
+      if (failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
+        // OS ignored requested address. Try different address.
+        base = NULL;
+      }
+    } else {
+      // 2.2 Request any available annoymous memory from OS.
+      //
+
+      //debug
+      assert(false, "%s - requested_address == NULL ,Can't reach here.", __func__);
+
+      base = os::reserve_memory(size, NULL, alignment, _fd_for_heap);
+    }
+
+    //
+    // Request memory from OS failed. 
+    //
+    if (base == NULL) return;
+
+    // Check alignment constraints
+    if ((((size_t)base) & (alignment - 1)) != 0) {
+      // Base not aligned, retry
+      unmap_or_release_memory(base, size, _fd_for_heap != -1 /*is_file_mapped*/);
+
+      // Make sure that size is aligned
+      size = align_up(size, alignment);
+      base = os::reserve_memory_aligned(size, alignment, _fd_for_heap);
+
+      if (requested_address != 0 &&
+          failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
+        // As a result of the alignment constraints, the allocated base differs
+        // from the requested address. Return back to the caller who can
+        // take remedial action (like try again without a requested address).
+        assert(_base == NULL, "should be");
+        return;
+      }
+    }
+  }  // base == NULL
+
+  // Done
+  // Initialize the fields of ReservedSpace
+  //
+  _base = base;
+  _size = size;
+  _alignment = alignment;
+  // If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
+  if (_fd_for_heap != -1) {
+    _special = true;
+  }
+}
+
+
+
+
+
+
+
+
+
 ReservedSpace ReservedSpace::first_part(size_t partition_size, size_t alignment,
                                         bool split, bool realloc) {
   assert(partition_size <= size(), "partition failed");
@@ -614,12 +767,22 @@ void ReservedHeapSpace::initialize_compressed_heap(const size_t size, size_t ali
   }
 }
 
+/**
+ * Tag : Request Java Heap space from OS.
+ *  
+ * Parameters:
+ *  large : Huge page or not.   
+ *  heap_allocation_directory : file backed virtual space ?
+ * 
+ */
 ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, const char* heap_allocation_directory) : ReservedSpace() {
 
   if (size == 0) {
     return;
   }
 
+  // [?] File backed virtual space ?
+  //
   if (heap_allocation_directory != NULL) {
     _fd_for_heap = os::create_file_for_heap(heap_allocation_directory);
     if (_fd_for_heap == -1) {
@@ -640,7 +803,9 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, 
       establish_noaccess_prefix();
     }
   } else {
-    initialize(size, alignment, large, NULL, false);
+    // The normal path : non-determined start addr; non-compressed oop heap.
+
+    initialize(size, alignment, large, NULL, false);   
   }
 
   assert(markOopDesc::encode_pointer_as_mark(_base)->decode_pointer() == _base,
@@ -648,6 +813,7 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, 
   assert(markOopDesc::encode_pointer_as_mark(&_base[size])->decode_pointer() == &_base[size],
          "area must be distinguishable from marks for mark-sweep");
 
+  // if base()!= NULL, means Java heap is reserved successfully.
   if (base() != NULL) {
     MemTracker::record_virtual_memory_type((address)base(), mtJavaHeap);
   }
@@ -656,6 +822,51 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, 
     os::close(_fd_for_heap);
   }
 }
+
+
+/**
+ * Semeru
+ *  Constructor for reserving Semeru memory pool from OS.
+ * 
+ * ReservedHeapSpace -> ReservedSpace
+ *                        initialize()
+ *                        initialize_memory_pool()
+ * 
+ * 
+ */   
+ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, char* heap_start_addr) : ReservedSpace() {
+
+  // Check in initialization function.
+  // if (size < alignment) {
+  //   log_info(heap)("%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
+  //                                                         (unsigned long long)size, (unsigned long long)alignment);
+  //   return;
+  // }
+
+  // Heap size should be aligned to alignment, too.
+  guarantee(is_aligned(size, alignment), "set by caller");
+
+  // The normal path : non-determined start addr; non-compressed oop heap.
+  initialize_semeru(size, alignment, false, heap_start_addr, false); 
+
+  assert(markOopDesc::encode_pointer_as_mark(_base)->decode_pointer() == _base,
+         "area must be distinguishable from marks for mark-sweep");
+  assert(markOopDesc::encode_pointer_as_mark(&_base[size])->decode_pointer() == &_base[size],
+         "area must be distinguishable from marks for mark-sweep");
+
+  // if base()!= NULL, means Java heap is reserved successfully.
+  if (base() != NULL) {
+    MemTracker::record_virtual_memory_type((address)base(), mtJavaHeap);
+  }
+}
+
+
+
+
+
+
+
+
 
 // Reserve space for code segment.  Same as Java heap only we mark this as
 // executable.

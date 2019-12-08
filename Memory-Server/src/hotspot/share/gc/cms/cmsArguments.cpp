@@ -227,3 +227,13 @@ void CMSArguments::disable_adaptive_size_policy(const char* collector_name) {
 CollectedHeap* CMSArguments::create_heap() {
   return create_heap_with_policy<CMSHeap, ConcurrentMarkSweepPolicy>();
 }
+
+
+  /**
+   * Semeru 
+   */
+CollectedHeap* CMSArguments::create_semeru_heap() {
+
+  tty->print("CMSArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

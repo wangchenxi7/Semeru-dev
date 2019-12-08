@@ -24,7 +24,7 @@
 
 #include "precompiled.hpp"
 #include "gc/g1/g1Analytics.hpp"
-#include "gc/g1/g1CollectorPolicy.hpp"
+//#include "gc/g1/g1CollectorPolicy.hpp"
 #include "gc/g1/g1YoungGenSizer.hpp"
 #include "gc/g1/heapRegion.hpp"
 #include "gc/g1/heapRegionRemSet.hpp"
@@ -32,7 +32,14 @@
 #include "runtime/globals.hpp"
 #include "utilities/debug.hpp"
 
-G1CollectorPolicy::G1CollectorPolicy() {
+// Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
+/**
+ * [?]We need to rewrite these  control parameters for Semeru
+ *  
+ */
+G1SemeruCollectorPolicy::G1SemeruCollectorPolicy() {
 
   // Set up the region size and associated fields. Given that the
   // policy is created before the heap, we have to set this up here,
@@ -45,24 +52,40 @@ G1CollectorPolicy::G1CollectorPolicy() {
   // the region size on the heap size, but the heap size should be
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
-  HeapRegion::setup_heap_region_size(InitialHeapSize, MaxHeapSize);
-  HeapRegionRemSet::setup_remset_size();
+  HeapRegion::setup_semeru_heap_region_size(InitialHeapSize, MaxHeapSize);
+  HeapRegionRemSet::setup_semeru_remset_size();
 
 }
 
-void G1CollectorPolicy::initialize_alignments() {
+void G1SemeruCollectorPolicy::initialize_alignments() {
   _space_alignment = HeapRegion::GrainBytes;
   size_t card_table_alignment = CardTableRS::ct_max_alignment_constraint();
   size_t page_size = UseLargePages ? os::large_page_size() : os::vm_page_size();
   _heap_alignment = MAX3(card_table_alignment, _space_alignment, page_size);
+
+  //Semeru
+  _semeru_memory_pool_alignment = HeapRegion::MemoryPoolRegionBytes;  // This is setted during the constructor of G1CollectorPolicy.
+  //_semeru_memory_pool_alignment = 2*1024*1024;  // There is a Heap Region size limitation ?
+  
+  //log_info(heap)("%s, _semeru_memory_pool_alignment is 0x%llx ", __func__, (unsigned long long)_semeru_memory_pool_alignment);
+  tty->print("%s, _semeru_memory_pool_alignment is 0x%llx ", __func__, (unsigned long long)_semeru_memory_pool_alignment);
+
 }
 
-size_t G1CollectorPolicy::heap_reserved_size_bytes() const {
+size_t G1SemeruCollectorPolicy::heap_reserved_size_bytes() const {
   return _max_heap_byte_size;
 }
 
-bool G1CollectorPolicy::is_hetero_heap() const {
+bool G1SemeruCollectorPolicy::is_hetero_heap() const {
   return false;
+}
+
+
+/**
+ *  Semeru
+ */ 
+size_t G1SemeruCollectorPolicy::memory_pool_alignment(){
+  return _semeru_memory_pool_alignment;
 }
 
 

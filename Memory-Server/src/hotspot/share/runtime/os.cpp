@@ -1699,6 +1699,42 @@ char* os::attempt_reserve_memory_at(size_t bytes, char* addr, int file_desc) {
   return result;
 }
 
+
+/**
+ * Semeru
+ *
+ * Reserve memory pool at specific start address
+ *    1) File based virtual memory range
+ *    2) Normal virtual memory range
+ * 
+ */  
+ char* os::attempt_reserve_memory_pool_at(size_t bytes, char* addr, size_t alignment, int file_desc ) {
+  char* result = NULL;
+  if (file_desc != -1) {  
+    // 1) Semeru never goes into this path.
+
+    //debug
+    assert(false, "Can't reach here.");
+
+    result = pd_attempt_reserve_memory_at(bytes, addr, file_desc);
+    if (result != NULL) {
+      MemTracker::record_virtual_memory_reserve_and_commit((address)result, bytes, CALLER_PC);
+    }
+  } else {
+    // 2) Normal path.
+    //size_t alignment = 1073741824;
+    result = pd_attempt_reserve_memory_pool_at(bytes, addr, alignment);
+    if (result != NULL) {
+      MemTracker::record_virtual_memory_reserve((address)result, bytes, CALLER_PC);
+    }
+  }
+  return result;
+}
+
+
+
+
+
 void os::split_reserved_memory(char *base, size_t size,
                                  size_t split, bool realloc) {
   pd_split_reserved_memory(base, size, split, realloc);

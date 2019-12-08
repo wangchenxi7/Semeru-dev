@@ -292,6 +292,13 @@ void PerfDataManager::destroy() {
   _constants = NULL;
 }
 
+
+/**
+ * Tag : GollectedHeap perf data.
+ *  [X] The PerfData can't be duplicated.
+ *      We need to name the Semeru Memory Heap's PerfData with different name.
+ *  
+ */
 void PerfDataManager::add_item(PerfData* p, bool sampled) {
 
   MutexLocker ml(PerfDataManager_lock);
@@ -300,6 +307,16 @@ void PerfDataManager::add_item(PerfData* p, bool sampled) {
     _all = new PerfDataList(100);
     _has_PerfData = true;
   }
+
+  //debug
+  //
+  // // Assume that all the duplicated cases are cuased by Semeru CollectedHeap.
+  // if(_all->contains(p->name())){
+  //   //add prefix "semeru" to the PerfData
+  //   char* tmp_name=
+
+  //   tty->print("%s, Duplicated PerfData name : %s \n", __func__, p->name());
+  // }
 
   assert(!_all->contains(p->name()), "duplicate name added");
 

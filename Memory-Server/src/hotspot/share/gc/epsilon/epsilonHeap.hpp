@@ -77,6 +77,12 @@ public:
   virtual void post_initialize();
   virtual void initialize_serviceability();
 
+  /**
+   * Semeru
+   */ 
+  virtual jint initialize_memory_pool();
+  
+
   virtual GrowableArray<GCMemoryManager*> memory_managers();
   virtual GrowableArray<MemoryPool*> memory_pools();
 

@@ -118,6 +118,10 @@ class os: AllStatic {
     _page_sizes[1] = 0; // sentinel
   }
 
+  //
+  // [?] All pd_* functions are in private area.
+  //
+
   static char*  pd_reserve_memory(size_t bytes, char* addr = 0,
                                   size_t alignment_hint = 0);
   static char*  pd_attempt_reserve_memory_at(size_t bytes, char* addr);
@@ -156,6 +160,13 @@ class os: AllStatic {
   static void initialize_initial_active_processor_count();
 
   LINUX_ONLY(static void pd_init_container_support();)
+
+
+  //
+  // Semeru
+  //
+  static char* pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, size_t alignment);
+
 
  public:
   static void init(void);                      // Called before command line parsing
@@ -353,6 +364,16 @@ class os: AllStatic {
                                       bool executable, const char* mesg);
   static bool   uncommit_memory(char* addr, size_t bytes);
   static bool   release_memory(char* addr, size_t bytes);
+
+  //
+  // Semeru
+  //
+
+  // file_desc : if != -1, the heap is file backed.
+  static char*  attempt_reserve_memory_pool_at(size_t bytes, char* addr, size_t alignment, int file_desc = -1 );
+
+
+
 
   // Touch memory pages that cover the memory range from start to end (exclusive)
   // to make the OS back the memory range with actual memory.

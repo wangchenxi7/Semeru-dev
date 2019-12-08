@@ -26,6 +26,7 @@
 #include "precompiled.hpp"
 #include "gc/g1/g1Arguments.hpp"
 #include "gc/g1/g1CollectedHeap.inline.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1CollectorPolicy.hpp"
 #include "gc/g1/g1HeapVerifier.hpp"
 #include "gc/g1/g1HeterogeneousCollectorPolicy.hpp"
@@ -34,6 +35,10 @@
 #include "gc/shared/workerPolicy.hpp"
 #include "runtime/globals.hpp"
 #include "runtime/globals_extension.hpp"
+
+// Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
 
 size_t G1Arguments::conservative_max_heap_alignment() {
   return HeapRegion::max_region_size();
@@ -156,6 +161,10 @@ void G1Arguments::initialize() {
   initialize_verification_types();
 }
 
+/**
+ * Tag : Create the necessary parameters for G1CollectedHeap.
+ * 
+ */
 CollectedHeap* G1Arguments::create_heap() {
   if (AllocateOldGenAt != NULL) {
     return create_heap_with_policy<G1CollectedHeap, G1HeterogeneousCollectorPolicy>();
@@ -163,3 +172,26 @@ CollectedHeap* G1Arguments::create_heap() {
     return create_heap_with_policy<G1CollectedHeap, G1CollectorPolicy>();
   }
 }
+
+/**
+ * Semeru
+ *  Build and return a G1SemeruCollectedHeap.
+ *  This heap is separate with the GC algorithm, which means it can exist in any GC algorithm.
+ * 
+ * [?] Reuse the G1ColelctorPolicy, build the G1SemeruCollectedHeap. 
+ * 
+ */
+CollectedHeap* G1Arguments::create_semeru_heap(){
+  //debug
+  tty->print("%s, build the G1SemeruCollectedHeap policy via G1Argument \n",__func__);
+
+  if (AllocateOldGenAt != NULL) {
+  //  return create_heap_with_policy<G1CollectedHeap, G1HeterogeneousCollectorPolicy>();
+    assert(false, "%s, Semeru memory pool doesn't support Heterogeneous heap. \n",__func__);
+    return NULL;
+
+  } else {
+    return create_heap_with_policy<G1SemeruCollectedHeap, G1SemeruCollectorPolicy>();
+  }
+}
+

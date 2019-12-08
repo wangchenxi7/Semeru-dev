@@ -37,7 +37,7 @@ class ReservedSpace {
   size_t _noaccess_prefix;
   size_t _alignment;
   bool   _special;
-  int    _fd_for_heap;
+  int    _fd_for_heap;      // [?] What's this for ?
  private:
   bool   _executable;
 
@@ -48,6 +48,14 @@ class ReservedSpace {
   void initialize(size_t size, size_t alignment, bool large,
                   char* requested_address,
                   bool executable);
+
+  //
+  // Semeru - protect domian
+  //
+  void initialize_semeru(size_t size, size_t alignment, bool large,
+                               char* requested_address,
+                               bool executable);
+
 
  public:
   // Constructor
@@ -122,6 +130,15 @@ class ReservedHeapSpace : public ReservedSpace {
   // Returns the base to be used for compression, i.e. so that null can be
   // encoded safely and implicit null checks can work.
   char *compressed_oop_base() { return _base - _noaccess_prefix; }
+
+  //
+  // Semeru
+  //
+
+  // Reserve Java Heap for Semeru memory pool at specific start address.
+  // The start address of Semeru memory pool is decided by CPU server.
+  ReservedHeapSpace(size_t size, size_t alignment, char* heap_start_addr = NULL);
+
 };
 
 // Class encapsulating behavior specific memory space for Code

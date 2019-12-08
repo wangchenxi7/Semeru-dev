@@ -180,16 +180,19 @@ void FreeHeap(void* p);
  * Tag : rewrite new Operator for Class CHeapObj.
  *  e.g. Allocate objects into normal C-Heap by using os::mallocc OR allocate into some ReservedSpace of JVM. 
  * 
+ * [?] What's the meaning of AllocateHeap, just function name ??
+ *    => meaning that allocate object into C-Heap ?
+ * 
  */
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
  public:
   ALWAYSINLINE void* operator new(size_t size) throw() {
-    return (void*)AllocateHeap(size, F);
+    return (void*)AllocateHeap(size, F);           // [?] Allocate object into C-Heap ?
   }
 
   ALWAYSINLINE void* operator new(size_t size,
                                   const NativeCallStack& stack) throw() {
-    return (void*)AllocateHeap(size, F, stack);
+    return (void*)AllocateHeap(size, F, stack);     // [?] Allocate stack into C-Heaep ?
   }
 
   ALWAYSINLINE void* operator new(size_t size, const std::nothrow_t&,

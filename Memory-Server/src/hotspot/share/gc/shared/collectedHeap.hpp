@@ -108,6 +108,11 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
   MemRegion _reserved;
 
+  /**
+   * Semeru 
+   */
+  MemRegion _reserved_memory_pool;  // [?] What's this variable used for ??
+
  protected:
   bool _is_gc_active;
 
@@ -128,6 +133,10 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
   // Constructor
   CollectedHeap();
+
+  // Semeru
+  CollectedHeap(bool Semeru);
+
 
   // Create a new tlab. All TLAB allocations must go through this.
   // To allow more flexible TLAB allocations min_size specifies
@@ -171,12 +180,12 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
  public:
   enum Name {
-    None,
+    None,         //0
     Serial,
     Parallel,
     CMS,
     G1,
-    Epsilon,
+    Epsilon,      // 5
     Z,
     Shenandoah
   };
@@ -194,6 +203,9 @@ class CollectedHeap : public CHeapObj<mtInternal> {
    * and JNI_OK on success.
    */
   virtual jint initialize() = 0;
+
+  // Semeru
+  virtual jint initialize_memory_pool() = 0;
 
   // In many heaps, there will be a need to perform some initialization activities
   // after the Universe is fully formed, but before general heap allocation is allowed.
@@ -213,6 +225,13 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
   virtual size_t capacity() const = 0;
   virtual size_t used() const = 0;
+
+  /**
+   * Semeru 
+   */
+  void initialize_reserved_memory_pool(HeapWord *start, HeapWord *end);
+  MemRegion reserved_memory_pool()  const { return _reserved_memory_pool; }
+  address memory_pool_base()        const { return (address)reserved_memory_pool().start();  } 
 
   // Return "true" if the part of the heap that allocates Java
   // objects has reached the maximal committed limit that it can
@@ -235,6 +254,19 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   bool is_in_reserved_or_null(const void* p) const {
     return p == NULL || is_in_reserved(p);
   }
+
+  /**
+   * Semeru 
+   */
+  // Returns "TRUE" if "p" points into the reserved area of the heap.
+  bool is_in_semeru_reserved(const void* p) const {
+    return _reserved_memory_pool.contains(p);
+  }
+
+  bool is_in_semeru_reserved_or_null(const void* p) const {
+    return p == NULL || is_in_semeru_reserved(p);
+  }
+
 
   // Returns "TRUE" iff "p" points into the committed areas of the heap.
   // This method can be expensive so avoid using it in performance critical

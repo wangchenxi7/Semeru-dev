@@ -40,5 +40,11 @@ public:
   G1CollectorPolicy();
   virtual size_t heap_reserved_size_bytes() const;
   virtual bool is_hetero_heap() const;
+
+  //
+  // Semeru
+  //
+  size_t memory_pool_alignment();
+
 };
 #endif // SHARE_VM_GC_G1_G1COLLECTORPOLICY_HPP

@@ -26,9 +26,14 @@
 
 class CollectedHeap;
 
+
+/**
+ * Tag : Build the CollectedHeap instance and ColloctorPolicy based on template paramters.
+ *  
+ */
 template <class Heap, class Policy>
 CollectedHeap* GCArguments::create_heap_with_policy() {
-  Policy* policy = new Policy();
+  Policy* policy = new Policy();  // 1) Build the specfic CollectorPolicy
   policy->initialize_all();
-  return new Heap(policy);
+  return new Heap(policy);    // 2) Build the specific CollectedHeap instance and initialize it by the CollectorPolicy.
 }

@@ -123,6 +123,19 @@ jint ParallelScavengeHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ *  
+ */
+jint ParallelScavengeHeap::initialize_memory_pool(){
+    
+  //assert(false, "ParallelScavengeHeap::%s, Never reach here.",__func__);
+  tty->print("ParallelScavengeHeap::%s, Should not reach here.",__func__);
+  return JNI_OK;
+}
+
+
+
 void ParallelScavengeHeap::initialize_serviceability() {
 
   _eden_pool = new EdenMutableSpacePool(_young_gen,

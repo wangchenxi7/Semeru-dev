@@ -128,6 +128,11 @@ class G1RegionMappingChangedListener : public G1MappingChangedListener {
   virtual void on_commit(uint start_idx, size_t num_regions, bool zero_filled);
 };
 
+/**
+ * G1CollectedHeap inherit from CollectedHeap directly, 
+ * not inherit from genCollectedHeap.
+ *  
+ */
 class G1CollectedHeap : public CollectedHeap {
   friend class G1FreeCollectionSetTask;
   friend class VM_CollectForMetadataAllocation;
@@ -943,6 +948,11 @@ public:
   // maximum sizes and remembered and barrier sets
   // specified by the policy object.
   jint initialize();
+
+  //
+  // Initialize a Memory pool for Semeru
+  //
+  jint initialize_memory_pool();
 
   virtual void stop();
   virtual void safepoint_synchronize_begin();

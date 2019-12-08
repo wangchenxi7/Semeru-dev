@@ -83,6 +83,19 @@ jint EpsilonHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ *  
+ */
+jint EpsilonHeap::initialize_memory_pool(){
+    
+  //assert(false, "EpsilonHeap::%s, Never reach here.",__func__);
+  tty->print("EpsilonHeap::%s, Should not reach here.",__func__);
+
+  return JNI_OK;
+}
+
+
 void EpsilonHeap::post_initialize() {
   CollectedHeap::post_initialize();
 }

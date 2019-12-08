@@ -216,3 +216,12 @@ size_t ShenandoahArguments::conservative_max_heap_alignment() {
 CollectedHeap* ShenandoahArguments::create_heap() {
   return create_heap_with_policy<ShenandoahHeap, ShenandoahCollectorPolicy>();
 }
+
+/**
+* Semeru 
+*/
+CollectedHeap* ShenandoahArguments::create_semeru_heap() {
+
+  tty->print("ShenandoahArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

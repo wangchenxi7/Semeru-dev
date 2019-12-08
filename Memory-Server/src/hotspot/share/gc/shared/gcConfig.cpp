@@ -91,7 +91,7 @@ SHENANDOAHGC_ONLY_ARG(SupportedGC(UseShenandoahGC,    CollectedHeap::Shenandoah,
                                   "Option -XX:-" #option " not supported"); \
   }
 
-GCArguments* GCConfig::_arguments = NULL;
+GCArguments* GCConfig::_arguments = NULL;             // The GC type decides this instance. e.g. G1Arguments.
 bool GCConfig::_gc_selected_ergonomically = false;
 
 void GCConfig::fail_if_unsupported_gc_is_selected() {
@@ -176,7 +176,7 @@ GCArguments* GCConfig::select_gc() {
   // Exactly one GC selected
   FOR_EACH_SUPPORTED_GC(gc) {
     if (gc->_flag) {
-      return &gc->_arguments;
+      return &gc->_arguments;       // Get _arguments value from  
     }
   }
 

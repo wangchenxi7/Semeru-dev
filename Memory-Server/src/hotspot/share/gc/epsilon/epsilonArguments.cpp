@@ -70,3 +70,13 @@ void EpsilonArguments::initialize() {
 CollectedHeap* EpsilonArguments::create_heap() {
   return create_heap_with_policy<EpsilonHeap, EpsilonCollectorPolicy>();
 }
+
+
+  /**
+   * Semeru 
+   */
+CollectedHeap* EpsilonArguments::create_semeru_heap() {
+
+  tty->print("EpsilonArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

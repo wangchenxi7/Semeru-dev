@@ -98,3 +98,13 @@ void ZArguments::initialize() {
 CollectedHeap* ZArguments::create_heap() {
   return create_heap_with_policy<ZCollectedHeap, ZCollectorPolicy>();
 }
+
+
+/**
+* Semeru 
+*/
+CollectedHeap* ZArguments::create_semeru_heap() {
+
+  tty->print("ZArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

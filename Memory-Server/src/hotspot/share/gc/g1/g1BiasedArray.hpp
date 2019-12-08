@@ -57,14 +57,22 @@ protected:
     assert(length > 0, "just checking");
     assert(shift_by < sizeof(uintptr_t) * 8, "Shifting by %u, larger than word size?", shift_by);
     _base = base;
-    _length = length;
-    _biased_base = base - (bias * elem_size);
-    _bias = bias;
-    _shift_by = shift_by;
+    _length = length;     // Number of Regions
+    _biased_base = base - (bias * elem_size);   // [?]  elem_size is HeapWord, 8bytes.
+    _bias = bias;         // the start Region index, count by Region size.
+    _shift_by = shift_by; // log (Region byte size)
   }
 
-  // Allocate and initialize this array to cover the heap addresses in the range
-  // of [bottom, end).
+  /** 
+   * Allocate and initialize this array to cover the heap addresses in the range of [bottom, end).
+   * 
+   * Tag : Split the virtual memory, [bottom, end), to Regions. 
+   *       And rebuild the paramters to describe this Heap, e.g. base, offset etc.     
+   * 
+   *       mapping_granularity_in_bytes, the Region size.
+   *       target_elem_size_in_bytes, the minimum granularity, e.g. Heap Word, 8 bytes.
+   *        
+   */ 
   void initialize(HeapWord* bottom, HeapWord* end, size_t target_elem_size_in_bytes, size_t mapping_granularity_in_bytes) {
     assert(mapping_granularity_in_bytes > 0, "just checking");
     assert(is_power_of_2(mapping_granularity_in_bytes),
@@ -75,8 +83,8 @@ protected:
     assert((uintptr_t)end % mapping_granularity_in_bytes == 0,
            "end mapping area address must be a multiple of mapping granularity " SIZE_FORMAT ", is " PTR_FORMAT,
            mapping_granularity_in_bytes, p2i(end));
-    size_t num_target_elems = pointer_delta(end, bottom, mapping_granularity_in_bytes);
-    idx_t bias = (uintptr_t)bottom / mapping_granularity_in_bytes;
+    size_t num_target_elems = pointer_delta(end, bottom, mapping_granularity_in_bytes);   // Number of Regions
+    idx_t bias = (uintptr_t)bottom / mapping_granularity_in_bytes;                        // Start index of Region
     address base = create_new_base_array(num_target_elems, target_elem_size_in_bytes);
     initialize_base(base, num_target_elems, bias, target_elem_size_in_bytes, log2_intptr(mapping_granularity_in_bytes));
   }
@@ -186,8 +194,15 @@ protected:
 public:
   G1BiasedMappedArray() {}
 
-  // Allocate and initialize this array to cover the heap addresses in the range
-  // of [bottom, end).
+  /** 
+   * Allocate and initialize this array to cover the heap addresses in the range of [bottom, end).
+   *
+   * Tag : Split the virtual space, [Bottom, end) into Heap Regions.
+   *      1) mapping_granularity, the Size of each Region. e.g 1M(1048576) Bytes.
+   *      Defined by  HeapRegion::GrainBytes.
+   *      2) sizeof(T), HeapWord size ? 8 bytes here.
+   * 
+   */  
   void initialize(HeapWord* bottom, HeapWord* end, size_t mapping_granularity) {
     G1BiasedMappedArrayBase::initialize(bottom, end, sizeof(T), mapping_granularity);
     this->clear();

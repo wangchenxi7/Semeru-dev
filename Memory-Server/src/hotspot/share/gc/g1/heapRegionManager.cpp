@@ -55,6 +55,14 @@ public:
 	const char* get_description() { return "Free Regions"; }
 };
 
+/**
+ * Assign intial values to each field.
+ * 	
+ * [?] _available_map(mtGC)  ?? Multiple thread GC ?
+ * 
+ * [?] _regions()  ??
+ *  
+ */
 HeapRegionManager::HeapRegionManager() :
 	_bot_mapper(NULL),
 	_cardtable_mapper(NULL),
@@ -93,10 +101,10 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 
 	_card_counts_mapper = card_counts;
 
-	MemRegion reserved = heap_storage->reserved();
-	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::GrainBytes);
+	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
+	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::GrainBytes);  // Split the Java heap into Regions.
 
-	_available_map.initialize(_regions.length());
+	_available_map.initialize(_regions.length());			// [?] Free Region ?
 }
 
 bool HeapRegionManager::is_available(uint region) const {
@@ -208,10 +216,22 @@ MemoryUsage HeapRegionManager::get_auxiliary_data_memory_usage() const {
 	return MemoryUsage(0, used_sz, committed_sz, committed_sz);
 }
 
+/**
+ * Tag : Expand from Region index 0, at num_regions.
+ * 
+ * 	[?] So, only invoke this function at Jave heap initialization ? 
+ * 
+ */
 uint HeapRegionManager::expand_by(uint num_regions, WorkGang* pretouch_workers) {
 	return expand_at(0, num_regions, pretouch_workers);
 }
 
+
+/**
+ * Tag :  Find #N available Regions from index, start.
+ * 		The Regions can be discontiguous. 
+ * 		[x] Finnaly, the expanded Regions can be smaller than expectation, num_regions.
+ */
 uint HeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* pretouch_workers) {
 	if (num_regions == 0) {
 		return 0;
@@ -226,7 +246,7 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* pretou
 	while (expanded < num_regions &&
 				 (num_last_found = find_unavailable_from_idx(cur, &idx_last_found)) > 0) {
 		uint to_expand = MIN2(num_regions - expanded, num_last_found);
-		make_regions_available(idx_last_found, to_expand, pretouch_workers);
+		make_regions_available(idx_last_found, to_expand, pretouch_workers);   // Add the Regions into HeapRegionManager->_free_list.
 		expanded += to_expand;
 		cur = idx_last_found + num_last_found + 1;
 	}
@@ -308,6 +328,12 @@ void HeapRegionManager::iterate(HeapRegionClosure* blk) const {
 	}
 }
 
+
+/**
+ * Tag : find contiguous available un-committed Regions from reserved space, HeapRegionManager->_regions.
+ * 	Here uses the HeapRegionManager->_available_map for fast test.	
+ * 
+ */
 uint HeapRegionManager::find_unavailable_from_idx(uint start_idx, uint* res_idx) const {
 	guarantee(res_idx != NULL, "checking");
 	guarantee(start_idx <= (max_length() + 1), "checking");
@@ -315,17 +341,17 @@ uint HeapRegionManager::find_unavailable_from_idx(uint start_idx, uint* res_idx)
 	uint num_regions = 0;
 
 	uint cur = start_idx;
-	while (cur < max_length() && is_available(cur)) {
+	while (cur < max_length() && is_available(cur)) {   // Find all the availabel Regions in un-committed reserved space.
 		cur++;
 	}
 	if (cur == max_length()) {
 		return num_regions;
 	}
-	*res_idx = cur;
+	*res_idx = cur;				// res_idx points to the last available, un-committed Region in reserved space.
 	while (cur < max_length() && !is_available(cur)) {
 		cur++;
 	}
-	num_regions = cur - *res_idx;
+	num_regions = cur - *res_idx;		// The found available un-committed Regions.
 #ifdef ASSERT
 	for (uint i = *res_idx; i < (*res_idx + num_regions); i++) {
 		assert(!is_available(i), "just checking");

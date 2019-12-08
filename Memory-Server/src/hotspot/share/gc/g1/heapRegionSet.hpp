@@ -137,6 +137,10 @@ public:
 
 class FreeRegionListIterator;
 
+/**
+ * Tag : A vector of free HeapRegion list
+ * 
+ */
 class FreeRegionList : public HeapRegionSetBase {
   friend class FreeRegionListIterator;
 

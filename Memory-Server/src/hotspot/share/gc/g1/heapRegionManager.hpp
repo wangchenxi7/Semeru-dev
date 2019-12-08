@@ -89,7 +89,7 @@ class HeapRegionManager: public CHeapObj<mtGC> {
 
   // Each bit in this bitmap indicates that the corresponding region is available
   // for allocation.
-  CHeapBitMap _available_map;         // [?] Record which Region is committed
+  CHeapBitMap _available_map;         // For the whole Reserved space, available bitmap for _regions.
 
    // The number of regions committed in the heap.
   uint _num_committed;
@@ -121,11 +121,16 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1HeapRegionTable _regions;                 // Region handler for all the Regions for current G1 Heap.
+  G1HeapRegionTable _regions;                 // The whole reserved space. Region handler for all the Regions for current G1 Heap.
   G1RegionToSpaceMapper* _heap_mapper;
   G1RegionToSpaceMapper* _prev_bitmap_mapper;
   G1RegionToSpaceMapper* _next_bitmap_mapper;
-  FreeRegionList _free_list;                  // [?] Connection with the _regions ?
+  FreeRegionList _free_list;                  // The committed free Regions. Each space request Region from this freelist.
+
+  // Semeru
+  //G1HeapRegionTable   _semeru_regions;        
+  //FreeRegionList      _semeru_free_list;
+
 
   void make_regions_available(uint index, uint num_regions = 1, WorkGang* pretouch_gang = NULL);
   void uncommit_regions(uint index, size_t num_regions = 1);

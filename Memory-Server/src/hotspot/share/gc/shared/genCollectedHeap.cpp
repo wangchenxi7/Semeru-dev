@@ -132,6 +132,27 @@ jint GenCollectedHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ * 
+ * Reach here multiple times during the "install" procedure. 
+ * But normal execution produre, under G1 GC, never reaches here.
+ * 
+ * [x] Why ?
+ *  During the install procesure, it utilize seriaGC to build some Java class.
+ *  e.g.  interim jimage, images/jmods/jdk.jlink.jmod etc.
+ * 
+ */
+  jint GenCollectedHeap::initialize_memory_pool(){
+    
+    //assert(false, "genCollectedHeap::%s, Never reach here.",__func__);
+    //log_info(heap)("genCollectedHeap::%s, reached here.",__func__);
+    tty->print("GenCollectedHeap::%s, Should not reach here. \n",__func__);
+
+    return JNI_OK;
+  }
+
+
 CardTableRS* GenCollectedHeap::create_rem_set(const MemRegion& reserved_region) {
   return new CardTableRS(reserved_region, false /* scan_concurrently */);
 }

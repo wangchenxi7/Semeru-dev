@@ -381,6 +381,20 @@ jint ShenandoahHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ *  
+ */
+jint ShenandoahHeap::initialize_memory_pool(){
+    
+  //assert(false, "ShenandoahHeap::%s, Never reach here.",__func__);
+  tty->print("ShenandoahHeap::%s, Never reach here.",__func__);
+
+  return JNI_OK;
+}
+
+
+
 void ShenandoahHeap::initialize_heuristics() {
   if (ShenandoahGCHeuristics != NULL) {
     if (strcmp(ShenandoahGCHeuristics, "aggressive") == 0) {

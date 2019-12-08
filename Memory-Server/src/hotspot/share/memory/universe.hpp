@@ -180,6 +180,11 @@ class Universe: AllStatic {
   // The particular choice of collected heap.
   static CollectedHeap* _collectedHeap;
 
+  /**
+   *  Semeru
+   */
+  static CollectedHeap* _SemeruCollectedHeap;
+
   static intptr_t _non_oop_bits;
 
   // For UseCompressedOops.
@@ -217,6 +222,14 @@ class Universe: AllStatic {
   static jint initialize_heap();
   static void initialize_basic_type_mirrors(TRAPS);
   static void fixup_mirrors(TRAPS);
+
+  /**
+   * Semeru
+   *  
+   */
+  static CollectedHeap* create_semeru_memory_pool();
+
+
 
   static void reinitialize_vtable_of(Klass* k, TRAPS);
   static void reinitialize_vtables(TRAPS);
@@ -441,6 +454,10 @@ class Universe: AllStatic {
 
   // Reserve Java heap and determine CompressedOops mode
   static ReservedSpace reserve_heap(size_t heap_size, size_t alignment);
+
+  // Semeru
+  static ReservedSpace reserve_semeru_memory_pool(size_t heap_size, size_t alignment);
+
 
   // Historic gc information
   static size_t get_heap_capacity_at_last_gc()         { return _heap_capacity_at_last_gc; }

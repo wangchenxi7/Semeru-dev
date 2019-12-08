@@ -146,7 +146,7 @@ const int WordsPerLong       = 2;       // Number of stack entries for longs
 
 const int oopSize            = sizeof(char*); // Full-width oop
 extern int heapOopSize;                       // Oop within a java object
-const int wordSize           = sizeof(char*);
+const int wordSize           = sizeof(char*); // wordSize is address length, 8 bytes for x86_64.
 const int longSize           = sizeof(jlong);
 const int jintSize           = sizeof(jint);
 const int size_tSize         = sizeof(size_t);

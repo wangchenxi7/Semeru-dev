@@ -3254,38 +3254,55 @@ static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed) {
 }
 
 /**
+ *	Semeru
+ * 
+ */ 
+
+
+
+
+
+/**
+ * Semeru
+ * 
+ *  Dedicated allocation path for memory pool.
+ * 	1) It has to be allocated at specified start address, requested_addr.
+ * 	2) It has to be aligned to Region size.
+ * 	3) Register the memory pool as RDMA buffer.
+ * 	4) Start the RDMA daemon thread to handle 1-sided RDMA read/write.
+ * 
  * If 'fixed' is true, anon_mmap() will attempt to reserve anonymous memory
  * at 'requested_addr'. If there are existing memory mappings at the same
  * location, however, they will be overwritten. If 'fixed' is false,
  * 'requested_addr' is only treated as a hint, the return value may or
  * may not start from the requested address. Unlike Linux mmap(), this
  * function returns NULL to indicate failure.
- * 
- * Tag : Jave get memory from OS to build its heap.
- * 
- * [?] We need to register the Java heap as RDMA buffer.
- * 		=> Does RDMA buffer have spefic requirements for the mmap flags ?
- * 
- * [?] We can override the start address here ?
+ *  
  * 
  */
 pthread_t rdma_cma_thread; 
 
-static char* anon_mmap_RDMA_buffer(char* requested_addr, size_t bytes, bool fixed, size_t addr_alignment_hint) {
+static char* anon_mmap_semeru_memory_pool(char* requested_addr, size_t bytes, bool fixed, size_t addr_alignment_hint) {
 	char * addr;
 	int flags;
 
-	size_t heap_threshold = 1073741824;  // 1GB, 1 Region.
-
 	// We are allocated space for Java main heap,
-	// align the start address to prevent re-allocation.
-	// rewrite the paramter.
-	if( bytes > heap_threshold){
-		// [?] Is there any contrains for the start address ? Contraints in virtual heap.
+	// 1) align the start address to prevent re-allocation.
+	// 2) Fix the start address of memory pool. Controlled by CPU server.
+	if(requested_addr == NULL){
+		log_info(heap)("%s, Warning. It's not good to reach here. Set the start address ealier.",__func__);
+
 		requested_addr = (char*)0x7fefff000000;   // use a fixed start address. Make sure the range is empty.
 		fixed = true;
-		assert(((uintptr_t)requested_addr % addr_alignment_hint) == 0, "unaligned start address");
 	}
+
+	// Check start address and size alignment.
+	// Confirm this alignment before reaching here.
+	assert( (bytes >= addr_alignment_hint), " If requested size(0x%llx) < Region size(0x%llx), can't reach here.", 
+	 																								(unsigned long long)bytes, (unsigned long long)addr_alignment_hint);
+	assert(((uintptr_t)requested_addr % addr_alignment_hint) == 0, "unaligned start address");
+	assert(fixed == true, "Fixed flag doesn't match with parameter requested_addr (0x%llx) ", 
+																																						   (unsigned long long)requested_addr );
 
 
 	flags = MAP_PRIVATE | MAP_NORESERVE | MAP_ANONYMOUS;   
@@ -3301,22 +3318,19 @@ static char* anon_mmap_RDMA_buffer(char* requested_addr, size_t bytes, bool fixe
 
 
 	// 3) Register the virtual memory pool as RDMA buffer
-	//		Create a deamon thread to build RDMA connection and run as RDMA CM handler in background.
-	if(bytes > heap_threshold){  // 1GB/Region
-		// JVM start will wait on this function ?
-		//Build_RDMA_to_master(addr, bytes);
-
+	// 4) Create a deamon thread to build RDMA connection and run as RDMA CM handler in background.
+	if(addr != MAP_FAILED){
+		// Confirming the reserved heap is at the start address we are expected.
 		assert(addr == requested_addr, "Allocated addr != requested_addr");
 
 		struct rdma_main_thread_args *args = (struct rdma_main_thread_args *)malloc(sizeof(struct rdma_main_thread_args));
-		args->heap_start	=	addr;			// char* 
-		args->heap_size		= bytes;  // size_t
+		args->heap_start	=	addr;			// char*
+		args->heap_size		= bytes;    // size_t
 		if(pthread_create(&rdma_cma_thread, NULL, Build_rdma_to_cpu_server, (void*)args) != 0) {
 			tty->print("Create the daemon thread failed.");
 			return NULL;
 		}
 	}
-
 
 	return addr == MAP_FAILED ? NULL : addr;
 }
@@ -3368,13 +3382,13 @@ static int anon_munmap(char * addr, size_t size) {
 	return ::munmap(addr, size) == 0;
 }
 
+/**
+ * Tag : Get virtual memory from OS at any start address.
+ *  
+ */
 char* os::pd_reserve_memory(size_t bytes, char* requested_addr,
 														size_t alignment_hint) {
-//	return anon_mmap(requested_addr, bytes, (requested_addr != NULL));
-
-//debug
-	return anon_mmap_RDMA_buffer(requested_addr, bytes, (requested_addr != NULL), alignment_hint);
-
+	return anon_mmap(requested_addr, bytes, (requested_addr != NULL));
 }
 
 bool os::pd_release_memory(char* addr, size_t size) {
@@ -4056,6 +4070,9 @@ char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr) {
 	}
 
 	if (addr != NULL) {
+		log_info(heap)("ERROR - Can't reserve Virtual Space, e.g. Heap, Memory pool, at spefied start address : 0x%llx \n", 
+																																								(unsigned long long)requested_addr );
+
 		// mmap() is successful but it fails to reserve at the requested address
 		anon_munmap(addr, bytes);
 	}
@@ -4105,6 +4122,99 @@ char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr) {
 		return NULL;
 	}
 }
+
+
+/**
+ * Semeru
+ * 
+ * Request virtual memory range from OS at specific start address, requested_addr.
+ * 		1) Try to request memory at specific start address,
+ * 		if failed
+ * 		2) Get virtual address range at any available start address.
+ *  
+ */
+char* os::pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, size_t alignment) {
+	const int max_tries = 10;
+	char* base[max_tries];
+	size_t size[max_tries];
+	const size_t gap = 0x000000;
+
+	// Assert only that the size is a multiple of the page size, since
+	// that's all that mmap requires, and since that's all we really know
+	// about at this low abstraction level.  If we need higher alignment,
+	// we can either pass an alignment to this method or verify alignment
+	// in one of the methods further up the call chain.  See bug 5044738.
+	assert(bytes % os::vm_page_size() == 0, "reserving unexpected size block");
+
+	// Repeatedly allocate blocks until the block is allocated at the
+	// right spot.
+
+	// Linux mmap allows caller to pass an address as hint; give it a try first,
+	// if kernel honors the hint then we can return immediately.
+	//char * addr = anon_mmap(requested_addr, bytes, false);
+	// size_t alignment_hint = 1073741824; 	// [?] Region size ? 1GB here.
+	char * addr = anon_mmap_semeru_memory_pool(requested_addr, bytes, requested_addr!=NULL,  alignment);
+	if (addr == requested_addr) {
+		return requested_addr;
+	}
+
+	if (addr != NULL) {
+		log_info(heap)("ERROR - Can't reserve Virtual Space, e.g. Heap, Memory pool, at spefied start address : 0x%llx \n", 
+																																											(unsigned long long)requested_addr );
+		assert(false, "%s, Can't reach here.", __func__);
+
+		// mmap() is successful but it fails to reserve at the requested address
+		anon_munmap(addr, bytes);
+	}
+
+	int i;
+	for (i = 0; i < max_tries; ++i) {
+		base[i] = reserve_memory(bytes);
+
+		if (base[i] != NULL) {
+			// Is this the block we wanted?
+			if (base[i] == requested_addr) {
+				size[i] = bytes;
+				break;
+			}
+
+			// Does this overlap the block we wanted? Give back the overlapped
+			// parts and try again.
+
+			ptrdiff_t top_overlap = requested_addr + (bytes + gap) - base[i];
+			if (top_overlap >= 0 && (size_t)top_overlap < bytes) {
+				unmap_memory(base[i], top_overlap);
+				base[i] += top_overlap;
+				size[i] = bytes - top_overlap;
+			} else {
+				ptrdiff_t bottom_overlap = base[i] + bytes - requested_addr;
+				if (bottom_overlap >= 0 && (size_t)bottom_overlap < bytes) {
+					unmap_memory(requested_addr, bottom_overlap);
+					size[i] = bytes - bottom_overlap;
+				} else {
+					size[i] = bytes;
+				}
+			}
+		}
+	}
+
+	// Give back the unused reserved pieces.
+
+	for (int j = 0; j < i; ++j) {
+		if (base[j] != NULL) {
+			unmap_memory(base[j], size[j]);
+		}
+	}
+
+	if (i < max_tries) {
+		return requested_addr;
+	} else {
+		return NULL;
+	}
+}
+
+
+
 
 size_t os::read(int fd, void *buf, unsigned int nBytes) {
 	return ::read(fd, buf, nBytes);

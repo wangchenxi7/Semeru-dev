@@ -37,6 +37,9 @@
 #include "gc/shared/gcCause.hpp"
 #include "utilities/pair.hpp"
 
+//Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
 // A G1Policy makes policy decisions that determine the
 // characteristics of the collector.  Examples include:
 //   * choice of collection set.
@@ -168,7 +171,7 @@ public:
   double accum_yg_surv_rate_pred(int age) const;
 
 private:
-  G1CollectionSet* _collection_set;
+  G1CollectionSet* _collection_set;          // The CSet
   double average_time_ms(G1GCPhaseTimes::GCParPhases phase) const;
   double other_time_ms(double pause_time_ms) const;
 
@@ -288,6 +291,13 @@ public:
   virtual ~G1Policy();
 
   static G1Policy* create_policy(G1CollectorPolicy* policy, STWGCTimer* gc_timer_stw);
+
+  /** 
+   * Semeru
+   */
+  G1Policy(G1SemeruCollectorPolicy* policy, STWGCTimer* gc_timer);
+  static G1Policy* create_policy(G1SemeruCollectorPolicy* policy, STWGCTimer* gc_timer_stw);
+
 
   G1CollectorState* collector_state() const;
 

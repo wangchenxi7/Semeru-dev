@@ -228,6 +228,58 @@ CollectedHeap::CollectedHeap() :
 	}
 }
 
+/**
+ *  Semeru 
+ */
+
+// Dedicated constructor for Semeru Heap (Memory Pool)
+
+CollectedHeap::CollectedHeap(bool semeru) :
+	_is_gc_active(false),
+	_total_collections(0),
+	_total_full_collections(0),
+	_gc_cause(GCCause::_no_gc),
+	_gc_lastcause(GCCause::_no_gc)
+{
+	// Confirm only Semeru CollectedHeap can invoke this.
+	guarantee(semeru, "%s, Only Semeru CollectedHeap can invoke this constructor.\n", __func__);
+
+	const size_t max_len = size_t(arrayOopDesc::max_array_length(T_INT));
+	const size_t elements_per_word = HeapWordSize / sizeof(jint);
+	_filler_array_max_size = align_object_size(filler_array_hdr_size() +
+																						 max_len / elements_per_word);
+
+	NOT_PRODUCT(_promotion_failure_alot_count = 0;)
+	NOT_PRODUCT(_promotion_failure_alot_gc_number = 0;)
+
+	// Debug
+	// Disable the UsePerfData for Semeru. Enable it only when confirm that we need it.
+	//
+	UsePerfData = false;
+	if (UsePerfData) {
+		EXCEPTION_MARK;
+
+		// create the gc cause jvmstat counters
+		// [x] If Add prefix "semeru" to all the PerfData.
+		//
+		_perf_gc_cause = PerfDataManager::create_string_variable(SUN_GC, "cause",
+														 80, GCCause::to_string(_gc_cause), CHECK);
+
+		_perf_gc_lastcause =
+								PerfDataManager::create_string_variable(SUN_GC, "lastCause",
+														 80, GCCause::to_string(_gc_lastcause), CHECK);
+	}
+
+	// Create the ring log
+	if (LogEvents) {
+		_gc_heap_log = new GCHeapLog();
+	} else {
+		_gc_heap_log = NULL;
+	}
+}
+
+
+
 // This interface assumes that it's being called by the
 // vm thread. It collects the heap assuming that the
 // heap lock is already held and that we are executing in
@@ -541,13 +593,37 @@ void CollectedHeap::initialize_reserved_region(HeapWord *start, HeapWord *end) {
 
 	//debug
 	//log_info(heap)("Allocated G1 heap[0x%llx, 0x%llx] ", (unsigned long long)start, (unsigned long long)end);
-	log_debug(heap)("Allocated G1 heap[0x%llx, 0x%llx] ", (unsigned long long)start, (unsigned long long)end);
+	log_debug(heap)("%s, Allocated G1 heap[0x%llx, 0x%llx] ", __func__, (unsigned long long)start, (unsigned long long)end);
 
 }
+
+/**
+ * Semeru
+ * 
+ */ 
+
+	void CollectedHeap::initialize_reserved_memory_pool(HeapWord *start, HeapWord *end) {
+	// It is important to do this in a way such that concurrent readers can't
+	// temporarily think something is in the heap.  (Seen this happen in asserts.)
+	_reserved_memory_pool.set_word_size(0);
+	_reserved_memory_pool.set_start(start);
+	_reserved_memory_pool.set_end(end);
+
+	//debug
+	//log_info(heap)("Allocated G1 heap[0x%llx, 0x%llx] ", (unsigned long long)start, (unsigned long long)end);
+	log_debug(heap)("%s, Allocated G1 Memory Pool[0x%llx, 0x%llx] ", __func__, 
+																	(unsigned long long)start, (unsigned long long)end);
+
+}
+
+
 
 void CollectedHeap::post_initialize() {
 	initialize_serviceability();
 }
+
+
+
 
 #ifndef PRODUCT
 

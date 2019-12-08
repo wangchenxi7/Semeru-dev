@@ -188,6 +188,9 @@ public:
 
 	static void setup_remset_size();
 
+	// Semeru
+	static void setup_semeru_remset_size();
+
 	bool cardset_is_empty() const {
 		return _other_regions.is_empty();
 	}

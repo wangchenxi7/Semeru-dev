@@ -154,6 +154,11 @@ size_t          Universe::_heap_used_at_last_gc = 0;
 
 CollectedHeap*  Universe::_collectedHeap = NULL;
 
+/**
+ * Semeru 
+ */
+CollectedHeap* Universe::_SemeruCollectedHeap	= NULL;
+
 NarrowPtrStruct Universe::_narrow_oop = { NULL, 0, true };
 NarrowPtrStruct Universe::_narrow_klass = { NULL, 0, true };
 address Universe::_narrow_ptrs_base;
@@ -675,7 +680,12 @@ jint universe_init() {
 	JavaClasses::compute_hard_coded_offsets();
 
 	initialize_global_behaviours();
-
+ 
+	//
+	// [?] How to dicide which CollectedHeap is used here.
+	//	e.g. G1CollectedHeap, ParallelScavengeCollectedHeap. 
+	//		Controlled by Universe::create_heap() ?
+	//
 	jint status = Universe::initialize_heap();			// Build the Java Heap
 	if (status != JNI_OK) {
 		return status;
@@ -738,9 +748,23 @@ jint universe_init() {
 	return JNI_OK;
 }
 
+/**
+ * Return the corresponding CollectedHeap based on the arguments.
+ * e.g. G1CollectedHeap, ParallelScavengeCollectedHeap. 
+ */
 CollectedHeap* Universe::create_heap() {
 	assert(_collectedHeap == NULL, "Heap already created");
 	return GCConfig::arguments()->create_heap();
+}
+
+
+// Controlled by Java option : -X ?
+// Use the G1Argument to build the G1SemeruCollectedHeap.
+CollectedHeap* Universe::create_semeru_memory_pool(){
+	assert(_SemeruCollectedHeap == NULL, "Semeru memory pool already created.");
+
+	// Should return the G1SemeruCollelctedHeap
+	return GCConfig::arguments()->create_semeru_heap();
 }
 
 // Choose the heap base address and oop encoding mode
@@ -750,16 +774,47 @@ CollectedHeap* Universe::create_heap() {
 // ZeroBased - Use zero based compressed oops with encoding when
 //     NarrowOopHeapBaseMin + heap_size < 32Gb
 // HeapBased - Use compressed oops with heap base + encoding.
-
+/**
+ *  Tag : Based on the object instance type,
+ *			Initialize the corresponding type of CollectedHeap based on  the _collectedHeap, which is built by create_heap().
+ *			e.g. G1CollectedHeap, ParallelScavengeHeap
+ *
+ * 
+ */  
 jint Universe::initialize_heap() {
-	_collectedHeap = create_heap();
-	jint status = _collectedHeap->initialize();  // Intialize the Java heap.
+	_collectedHeap = create_heap();							 // 1) Build the arguments and policy for G1CollectedHeap.
+	jint status = _collectedHeap->initialize();  // 2) Allocate && Intialize the Java heap.
 	if (status != JNI_OK) {
 		return status;
 	}
 	log_info(gc)("Using %s", _collectedHeap->name());
 
 	ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
+
+	//debug
+	// Change the control to -X option
+	//const char* target_gc_name="G1";
+	if( _collectedHeap->kind() == CollectedHeap::G1 ){
+		log_info(heap)("%s, Using G1 GC, build the Semeru Memory pool. \n", __func__);
+
+	// Create the G1SemeruCollectedHeap policy and heap space.
+
+	// Semeru
+	// 1) Build the Semeru Colloctor Policy
+	// 2) Allocate G1SemeruCollecteHeap , and then initialize it with G1CollectorPolicy.
+		log_info(heap)("%s, Build the G1SemeruCollectorPolicy. \n",__func__);
+		_SemeruCollectedHeap	=	create_semeru_memory_pool();
+
+		log_info(heap)("%s, Prepare to Allocate Semeru memory pool. \n", __func__);
+	  jint semeru_status = _SemeruCollectedHeap->initialize_memory_pool();
+	 if(semeru_status != JNI_OK){
+	 	log_info(heap)("%s, Create Semeru memory pool failed.", __func__);
+	 	return semeru_status;
+	 }
+	 log_info(heap)("%s, Create Semeru memory pool successfully.", __func__);
+	 //tty->print("%s, Create Semeru memory pool successfully.\n", __func__);
+
+	}
 
 #ifdef _LP64
 	if (UseCompressedOops) {
@@ -832,6 +887,10 @@ void Universe::print_compressed_oops_mode(outputStream* st) {
 	st->cr();
 }
 
+/**
+ * Tag :  Request Java Heap from OS.
+ *  
+ */
 ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
 
 	assert(alignment <= Arguments::conservative_max_heap_alignment(),
@@ -876,6 +935,80 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
 	ShouldNotReachHere();
 	return ReservedHeapSpace(0, 0, false);
 }
+
+
+/**
+ * Semeru
+ *  
+ * 	Univer path :
+ * 1) Get Memory from OS at specific start address, controlled by CPU server.
+ * 
+ * Parameters:
+ * 		heap_size : Controlled by heap_size, we need to set a separate option ?
+ * 		alignment : Region size alignment, e.g. 1GB.
+ */
+ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alignment) {
+
+// debug
+	log_debug(heap)("%s, Enter .\n",__func__);
+
+
+	assert(alignment <= Arguments::conservative_max_heap_alignment(),
+				 "actual alignment " SIZE_FORMAT " must be within maximum heap alignment " SIZE_FORMAT,
+				 alignment, Arguments::conservative_max_heap_alignment());
+
+	size_t total_reserved = align_up(heap_size, alignment);
+	assert(!UseCompressedOops || (total_reserved <= (OopEncodingHeapMax - os::vm_page_size())),
+			"heap size is too big for compressed oops");
+
+	bool use_large_pages = UseLargePages && is_aligned(alignment, os::large_page_size());
+	assert(!UseLargePages
+			|| UseParallelGC
+			|| use_large_pages, "Wrong alignment to use large pages");
+
+
+
+	// Now create the space.
+	//ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
+	char* heap_start_addr = (char*)0x7fefff000000;		// Not set the memory pool start address yet.
+	ReservedHeapSpace total_rs(total_reserved, alignment, heap_start_addr);			// [X] Get virtual space from OS.
+
+	// ==> Reserve Java heap from OS successfully 
+	if (total_rs.is_reserved()) {
+		assert((total_reserved == total_rs.size()) && ((uintptr_t)total_rs.base() % alignment == 0),
+					 "must be exactly of required size and alignment");
+		// We are good.
+
+		// if (UseCompressedOops) {
+		// 	// Universe::initialize_heap() will reset this to NULL if unscaled
+		// 	// or zero-based narrow oops are actually used.
+		// 	// Else heap start and base MUST differ, so that NULL can be encoded nonambigous.
+		// 	Universe::set_narrow_oop_base((address)total_rs.compressed_oop_base());
+		// }
+
+		if (heap_start_addr != NULL) {
+			log_info(heap)("Successfully allocated Java heap at location 0x%llx", (unsigned long long)heap_start_addr);
+		}
+
+		// Reserve Java heap successfully.
+		return total_rs;
+	}
+
+	// ==> Reserve Java heap from OS failed,
+	vm_exit_during_initialization(
+		err_msg("Could not reserve enough space for " SIZE_FORMAT "KB object heap",
+						total_reserved/K));
+
+	// satisfy compiler
+	// ERROR path
+	ShouldNotReachHere();
+	return ReservedHeapSpace(0, 0, false);
+}
+
+
+
+
+
 
 
 // It's the caller's responsibility to ensure glitch-freedom

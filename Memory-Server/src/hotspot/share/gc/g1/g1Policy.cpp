@@ -95,6 +95,64 @@ G1Policy* G1Policy::create_policy(G1CollectorPolicy* policy, STWGCTimer* gc_time
   }
 }
 
+
+
+/**
+ * Semeru
+ *  
+ * Constructors for Semeru Collected Policy and Heap.
+ */
+
+G1Policy::G1Policy(G1SemeruCollectorPolicy* policy, STWGCTimer* gc_timer) :
+  _predictor(G1ConfidencePercent / 100.0),
+  _analytics(new G1Analytics(&_predictor)),
+  _remset_tracker(),
+  _mmu_tracker(new G1MMUTrackerQueue(GCPauseIntervalMillis / 1000.0, MaxGCPauseMillis / 1000.0)),
+  _ihop_control(create_ihop_control(&_predictor)),
+  _policy_counters(new GCPolicyCounters("GarbageFirst", 1, 2)),
+  _full_collection_start_sec(0.0),
+  _collection_pause_end_millis(os::javaTimeNanos() / NANOSECS_PER_MILLISEC),
+  _young_list_target_length(0),
+  _young_list_fixed_length(0),
+  _young_list_max_length(0),
+  _short_lived_surv_rate_group(new SurvRateGroup()),
+  _survivor_surv_rate_group(new SurvRateGroup()),
+  _reserve_factor((double) G1ReservePercent / 100.0),
+  _reserve_regions(0),
+  _young_gen_sizer(G1YoungGenSizer::create_gen_sizer(policy)),
+  _free_regions_at_end_of_collection(0),
+  _max_rs_lengths(0),
+  _rs_lengths_prediction(0),
+  _pending_cards(0),
+  _bytes_allocated_in_old_since_last_gc(0),
+  _initial_mark_to_mixed(),
+  _collection_set(NULL),
+  _bytes_copied_during_gc(0),
+  _g1h(NULL),
+  _phase_times(new G1GCPhaseTimes(gc_timer, ParallelGCThreads)),
+  _mark_remark_start_sec(0),
+  _mark_cleanup_start_sec(0),
+  _tenuring_threshold(MaxTenuringThreshold),
+  _max_survivor_regions(0),
+  _survivors_age_table(true)
+{
+}
+
+G1Policy* G1Policy::create_policy(G1SemeruCollectorPolicy* policy, STWGCTimer* gc_timer_stw) {
+  if (policy->is_hetero_heap()) {
+    //return new G1HeterogeneousHeapPolicy(policy, gc_timer_stw);
+
+    assert(false, "%s,Semeru not support heterogenous heap \n", __func__);
+
+    return NULL;
+
+  } else {
+    return new G1Policy(policy, gc_timer_stw);
+  }
+}
+
+
+
 G1CollectorState* G1Policy::collector_state() const { return _g1h->collector_state(); }
 
 void G1Policy::init(G1CollectedHeap* g1h, G1CollectionSet* collection_set) {

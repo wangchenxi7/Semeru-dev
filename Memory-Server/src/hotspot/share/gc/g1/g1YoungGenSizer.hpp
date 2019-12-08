@@ -28,6 +28,9 @@
 #include "gc/g1/g1CollectorPolicy.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+// Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
 // There are three command line options related to the young gen size:
 // NewSize, MaxNewSize and NewRatio (There is also -Xmn, but that is
 // just a short form for NewSize==MaxNewSize). G1 will use its internal
@@ -100,6 +103,7 @@ public:
   uint min_desired_young_length() const {
     return _min_desired_young_length;
   }
+
   uint max_desired_young_length() const {
     return _max_desired_young_length;
   }
@@ -109,6 +113,11 @@ public:
   }
 
   static G1YoungGenSizer* create_gen_sizer(G1CollectorPolicy* policy);
+
+  //Semeru
+  static G1YoungGenSizer* create_gen_sizer(G1SemeruCollectorPolicy* policy);
+
+
 };
 
 #endif // SHARE_VM_GC_G1_G1YOUNGGENSIZER_HPP

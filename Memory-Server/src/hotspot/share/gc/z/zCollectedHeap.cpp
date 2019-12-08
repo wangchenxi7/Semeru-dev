@@ -70,6 +70,19 @@ jint ZCollectedHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ *  
+ */
+jint ZCollectedHeap::initialize_memory_pool(){
+    
+  //assert(false, "ZCollectedHeap::%s, Never reach here.",__func__);
+  tty->print("ZCollectedHeap::%s, Never reach here.",__func__);
+
+  return JNI_OK;
+}
+
+
 void ZCollectedHeap::initialize_serviceability() {
   _heap.serviceability_initialize();
 }

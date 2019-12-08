@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Red Hat, Inc. and/or its affiliates.
+ * Copyright (c) 2001, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,27 +22,36 @@
  *
  */
 
-#ifndef SHARE_GC_CMS_CMSARGUMENTS_HPP
-#define SHARE_GC_CMS_CMSARGUMENTS_HPP
+#ifndef SHARE_VM_GC_G1_SEMERU_G1COLLECTORPOLICY_HPP
+#define SHARE_VM_GC_G1_SEMERU_G1COLLECTORPOLICY_HPP
 
-#include "gc/shared/gcArguments.hpp"
+#include "gc/shared/collectorPolicy.hpp"
 
-class CollectedHeap;
+// G1CollectorPolicy is primarily used during initialization and to expose the
+// functionality of the CollectorPolicy interface to the rest of the VM.
 
-class CMSArguments : public GCArguments {
-private:
-  void disable_adaptive_size_policy(const char* collector_name);
-  void set_parnew_gc_flags();
+class G1YoungGenSizer;
+
+class G1SemeruCollectorPolicy: public CollectorPolicy {
+protected:
+  void initialize_alignments();
+
+  //
+  // Semeru
+  //
+  size_t _semeru_memory_pool_alignment;
+
+  bool  debug_flag; // Used to stop re-initialize the G1Policy fields.
+
 public:
-  virtual void initialize();
-  virtual size_t conservative_max_heap_alignment();
-  virtual CollectedHeap* create_heap();
+  G1SemeruCollectorPolicy();
+  virtual size_t heap_reserved_size_bytes() const;
+  virtual bool is_hetero_heap() const;
 
- /**
-  * Semeru 
-  */
-  virtual CollectedHeap* create_semeru_heap();
+  //
+  // Semeru
+  //
+  size_t memory_pool_alignment();
 
 };
-
-#endif // SHARE_GC_CMS_CMSARGUMENTS_HPP
+#endif // SHARE_VM_GC_G1_SEMERU_G1COLLECTORPOLICY_HPP

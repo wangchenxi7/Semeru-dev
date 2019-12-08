@@ -33,6 +33,10 @@ class SerialArguments : public GCArguments {
 public:
   virtual size_t conservative_max_heap_alignment();
   virtual CollectedHeap* create_heap();
+
+  // Semeru
+  virtual CollectedHeap* create_semeru_heap();
+
 };
 
 #endif // SHARE_GC_SERIAL_SERIALARGUMENTS_HPP

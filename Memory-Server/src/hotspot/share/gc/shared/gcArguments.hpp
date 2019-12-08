@@ -40,6 +40,12 @@ public:
   virtual size_t conservative_max_heap_alignment() = 0;
   virtual CollectedHeap* create_heap() = 0;
   static bool check_args_consistency();
+
+  /**
+   * Semeru 
+   */
+  virtual CollectedHeap* create_semeru_heap() = 0;
+
 };
 
 #endif // SHARE_GC_SHARED_GCARGUMENTS_HPP

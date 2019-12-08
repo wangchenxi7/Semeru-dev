@@ -51,6 +51,10 @@ public:
   virtual jint initialize();
   virtual CardTableRS* create_rem_set(const MemRegion& reserved_region);
 
+  //
+  // Semeru
+  virtual jint initialize_memory_pool();
+
   // Convenience function to be used in situations where the heap type can be
   // asserted to be this type.
   static CMSHeap* heap();

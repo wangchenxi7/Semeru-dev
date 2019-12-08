@@ -97,6 +97,18 @@ jint CMSHeap::initialize() {
   return JNI_OK;
 }
 
+/**
+ * Semeru
+ * 
+ */
+  jint CMSHeap::initialize_memory_pool() {
+    
+    tty->print("CMSHeap::%s, Should not reach here.",__func__);
+
+    return JNI_OK;
+  }
+
+
 CardTableRS* CMSHeap::create_rem_set(const MemRegion& reserved_region) {
   return new CMSCardTable(reserved_region);
 }

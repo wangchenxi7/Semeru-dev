@@ -36,3 +36,13 @@ size_t SerialArguments::conservative_max_heap_alignment() {
 CollectedHeap* SerialArguments::create_heap() {
   return create_heap_with_policy<SerialHeap, MarkSweepPolicy>();
 }
+
+
+/**
+* Semeru 
+*/
+CollectedHeap* SerialArguments::create_semeru_heap() {
+
+  tty->print("SerialArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

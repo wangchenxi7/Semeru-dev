@@ -100,3 +100,12 @@ CollectedHeap* ParallelArguments::create_heap() {
     return create_heap_with_policy<ParallelScavengeHeap, GenerationSizer>();
   }
 }
+
+/**
+* Semeru 
+*/
+CollectedHeap* ParallelArguments::create_semeru_heap() {
+
+  tty->print("ParallelArguments::%s, Should not reach here. \n", __func__);
+  return NULL;
+}

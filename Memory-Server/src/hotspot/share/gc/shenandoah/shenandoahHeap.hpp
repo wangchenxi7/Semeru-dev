@@ -140,6 +140,11 @@ public:
   void post_initialize();
   void initialize_heuristics();
 
+  //
+  // Semeru
+  //
+  jint initialize_memory_pool();
+
   void initialize_serviceability();
 
   void print_on(outputStream* st)              const;

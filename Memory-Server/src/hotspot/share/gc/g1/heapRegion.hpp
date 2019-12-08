@@ -323,6 +323,9 @@ class HeapRegion: public G1ContiguousSpace {
   static size_t GrainWords;     // [?] The Region size is fixed to this, 128K words, 1MB ??
   static size_t CardsPerRegion;
 
+  // Semeru
+  static size_t MemoryPoolRegionBytes;
+
   static size_t align_up_to_region_byte_size(size_t sz) {
     return (sz + (size_t) GrainBytes - 1) &
                                       ~((1 << (size_t) LogOfHRGrainBytes) - 1);
@@ -347,6 +350,9 @@ class HeapRegion: public G1ContiguousSpace {
   // throughout the JVM's execution, therefore they should only be set
   // up once during initialization time.
   static void setup_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
+
+  // Semeru
+  static void setup_semeru_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
 
   // All allocated blocks are occupied by objects in a HeapRegion
   bool block_is_obj(const HeapWord* p) const;
