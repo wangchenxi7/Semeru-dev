@@ -67,7 +67,7 @@ size_t HeapRegion::min_region_size_in_words() {
 //
 int    HeapRegion::SemeruLogOfHRGrainBytes = 0;
 int    HeapRegion::SemeruLogOfHRGrainWords = 0;
-size_t HeapRegion::SemeruGrainBytes        = 0;  
+size_t HeapRegion::SemeruGrainBytes        = 0;   // Semeru allocation alignment && Region size.
 size_t HeapRegion::SemeruGrainWords        = 0;      
 size_t HeapRegion::SemeruCardsPerRegion    = 0;  
 

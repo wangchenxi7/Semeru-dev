@@ -1009,7 +1009,7 @@ public:
 //   G1CollectionSet* collection_set() { return &_collection_set; }
 
   virtual CollectorPolicy* collector_policy() const;
-  virtual G1SemeruCollectorPolicy* g1_collector_policy() const;
+  virtual G1SemeruCollectorPolicy* semeru_collector_policy() const;
 
   virtual SoftRefPolicy* soft_ref_policy();
 

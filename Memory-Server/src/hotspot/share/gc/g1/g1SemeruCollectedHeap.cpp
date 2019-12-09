@@ -1766,12 +1766,9 @@ jint G1SemeruCollectedHeap::initialize() {
 jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	os::enable_vtime();
 
-	//debug
-	tty->print("Enter function %s \n", __func__);
-	//return JNI_OK;
+	log_debug(heap)("Enter function %s \n", __func__);
 
 	// Necessary to satisfy locking discipline assertions.
-// 	// MutexLocker x(Heap_lock);
 	MutexLocker x(Memory_Pool_lock);
 
 	// While there are no constraints in the GC code that HeapWordSize
@@ -1781,27 +1778,21 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// HeapWordSize).
 	guarantee(HeapWordSize == wordSize, "HeapWordSize must equal wordSize");
 
-
-// 	//
-//   // [?] Build the Semeru memory pool policy seperately ?
-// 	//
-	size_t init_byte_size = g1_collector_policy()->semeru_initial_heap_byte_size();			//-X:SemeruMemPoolInitialSize
-	size_t max_byte_size 	= g1_collector_policy()->semeru_heap_reserved_size_bytes();		//-X:SemeruMemPoolMaxSize
-	size_t heap_alignment = g1_collector_policy()->semeru_memory_pool_alignment();			//-X:SemeruMemPoolAlignment
-
-	// debug
+	//
+  // [x] Build the Semeru memory pool policy seperately
+	//		 Make sure using the semeru_collector_policy() not the base class, collector_policy()
+	size_t init_byte_size = semeru_collector_policy()->initial_heap_byte_size();			//-X:SemeruMemPoolInitialSize
+	size_t max_byte_size 	= semeru_collector_policy()->heap_reserved_size_bytes();		//-X:SemeruMemPoolMaxSize
+	size_t heap_alignment = semeru_collector_policy()->heap_alignment();							//-X:SemeruMemPoolAlignment
 	log_info(heap)("%s, init_byte_size : 0x%llx, max_byte_size : 0x%llx, heap_alignment : 0x%llx \n",
 								__func__, (unsigned long long)init_byte_size, (unsigned long long)max_byte_size,(unsigned long long)heap_alignment);
-	//return JNI_OK;
 
 
 	// Ensure that the sizes are properly aligned.
-	Universe::check_alignment(init_byte_size, HeapRegion::GrainBytes, "g1 Semeru heap");  // Region size alignment
-	Universe::check_alignment(max_byte_size, HeapRegion::GrainBytes, "g1 Semeru heap");
-	Universe::check_alignment(max_byte_size, heap_alignment, "g1 Semeru heap");
+	Universe::check_alignment(init_byte_size, HeapRegion::SemeruGrainBytes, "g1 Semeru heap");  // Region size alignment
+	Universe::check_alignment(max_byte_size, HeapRegion::SemeruGrainBytes, "g1 Semeru heap");
+	//Universe::check_alignment(max_byte_size, heap_alignment, "g1 Semeru heap");		// useless here.
 
- 	//debug
-	//return JNI_OK;
 
 	// Reserve the maximum virtual space according to -Xmx.
 	// [x] Get virtual space from OS.
@@ -2130,11 +2121,13 @@ void G1SemeruCollectedHeap::ref_processing_init() {
 													 true);                                // allow changes to number of processing threads
 }
 
+// return the super class's instance
 CollectorPolicy* G1SemeruCollectedHeap::collector_policy() const {
 	return _collector_policy;
 }
 
-G1SemeruCollectorPolicy* G1SemeruCollectedHeap::g1_collector_policy() const {
+// return current/sub-class's instance
+G1SemeruCollectorPolicy* G1SemeruCollectedHeap::semeru_collector_policy() const {
 	return _collector_policy;
 }
 

@@ -34,6 +34,6 @@ class CollectedHeap;
 template <class Heap, class Policy>
 CollectedHeap* GCArguments::create_heap_with_policy() {
   Policy* policy = new Policy();  // 1) Build the specfic CollectorPolicy
-  policy->initialize_all();
+  policy->initialize_all();       // Specific GC#CollectorPolicy's initialize_all() function.
   return new Heap(policy);    // 2) Build the specific CollectedHeap instance and initialize it by the CollectorPolicy.
 }

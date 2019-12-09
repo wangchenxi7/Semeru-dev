@@ -65,8 +65,8 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   size_t _max_heap_byte_size;
   size_t _min_heap_byte_size;
 
-  size_t _space_alignment;
-  size_t _heap_alignment;
+  size_t _space_alignment;   // [?] Used for OS
+  size_t _heap_alignment;    // [?] Used for Java heap ?
 
   //
   // Semeru
@@ -75,7 +75,7 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   // // Define these parameters in G1SemeruCollectorPolicy
   // size_t  _semeru_max_heap_byte_size;
   // size_t  _semeru_initial_heap_byte_size;
-  // size_t  _semeru_memory_pool_alignment;
+  // size_t  _semeru_heap_alignment;
 
 
   CollectorPolicy();

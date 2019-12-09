@@ -792,7 +792,7 @@ jint Universe::initialize_heap() {
 	ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
 
 	// const char* target_gc_name="G1";
-	// controlled by -XX:SemeruEnableMemPool.
+	// controlled by -XX:SemeruEnableMemPool && -XX:+UseG1GC.
 	if( SemeruEnableMemPool && (_collectedHeap->kind() == CollectedHeap::G1) ){
 		log_info(heap)("%s, Using G1 GC, build the Semeru Memory pool. \n", __func__);
 
@@ -944,12 +944,13 @@ ReservedSpace Universe::reserve_heap(size_t heap_size, size_t alignment) {
  * 
  * Parameters:
  * 		heap_size : Controlled by heap_size, we need to set a separate option ?
- * 		alignment : Region size alignment, e.g. 1GB.
+ * 		alignment : Region size alignment, determined by -XX:SemeruMemPoolAlignment,
+ * 								also HeapRegion::SemeruGrainBytes, region_size
  */
 ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alignment) {
 
-// debug
-	log_debug(heap)("%s, Enter .\n",__func__);
+	log_debug(heap)("%s, Try to request memory 0x%llx from OS at 0x%llx alignment. \n",
+															__func__, (unsigned long long) heap_size, (unsigned long long)alignment);
 
 
 	assert(alignment <= SemeruMemPoolMaxSize,
@@ -966,9 +967,8 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 			|| use_large_pages, "Wrong alignment to use large pages");
 
 
-
 	// Now create the space.
-	//ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
+	// ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
 	char* heap_start_addr = (char*)0x7fef00000000;		// Not set the memory pool start address yet.
 	ReservedHeapSpace total_rs(total_reserved, alignment, heap_start_addr);			// [X] Get virtual space from OS.
 

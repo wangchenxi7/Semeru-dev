@@ -272,16 +272,13 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
   _base = NULL;
   _size = 0;
   _special = false;             // Huge page, file backed heap 
-  _executable = executable;
+  _executable = executable;     // What's the meaning ?
   _alignment = 0;
   _noaccess_prefix = 0;
 
   // Reserve at lease 1 Region for Semeru memory pool
-  if (size < alignment){
-    log_info(heap)("%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
+  assert(size >= alignment, "%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
                                                            (unsigned long long)size, (unsigned long long)alignment);
-    return;
-  }
 
   // If OS doesn't support demand paging for large page memory, we need
   // to use reserve_memory_special() to reserve and pin the entire region.
@@ -836,18 +833,12 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, 
  */   
 ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, char* heap_start_addr) : ReservedSpace() {
 
-  // Check in initialization function.
-  // if (size < alignment) {
-  //   log_info(heap)("%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
-  //                                                         (unsigned long long)size, (unsigned long long)alignment);
-  //   return;
-  // }
-
   // Heap size should be aligned to alignment, too.
   guarantee(is_aligned(size, alignment), "set by caller");
 
   // The normal path : non-determined start addr; non-compressed oop heap.
-  initialize_semeru(size, alignment, false, heap_start_addr, false); 
+  // size, allocation alignment, large_page, heap_start, executable.
+  initialize_semeru(size, alignment, false, heap_start_addr, false);  
 
   assert(markOopDesc::encode_pointer_as_mark(_base)->decode_pointer() == _base,
          "area must be distinguishable from marks for mark-sweep");

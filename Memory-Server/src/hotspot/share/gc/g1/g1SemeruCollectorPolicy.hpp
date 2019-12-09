@@ -34,29 +34,63 @@ class G1YoungGenSizer;
 
 class G1SemeruCollectorPolicy: public CollectorPolicy {
 protected:
+  // override the virutal functions
   void initialize_alignments();
+  void initialize_flags();    
+  void initialize_size_info();
 
   // Define these parameters in G1SemeruCollectorPolicy
   size_t  _semeru_max_heap_byte_size;
   size_t  _semeru_initial_heap_byte_size;
-  size_t  _semeru_memory_pool_alignment;
+  size_t  _semeru_heap_alignment;      // Override the CollectorPolicy->_heap_alignment
 
-  bool  debug_flag; // Used to stop re-initialize the G1Policy fields.
+
+
+  //
+  // Abandoned paramters from super class : CollectorPolicy
+  //  Override them and assign a , but never use them. 
+  size_t _initial_heap_byte_size;
+  size_t _max_heap_byte_size;
+  //size_t _min_heap_byte_size; // Still use this one.
+
+  // size_t _space_alignment;   // Still use this one.
+  size_t _heap_alignment;       // [?] Used for Java heap ?
 
 public:
   G1SemeruCollectorPolicy();
-  //virtual size_t heap_reserved_size_bytes() const;
-  virtual bool is_hetero_heap() const;
 
-  //
-  // Semeru
-  //
-  size_t semeru_heap_reserved_size_bytes()  {return _semeru_max_heap_byte_size;   }
-  size_t semeru_max_heap_byte_size()     { return _semeru_max_heap_byte_size; }
+  // non-virtual override the 
+  void initialize_all() {
+    initialize_alignments();
+    initialize_flags();
+    initialize_size_info();
+  }
 
-  size_t semeru_memory_pool_alignment()  { return _semeru_memory_pool_alignment;  }
-  size_t semeru_initial_heap_byte_size() { return _semeru_initial_heap_byte_size; }
-  size_t semeru_min_heap_byte_size()     { return _min_heap_byte_size; }      // use the CollectedHeap default value.
+  // Override the non-virutal functions of base class.
+  // These non-virtual function call will be determined in C++/C compilation time.
+  // which means that the version of non-virtual function is determined by the class variable, not the real object instance.
+  size_t heap_reserved_size_bytes()         { return _semeru_max_heap_byte_size;   }
+  size_t semeru_memory_pool_alignment()     { return _semeru_heap_alignment;  }
+  
+  // size_t space_alignment()        { return _space_alignment; }
+  size_t heap_alignment()         { return _semeru_heap_alignment;  }
+
+  size_t initial_heap_byte_size() { return _semeru_initial_heap_byte_size; }
+  size_t max_heap_byte_size()     { return _semeru_max_heap_byte_size; }
+  size_t min_heap_byte_size()     { return _min_heap_byte_size; }               // Use the CollectorPolicy default min heap size.
+
+  bool is_hetero_heap()     const {  return false;  }
+
+  void reset_the_abandoned_super_class_fields();
+
+  #ifdef ASSERT
+
+    void assert_flags();
+
+  #endif
 
 };
+
+
+
 #endif // SHARE_VM_GC_G1_SEMERU_G1COLLECTORPOLICY_HPP
