@@ -53,10 +53,6 @@ size_t HeapRegion::GrainBytes        = 0;
 size_t HeapRegion::GrainWords        = 0;
 size_t HeapRegion::CardsPerRegion    = 0;
 
-//Semeru
-size_t HeapRegion::MemoryPoolRegionBytes  = 0; // Implementa the static variable.
-
-
 size_t HeapRegion::max_region_size() {
   return HeapRegionBounds::max_size();
 }
@@ -64,6 +60,18 @@ size_t HeapRegion::max_region_size() {
 size_t HeapRegion::min_region_size_in_words() {
   return HeapRegionBounds::min_size() >> LogHeapWordSize;
 }
+
+
+//
+// Semeru heap control.
+//
+int    HeapRegion::SemeruLogOfHRGrainBytes = 0;
+int    HeapRegion::SemeruLogOfHRGrainWords = 0;
+size_t HeapRegion::SemeruGrainBytes        = 0;  
+size_t HeapRegion::SemeruGrainWords        = 0;      
+size_t HeapRegion::SemeruCardsPerRegion    = 0;  
+
+
 
 /**
  * Tag : Intialize Heap Region related information.
@@ -132,14 +140,24 @@ void HeapRegion::setup_heap_region_size(size_t initial_heap_size, size_t max_hea
  * Initialize the Heap Region parameters 
  * 
  */
-void HeapRegion::setup_semeru_heap_region_size(size_t initial_heap_size, size_t max_heap_size) {
+void HeapRegion::setup_semeru_heap_region_size(size_t initial_sermeru_heap_size, size_t max_semeru_heap_size) {
 
-  size_t region_size = G1HeapRegionSize;
-  if (FLAG_IS_DEFAULT(G1HeapRegionSize)) {
-    size_t average_heap_size = (initial_heap_size + max_heap_size) / 2;
-    region_size = MAX2(average_heap_size / HeapRegionBounds::target_number(),
-                       HeapRegionBounds::min_size());
-  }
+  // Confirm their initial value is 0.
+  assert(initial_sermeru_heap_size == max_semeru_heap_size, 
+              "%s, Semeru's initial heap size(0x%llx) must equal to its max size(0x%llx) .", 
+              __func__, (unsigned long long)initial_sermeru_heap_size, (unsigned long long)max_semeru_heap_size );
+
+  // region size control, use the Semeru specific policy 
+  //
+  // size_t region_size = G1HeapRegionSize;
+  // if (FLAG_IS_DEFAULT(G1HeapRegionSize)) {
+  //   size_t average_heap_size = (initial_sermeru_heap_size + max_semeru_heap_size) / 2;
+  //   region_size = MAX2(average_heap_size / HeapRegionBounds::target_number(),
+  //                      HeapRegionBounds::min_size());
+  // }
+
+  // For Semeru memopy pool, Region size equal to the allocation alignment.
+  size_t region_size = SemeruMemPoolAlignment;
 
   int region_size_log = log2_long((jlong) region_size);
   // Recalculate the region size to make sure it's a power of
@@ -147,45 +165,41 @@ void HeapRegion::setup_semeru_heap_region_size(size_t initial_heap_size, size_t 
   // <= what we've calculated so far.
   region_size = ((size_t)1 << region_size_log);
 
-  // Now make sure that we don't go over or under our limits.
-  if (region_size < HeapRegionBounds::min_size()) {
-    region_size = HeapRegionBounds::min_size();
-  } else if (region_size > HeapRegionBounds::max_size()) {
-    region_size = HeapRegionBounds::max_size();
-  }
+  // // Now make sure that we don't go over or under our limits.
+  // if (region_size < HeapRegionBounds::min_size()) {
+  //   region_size = HeapRegionBounds::min_size();
+  // } else if (region_size > HeapRegionBounds::max_size()) {
+  //   region_size = HeapRegionBounds::max_size();
+  // }
 
   // And recalculate the log.
   region_size_log = log2_long((jlong) region_size);
 
   // Now, set up the globals.
-  //guarantee(LogOfHRGrainBytes == 0, "we should only set it once");
-  LogOfHRGrainBytes = region_size_log;
+  guarantee(SemeruLogOfHRGrainBytes == 0, "we should only set it once");
+  SemeruLogOfHRGrainBytes = region_size_log;
 
-  //guarantee(LogOfHRGrainWords == 0, "we should only set it once");
-  LogOfHRGrainWords = LogOfHRGrainBytes - LogHeapWordSize;
+  guarantee(SemeruLogOfHRGrainWords == 0, "we should only set it once");
+  SemeruLogOfHRGrainWords = SemeruLogOfHRGrainBytes - LogHeapWordSize;
 
-  //guarantee(GrainBytes == 0, "we should only set it once");
+  guarantee(SemeruGrainBytes == 0, "we should only set it once");
   // The cast to int is safe, given that we've bounded region_size by
   // MIN_REGION_SIZE and MAX_REGION_SIZE.
-  GrainBytes = region_size;
-  log_info(gc, heap)("Heap region size: " SIZE_FORMAT "M", GrainBytes / M);
-
-  // Semeru
-  //MemoryPoolRegionBytes = 1073741824; // 1GB now
-  MemoryPoolRegionBytes = 2*1048576;      // 2MB, debug
-  log_info(heap) ("%s, Set HeapRegion::MemoryPoolRegionBytes : 0x%llx ", __func__,  
-                                                    (unsigned long long)MemoryPoolRegionBytes);
+  SemeruGrainBytes = region_size;
+  log_info(heap)("Heap region size: " SIZE_FORMAT "M", SemeruGrainBytes / M);
 
 
-  //guarantee(GrainWords == 0, "we should only set it once");
-  GrainWords = GrainBytes >> LogHeapWordSize;
-  guarantee((size_t) 1 << LogOfHRGrainWords == GrainWords, "sanity");
+  guarantee(SemeruGrainWords == 0, "we should only set it once");
+  SemeruGrainWords = SemeruGrainBytes >> LogHeapWordSize;
+  guarantee((size_t) 1 << SemeruLogOfHRGrainWords == SemeruGrainWords, "sanity");
 
-  //guarantee(CardsPerRegion == 0, "we should only set it once");
-  CardsPerRegion = GrainBytes >> G1CardTable::card_shift;
+  guarantee(SemeruCardsPerRegion == 0, "we should only set it once");
+  SemeruCardsPerRegion = SemeruGrainBytes >> G1CardTable::card_shift;  // number of card per Semeru Region.
 
-  if (G1HeapRegionSize != GrainBytes) {
-    FLAG_SET_ERGO(size_t, G1HeapRegionSize, GrainBytes);
+  if (SemeruMemPoolAlignment != SemeruGrainBytes) {
+    tty->print("%s, Warning! SemeruGrainBytes != SemeruMemPoolAlignment. Reset the SemeruMemPoolAlignment. \n", __func__);
+
+    FLAG_SET_ERGO(size_t, SemeruMemPoolAlignment, SemeruGrainBytes);
   }
 }
 

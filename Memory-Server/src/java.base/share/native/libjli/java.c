@@ -203,8 +203,9 @@ static jboolean IsWildCardEnabled();
  * create a new thread to invoke JVM. See 6316197 for more information.
  */
 static jlong threadStackSize    = 0;  /* stack size of the new thread */
-static jlong maxHeapSize        = 0;  /* max heap size */
+static jlong maxHeapSize        = 0;  /* max heap size */   // [?] Should declare and define this value in C++ code ?
 static jlong initialHeapSize    = 0;  /* inital heap size */
+
 
 /*
  * A minimum -Xss stack size suitable for all platforms.

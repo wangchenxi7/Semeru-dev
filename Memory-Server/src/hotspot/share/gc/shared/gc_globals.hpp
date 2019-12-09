@@ -720,6 +720,25 @@
           "Maximum heap size (in bytes)")                                   \
           constraint(MaxHeapSizeConstraintFunc,AfterErgo)                   \
                                                                             \
+  /* Semeru start */                                                        \
+                                                                            \
+  product(bool, SemeruEnableMemPool, false,                                 \
+          "Build the Semeru Memory Heap or not. (default false) ")          \
+                                                                            \
+  /* The initialize equal to max size at this time.     */                  \
+  product(size_t, SemeruMemPoolInitialSize, ScaleForWordSize(96*M),         \
+          "Initial Semeru collected heap (Memory Pool) size (in bytes)")    \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(size_t, SemeruMemPoolMaxSize, ScaleForWordSize(96*M),             \
+          "Maximum Semeru collected heap (Memory Pool) size (in bytes)")    \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(size_t, SemeruMemPoolAlignment, 0,                                \
+          "Semeru collected heap's Region/Alignment size (in bytes)")       \
+          range(0, max_uintx)                                         \
+  /* Semeru end */                                                          \
+                                                                            \
   product(size_t, OldSize, ScaleForWordSize(4*M),                           \
           "Initial tenured generation size (in bytes)")                     \
           range(0, max_uintx)                                               \

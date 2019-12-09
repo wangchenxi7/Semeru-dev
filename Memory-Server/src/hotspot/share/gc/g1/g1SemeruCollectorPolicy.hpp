@@ -36,22 +36,27 @@ class G1SemeruCollectorPolicy: public CollectorPolicy {
 protected:
   void initialize_alignments();
 
-  //
-  // Semeru
-  //
-  size_t _semeru_memory_pool_alignment;
+  // Define these parameters in G1SemeruCollectorPolicy
+  size_t  _semeru_max_heap_byte_size;
+  size_t  _semeru_initial_heap_byte_size;
+  size_t  _semeru_memory_pool_alignment;
 
   bool  debug_flag; // Used to stop re-initialize the G1Policy fields.
 
 public:
   G1SemeruCollectorPolicy();
-  virtual size_t heap_reserved_size_bytes() const;
+  //virtual size_t heap_reserved_size_bytes() const;
   virtual bool is_hetero_heap() const;
 
   //
   // Semeru
   //
-  size_t memory_pool_alignment();
+  size_t semeru_heap_reserved_size_bytes()  {return _semeru_max_heap_byte_size;   }
+  size_t semeru_max_heap_byte_size()     { return _semeru_max_heap_byte_size; }
+
+  size_t semeru_memory_pool_alignment()  { return _semeru_memory_pool_alignment;  }
+  size_t semeru_initial_heap_byte_size() { return _semeru_initial_heap_byte_size; }
+  size_t semeru_min_heap_byte_size()     { return _min_heap_byte_size; }      // use the CollectedHeap default value.
 
 };
 #endif // SHARE_VM_GC_G1_SEMERU_G1COLLECTORPOLICY_HPP

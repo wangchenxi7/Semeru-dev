@@ -1785,27 +1785,9 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 	//
 //   // [?] Build the Semeru memory pool policy seperately ?
 // 	//
-	size_t init_byte_size = collector_policy()->initial_heap_byte_size();				//-Xms
-	size_t max_byte_size = g1_collector_policy()->heap_reserved_size_bytes();		//-Xmx
-// 	//size_t heap_alignment = collector_policy()->heap_alignment();
-// 	// We redefine the heap_alignment to memory_pool_alignment
-	
-// 	//
-// 	// [?] This invocation can crash the "make install" procedure
-// 	//size_t heap_alignment	= collector_policy()->memory_pool_alignment();			// Region size, 1GB.
-	size_t heap_alignment = g1_collector_policy()->memory_pool_alignment();
-	
-// 	//size_t init_byte_size = 128*1024*1024;
-// 	//size_t max_byte_size	= 128*1024*1024;
-// 	//size_t heap_alignment	= 1*1024*1024;
-
-
-// 	//Debug
-// 	if(init_byte_size <= heap_alignment){
-// 		tty->print("Error in %s, heap_alignment, 0x%llx, initialized failed. \n", 
-// 																								__func__, (unsigned long long)heap_alignment);
-// 		heap_alignment = 1048576;
-// 	}
+	size_t init_byte_size = g1_collector_policy()->semeru_initial_heap_byte_size();			//-X:SemeruMemPoolInitialSize
+	size_t max_byte_size 	= g1_collector_policy()->semeru_heap_reserved_size_bytes();		//-X:SemeruMemPoolMaxSize
+	size_t heap_alignment = g1_collector_policy()->semeru_memory_pool_alignment();			//-X:SemeruMemPoolAlignment
 
 	// debug
 	log_info(heap)("%s, init_byte_size : 0x%llx, max_byte_size : 0x%llx, heap_alignment : 0x%llx \n",

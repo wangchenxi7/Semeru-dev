@@ -71,7 +71,11 @@ class CollectorPolicy : public CHeapObj<mtGC> {
   //
   // Semeru
   //
-  //size_t  _semeru_memory_pool_alignment;
+
+  // // Define these parameters in G1SemeruCollectorPolicy
+  // size_t  _semeru_max_heap_byte_size;
+  // size_t  _semeru_initial_heap_byte_size;
+  // size_t  _semeru_memory_pool_alignment;
 
 
   CollectorPolicy();

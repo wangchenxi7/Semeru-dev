@@ -2574,6 +2574,60 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
       if (FLAG_SET_CMDLINE(size_t, MaxHeapSize, (size_t)long_max_heap_size) != JVMFlag::SUCCESS) {
         return JNI_EINVAL;
       }
+        // Smeru - Enable or not
+    }else if(match_option(option, "-XX:SemeruEnableMemPool")){
+      
+        if (FLAG_SET_CMDLINE(bool, SemeruEnableMemPool, true) != JVMFlag::SUCCESS) {
+          return JNI_EINVAL;
+        }
+      
+      // Semeru - Memroy Pool Size
+      // Initial = Max for Semeru Memory Pool (CollectedHeap)
+      // 1GB at least.
+    } else if(match_option(option, "-XX:SemeruMemPoolMaxSize=", &tail)){
+      julong long_max_heap_size = 0;
+      ArgsRange errcode = parse_memory_size(tail, &long_max_heap_size, 0);  // String, value, min, max=default_int_max.
+      if (errcode != arg_in_range) {
+        jio_fprintf(defaultStream::error_stream(),
+                    "Invalid SemeruMemPoolMaxSize: %s\n", option->optionString);
+        describe_range_error(errcode);
+        return JNI_EINVAL;
+      }
+
+      if (FLAG_SET_CMDLINE(size_t, SemeruMemPoolMaxSize, (size_t)long_max_heap_size) != JVMFlag::SUCCESS) {
+        return JNI_EINVAL;
+      }
+
+      // Semeru Memory Pool initial size, equal to max size right now.
+    }else if(match_option(option, "-XX:SemeruMemPoolInitialSize=", &tail)){
+      julong long_max_heap_size = 0;
+      ArgsRange errcode = parse_memory_size(tail, &long_max_heap_size, 0);  // String, value, min, max=default_int_max.
+      if (errcode != arg_in_range) {
+        jio_fprintf(defaultStream::error_stream(),
+                    "Invalid SemeruMemPoolInitialSize size: %s\n", option->optionString);
+        describe_range_error(errcode);
+        return JNI_EINVAL;
+      }
+
+      if (FLAG_SET_CMDLINE(size_t, SemeruMemPoolInitialSize, (size_t)long_max_heap_size) != JVMFlag::SUCCESS) {
+        return JNI_EINVAL;
+      }
+
+      // Semeru memory pool alignment
+    }else if(match_option(option, "-XX:SemeruMemPoolAlignment=", &tail)){
+      julong long_max_heap_size = 0;
+      ArgsRange errcode = parse_memory_size(tail, &long_max_heap_size, 1048576);  // String, value, min, max=default_int_max.
+      if (errcode != arg_in_range) {
+        jio_fprintf(defaultStream::error_stream(),
+                    "Invalid SemeruMemPoolAlignment size: %s\n", option->optionString);
+        describe_range_error(errcode);
+        return JNI_EINVAL;
+      }
+
+      if (FLAG_SET_CMDLINE(size_t, SemeruMemPoolAlignment, (size_t)long_max_heap_size) != JVMFlag::SUCCESS) {
+        return JNI_EINVAL;
+      }
+
     // Xmaxf
     } else if (match_option(option, "-Xmaxf", &tail)) {
       char* err;

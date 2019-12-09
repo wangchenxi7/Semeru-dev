@@ -1314,7 +1314,10 @@ static JVMFlag::Error apply_constraint_and_check_range_size_t(const char* name, 
   return status;
 }
 
-
+/** 
+ * Tag : Set the vlaue to Command line option, JVMFlag. 
+ * 
+ */
 JVMFlag::Error JVMFlag::size_tAtPut(JVMFlag* flag, size_t* value, JVMFlag::Flags origin) {
   const char* name;
   if (flag == NULL) return JVMFlag::INVALID_FLAG;
@@ -1322,11 +1325,11 @@ JVMFlag::Error JVMFlag::size_tAtPut(JVMFlag* flag, size_t* value, JVMFlag::Flags
   name = flag->_name;
   JVMFlag::Error check = apply_constraint_and_check_range_size_t(name, *value, !JVMFlagConstraintList::validated_after_ergo());
   if (check != JVMFlag::SUCCESS) return check;
-  size_t old_value = flag->get_size_t();
+  size_t old_value = flag->get_size_t();  // Read the old value ?
   trace_flag_changed<EventUnsignedLongFlagChanged, u8>(name, old_value, *value, origin);
-  check = flag->set_size_t(*value);
-  *value = old_value;
-  flag->set_origin(origin);
+  check = flag->set_size_t(*value);   // Set JVMFlag->_addr to *value.
+  *value = old_value;                 // why record the  old value?
+  flag->set_origin(origin);           // origin = JVMFlag::COMMAND_LINE, what's for ?
   return check;
 }
 

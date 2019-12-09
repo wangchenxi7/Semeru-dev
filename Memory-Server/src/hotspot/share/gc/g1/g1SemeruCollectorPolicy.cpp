@@ -39,7 +39,10 @@
  * [?]We need to rewrite these  control parameters for Semeru
  *  
  */
-G1SemeruCollectorPolicy::G1SemeruCollectorPolicy() {
+G1SemeruCollectorPolicy::G1SemeruCollectorPolicy():
+_semeru_max_heap_byte_size(SemeruMemPoolMaxSize),
+_semeru_initial_heap_byte_size(SemeruMemPoolInitialSize),
+_semeru_memory_pool_alignment(0) {    // Initialize the alignment size in initialize_alignments() 
 
   // Set up the region size and associated fields. Given that the
   // policy is created before the heap, we have to set this up here,
@@ -52,40 +55,31 @@ G1SemeruCollectorPolicy::G1SemeruCollectorPolicy() {
   // the region size on the heap size, but the heap size should be
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
-  HeapRegion::setup_semeru_heap_region_size(InitialHeapSize, MaxHeapSize);
+  HeapRegion::setup_semeru_heap_region_size(SemeruMemPoolInitialSize, SemeruMemPoolMaxSize);
   HeapRegionRemSet::setup_semeru_remset_size();
 
 }
 
 void G1SemeruCollectorPolicy::initialize_alignments() {
+
+  // Some parameters for original heap  control.
+  // If hese parameters are not static, can we just rewrite their value to Semeru paratmers. 
   _space_alignment = HeapRegion::GrainBytes;
   size_t card_table_alignment = CardTableRS::ct_max_alignment_constraint();
   size_t page_size = UseLargePages ? os::large_page_size() : os::vm_page_size();
   _heap_alignment = MAX3(card_table_alignment, _space_alignment, page_size);
 
-  //Semeru
-  _semeru_memory_pool_alignment = HeapRegion::MemoryPoolRegionBytes;  // This is setted during the constructor of G1CollectorPolicy.
-  //_semeru_memory_pool_alignment = 2*1024*1024;  // There is a Heap Region size limitation ?
-  
-  //log_info(heap)("%s, _semeru_memory_pool_alignment is 0x%llx ", __func__, (unsigned long long)_semeru_memory_pool_alignment);
-  tty->print("%s, _semeru_memory_pool_alignment is 0x%llx ", __func__, (unsigned long long)_semeru_memory_pool_alignment);
+  // Semeru patarmeters 
+  _semeru_memory_pool_alignment = MAX3(card_table_alignment, HeapRegion::SemeruGrainBytes, page_size);
+  log_info(heap)("%s, _semeru_memory_pool_alignment is 0x%llx ", __func__, 
+                              (unsigned long long)_semeru_memory_pool_alignment);
 
 }
 
-size_t G1SemeruCollectorPolicy::heap_reserved_size_bytes() const {
-  return _max_heap_byte_size;
-}
 
 bool G1SemeruCollectorPolicy::is_hetero_heap() const {
   return false;
 }
 
-
-/**
- *  Semeru
- */ 
-size_t G1SemeruCollectorPolicy::memory_pool_alignment(){
-  return _semeru_memory_pool_alignment;
-}
 
 

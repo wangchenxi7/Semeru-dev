@@ -320,11 +320,20 @@ class HeapRegion: public G1ContiguousSpace {
   static int    LogOfHRGrainWords;
 
   static size_t GrainBytes;
-  static size_t GrainWords;     // [?] The Region size is fixed to this, 128K words, 1MB ??
-  static size_t CardsPerRegion;
+  static size_t GrainWords;      // [?] The Region size is fixed to this, 128K words, 1MB ??
+  static size_t CardsPerRegion;  
 
+  //
   // Semeru
-  static size_t MemoryPoolRegionBytes;
+  //
+  static int    SemeruLogOfHRGrainBytes;
+  static int    SemeruLogOfHRGrainWords;
+
+  static size_t SemeruGrainBytes;   // The Region size, decided in function HeapRegion::setup_heap_region_size
+  static size_t SemeruGrainWords;      
+  static size_t SemeruCardsPerRegion;  
+
+
 
   static size_t align_up_to_region_byte_size(size_t sz) {
     return (sz + (size_t) GrainBytes - 1) &

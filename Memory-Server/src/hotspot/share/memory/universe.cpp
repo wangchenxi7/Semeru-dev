@@ -791,28 +791,27 @@ jint Universe::initialize_heap() {
 
 	ThreadLocalAllocBuffer::set_max_size(Universe::heap()->max_tlab_size());
 
-	//debug
-	// Change the control to -X option
-	//const char* target_gc_name="G1";
-	if( _collectedHeap->kind() == CollectedHeap::G1 ){
+	// const char* target_gc_name="G1";
+	// controlled by -XX:SemeruEnableMemPool.
+	if( SemeruEnableMemPool && (_collectedHeap->kind() == CollectedHeap::G1) ){
 		log_info(heap)("%s, Using G1 GC, build the Semeru Memory pool. \n", __func__);
 
-	// Create the G1SemeruCollectedHeap policy and heap space.
+		// Create the G1SemeruCollectedHeap policy and heap space.
 
-	// Semeru
-	// 1) Build the Semeru Colloctor Policy
-	// 2) Allocate G1SemeruCollecteHeap , and then initialize it with G1CollectorPolicy.
+		// Semeru
+		// 1) Build the Semeru Colloctor Policy
 		log_info(heap)("%s, Build the G1SemeruCollectorPolicy. \n",__func__);
 		_SemeruCollectedHeap	=	create_semeru_memory_pool();
 
+		// 2) Allocate G1SemeruCollecteHeap , and then initialize it with G1CollectorPolicy.
 		log_info(heap)("%s, Prepare to Allocate Semeru memory pool. \n", __func__);
 	  jint semeru_status = _SemeruCollectedHeap->initialize_memory_pool();
-	 if(semeru_status != JNI_OK){
-	 	log_info(heap)("%s, Create Semeru memory pool failed.", __func__);
-	 	return semeru_status;
-	 }
-	 log_info(heap)("%s, Create Semeru memory pool successfully.", __func__);
-	 //tty->print("%s, Create Semeru memory pool successfully.\n", __func__);
+	 	if(semeru_status != JNI_OK){
+	 		log_info(heap)("%s, Create Semeru memory pool failed.", __func__);
+	 		return semeru_status;
+	 	}
+	 	log_info(heap)("%s, Create Semeru memory pool successfully.", __func__);
+	 	//tty->print("%s, Create Semeru memory pool successfully.\n", __func__);
 
 	}
 
@@ -953,9 +952,9 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 	log_debug(heap)("%s, Enter .\n",__func__);
 
 
-	assert(alignment <= Arguments::conservative_max_heap_alignment(),
+	assert(alignment <= SemeruMemPoolMaxSize,
 				 "actual alignment " SIZE_FORMAT " must be within maximum heap alignment " SIZE_FORMAT,
-				 alignment, Arguments::conservative_max_heap_alignment());
+				 alignment, SemeruMemPoolMaxSize );
 
 	size_t total_reserved = align_up(heap_size, alignment);
 	assert(!UseCompressedOops || (total_reserved <= (OopEncodingHeapMax - os::vm_page_size())),
@@ -970,7 +969,7 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 
 	// Now create the space.
 	//ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
-	char* heap_start_addr = (char*)0x7fefff000000;		// Not set the memory pool start address yet.
+	char* heap_start_addr = (char*)0x7fef00000000;		// Not set the memory pool start address yet.
 	ReservedHeapSpace total_rs(total_reserved, alignment, heap_start_addr);			// [X] Get virtual space from OS.
 
 	// ==> Reserve Java heap from OS successfully 
