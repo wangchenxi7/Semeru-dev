@@ -1035,6 +1035,16 @@ class G1UpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 
 		uint _num_regions_selected_for_rebuild;  // The number of regions actually selected for rebuild.
 
+
+		/**
+		 * Tag : Select the Region to Rebuild its RemSet.
+		 * 	Selection polocy:
+		 * 			humongous region : 
+		 * 			normal region : Live ratio is low. Check details in function update_before_rebuild()
+		 * 											[?] The selected Regions all marked as CSet ?
+		 * 
+		 * Update all Old Region's top_at_rebuild_start.
+		 */
 		void update_remset_before_rebuild(HeapRegion* hr) {
 			G1RemSetTrackingPolicy* tracking_policy = _g1h->g1_policy()->remset_tracker();
 
@@ -1049,7 +1059,9 @@ class G1UpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 			if (selected_for_rebuild) {
 				_num_regions_selected_for_rebuild++;
 			}
-			_cm->update_top_at_rebuild_start(hr);
+
+			// Even not select this Region to rebuild its RemSet, update its _top_at_rebuild_start.
+			_cm->update_top_at_rebuild_start(hr);			
 		}
 
 		// Distribute the given words across the humongous object starting with hr and

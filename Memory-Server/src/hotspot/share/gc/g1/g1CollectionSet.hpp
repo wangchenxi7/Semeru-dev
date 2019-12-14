@@ -41,7 +41,7 @@ class G1CollectionSet {
   G1CollectedHeap* _g1h;
   G1Policy* _policy;
 
-  CollectionSetChooser* _cset_chooser;  // [?]
+  CollectionSetChooser* _cset_chooser;  // [?] Add the old Region candidate into this chooser ?
 
   //
   // Record the number of eden, survivor, old regions in the Collection Set.

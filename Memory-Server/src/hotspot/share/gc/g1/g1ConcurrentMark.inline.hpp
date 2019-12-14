@@ -221,6 +221,16 @@ inline HeapWord* G1ConcurrentMark::top_at_rebuild_start(uint region) const {
   return _top_at_rebuild_starts[region];
 }
 
+
+/**
+ * Tag : update the _top_at_rebuild_starts to top.
+ * 
+ * [x] When to do this update ? 
+ *  According to lock, only invoked in pre-rebuild. Update all the Old Region's _top_before_rebuild_starts. 
+ *  
+ * [?] RemSet Rebuild is a concurrent procedure, the top may be changed after the scan for this region ?
+ * 
+ */
 inline void G1ConcurrentMark::update_top_at_rebuild_start(HeapRegion* r) {
   uint const region = r->hrm_index();
   assert(region < _g1h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
@@ -228,7 +238,7 @@ inline void G1ConcurrentMark::update_top_at_rebuild_start(HeapRegion* r) {
          "TARS for region %u has already been set to " PTR_FORMAT " should be NULL",
          region, p2i(_top_at_rebuild_starts[region]));
   G1RemSetTrackingPolicy* tracker = _g1h->g1_policy()->remset_tracker();
-  if (tracker->needs_scan_for_rebuild(r)) {
+  if (tracker->needs_scan_for_rebuild(r)) {   // except for Young, Free and Closed-Achrive HeapRegions.
     _top_at_rebuild_starts[region] = r->top();
   } else {
     // Leave TARS at NULL.

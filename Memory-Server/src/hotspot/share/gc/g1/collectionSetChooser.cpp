@@ -280,6 +280,10 @@ bool CollectionSetChooser::region_occupancy_low_enough_for_evac(size_t live_byte
   return live_bytes < mixed_gc_live_threshold_bytes();
 }
 
+/**
+ * Tag : Select the HeapRegion->RemSet->Completed into CSet @ Young Mixed GC start. 
+ *  
+ */
 bool CollectionSetChooser::should_add(HeapRegion* hr) const {
   return !hr->is_young() &&
          !hr->is_pinned() &&

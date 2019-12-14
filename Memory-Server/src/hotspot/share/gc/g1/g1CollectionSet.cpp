@@ -458,9 +458,9 @@ double G1CollectionSet::finalize_young_part(double target_pause_time_ms, G1Survi
 }
 
 void G1CollectionSet::add_as_old(HeapRegion* hr) {
-	cset_chooser()->pop(); // already have region via peek()
-	_g1h->old_set_remove(hr);
-	add_old_region(hr);
+	cset_chooser()->pop(); 			// already have region via peek()
+	_g1h->old_set_remove(hr);		// Remove the Old HeapRegion from G1CollectedHeap->_old_set ??
+	add_old_region(hr);					// Add this Old HeapRegion into CSet and CSet fast test path : G1BiasedMappedArray<InCSetState>
 }
 
 void G1CollectionSet::add_as_optional(HeapRegion* hr) {
@@ -494,6 +494,8 @@ static int compare_region_idx(const uint a, const uint b) {
 /**
  * Tag : Pick some regions and add them to Collection Set.
  * 
+ *  [?] Select Old Regions in Tracking state and add them into CSet ?
+ * 
  */
 void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 	double non_young_start_time_sec = os::elapsedTime();
@@ -509,7 +511,9 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 		const uint max_old_cset_length = MAX2(min_old_cset_length, _policy->calc_max_old_cset_length());
 		bool check_time_remaining = _policy->adaptive_young_list_length();
 
-		initialize_optional(max_old_cset_length - min_old_cset_length);
+		// [?] optional means that according to the CSet length limitations, 
+		// some Region can be added into CSet, but not necessary
+		initialize_optional(max_old_cset_length - min_old_cset_length);  
 		log_debug(gc, ergo, cset)("Start adding old regions for mixed gc. min %u regions, max %u regions, "
 															"time remaining %1.2fms, optional threshold %1.2fms",
 															min_old_cset_length, max_old_cset_length, time_remaining_ms, optional_threshold_ms);
@@ -520,6 +524,8 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 		//
 		HeapRegion* hr = cset_chooser()->peek();
 		while (hr != NULL) {
+
+			// old_region and optional_region are different parts of the CSet ?
 			if (old_region_length() + optional_region_length() >= max_old_cset_length) {
 				// Added maximum number of old regions to the CSet.
 				log_debug(gc, ergo, cset)("Finish adding old regions to CSet (old CSet region num reached max). "
@@ -549,7 +555,7 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 			// Add regions to old set until we reach minimum amount
 			if (old_region_length() < min_old_cset_length) {
 				predicted_old_time_ms += predicted_time_ms;
-				add_as_old(hr);
+				add_as_old(hr);				// [x] Add this Old Region into CSet.
 				// Record the number of regions added when no time remaining
 				if (time_remaining_ms == 0.0) {
 					expensive_region_num++;
@@ -561,6 +567,7 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 					log_debug(gc, ergo, cset)("Finish adding old regions to CSet (old CSet region num reached min).");
 					break;
 				}
+
 				// Keep adding regions to old set until we reach optional threshold
 				if (time_remaining_ms > optional_threshold_ms) {
 					predicted_old_time_ms += predicted_time_ms;
@@ -569,7 +576,7 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 					// Keep adding optional regions until time is up
 					if (!optional_is_full()) {
 						predicted_optional_time_ms += predicted_time_ms;
-						add_as_optional(hr);
+						add_as_optional(hr);		// [x] Add the Old Region as Optional CSet ? 
 					} else {
 						log_debug(gc, ergo, cset)("Finish adding old regions to CSet (optional set full).");
 						break;
@@ -579,7 +586,8 @@ void G1CollectionSet::finalize_old_part(double time_remaining_ms) {
 					break;
 				}
 			}
-			hr = cset_chooser()->peek();
+
+			hr = cset_chooser()->peek(); // get next Region from cset_chooser.
 		}
 		if (hr == NULL) {
 			log_debug(gc, ergo, cset)("Finish adding old regions to CSet (candidate old regions not available)");

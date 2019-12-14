@@ -50,7 +50,7 @@ class CardTableBarrierSet: public ModRefBarrierSet {
   // Used in support of ReduceInitialCardMarks; only consulted if COMPILER2
   // or INCLUDE_JVMCI is being used
   bool       _defer_initial_card_mark;
-  CardTable* _card_table;
+  CardTable* _card_table;               // Byte table for Heap Card. Used to record the status of card.
 
   CardTableBarrierSet(BarrierSetAssembler* barrier_set_assembler,
                       BarrierSetC1* barrier_set_c1,

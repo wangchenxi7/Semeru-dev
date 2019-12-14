@@ -50,6 +50,10 @@ class G1CardTable: public CardTable {
 
   G1CardTableChangedListener _listener;
 
+  /**
+   * Tag : Use Binary: 0010,0000 as the flag bit of Young Gen card.
+   *  
+   */
   enum G1CardValues {
     g1_young_gen = CT_MR_BS_last_reserved << 1
   };

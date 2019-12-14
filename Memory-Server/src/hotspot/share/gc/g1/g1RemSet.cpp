@@ -1006,7 +1006,11 @@ class G1RebuildRemSetTask: public AbstractGangTask {
 public:
 
 	/**
-	 * Tag : what's this closure for ?
+	 * Tag : Rebuild RemSet for the HeapRegions in CSet.
+	 * Scan all the Old regions, not include closed_archive_regions, to rebuild the RemSet for Regions in CSet.  
+	 * 
+	 * [?] This is a concurrent procedure, how to handle the objects between _top_at_rebuild_starts and _top ?
+	 * 		But this case should only occur in one Old Region, which is the target of Young GC evacuation ?
 	 * 
 	 */
 	G1RebuildRemSetHeapRegionClosure(G1CollectedHeap* g1h,
@@ -1032,6 +1036,13 @@ public:
 			size_t const chunk_size_in_words = G1RebuildRemSetChunkSize / HeapWordSize;
 
 			HeapWord* const top_at_mark_start = hr->prev_top_at_mark_start();
+
+			// debug
+			// Check the _top_at_rebuild_start and _top
+			// if(_cm->top_at_rebuild_start(region_idx)!= 0x0 && _cm->top_at_rebuild_start(region_idx) != hr->top()){
+			// 	tty->print("%s, For Region[%d], it's top_at_rebuild_start(0x%lx) and top(0x%lx) are not equal.",
+			// 																	__func__, region_idx, (size_t)_cm->top_at_rebuild_start(region_idx), (size_t)hr->top());
+			// }
 
 			HeapWord* cur = hr->bottom();
 			while (cur < hr->end()) {
@@ -1075,11 +1086,12 @@ public:
 				}
 				cur += chunk_size_in_words;
 
-				_cm->do_yield_check();
+				_cm->do_yield_check();  // For example ,yield for a Young GC.
 				if (_cm->has_aborted()) {
 					return true;
 				}
 			}
+			
 			// In the final iteration of the loop the region might have been eagerly reclaimed.
 			// Simply filter out those regions. We can not just use region type because there
 			// might have already been new allocations into these regions.

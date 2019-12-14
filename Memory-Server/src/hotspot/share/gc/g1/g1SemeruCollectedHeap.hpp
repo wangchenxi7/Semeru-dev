@@ -176,11 +176,11 @@ class G1SemeruCollectedHeap : public CollectedHeap {
 private:
 //   G1YoungRemSetSamplingThread* _young_gen_sampling_thread;
 
-  WorkGang* _workers;
+  WorkGang* _workers;         // GC threads 
   G1SemeruCollectorPolicy* _collector_policy;
-  G1CardTable* _card_table;
+  G1CardTable* _card_table;   // de-duplicate the dirty cards.
 
-  SoftRefPolicy      _soft_ref_policy;
+  SoftRefPolicy      _soft_ref_policy;  // soft-reference ?
 
   static size_t _humongous_object_threshold_in_words;
 

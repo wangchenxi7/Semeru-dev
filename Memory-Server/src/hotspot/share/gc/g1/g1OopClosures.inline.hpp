@@ -60,6 +60,13 @@ inline void G1ScanClosureBase::prefetch_and_push(T* p, const oop obj) {
 	_par_scan_state->push_on_queue(p);
 }
 
+
+/**
+ * Tag : For a cross-region reference, the target obejct is NOT in CSet.
+ * 
+ * [?] Meaning of optional_region ? 
+ * 
+ */
 template <class T>
 inline void G1ScanClosureBase::handle_non_cset_obj_common(InCSetState const state, T* p, oop const obj) {
 	if (state.is_humongous()) {
@@ -67,8 +74,6 @@ inline void G1ScanClosureBase::handle_non_cset_obj_common(InCSetState const stat
 	} else if (state.is_optional()) {			// [?] optional region should be in CSet ???
 		_par_scan_state->remember_reference_into_optional_region(p);  // push this field into corresponding optional_region's queue
 	}   
-	// [?] If the target object isn't in optional_region, just ignore it ?
-	//
 }
 
 inline void G1ScanClosureBase::trim_queue_partially() {
@@ -224,13 +229,13 @@ inline void G1ScanObjsDuringUpdateRSClosure::do_oop_work(T* p) {
 
 	assert(!_g1h->is_in_cset((HeapWord*)p), "Oop originates from " PTR_FORMAT " (region: %u) which is in the collection set.", p2i(p), _g1h->addr_to_region((HeapWord*)p));
 	const InCSetState state = _g1h->in_cset_state(obj);
-	if (state.is_in_cset()) {
+	if (state.is_in_cset()) {			// This test isn't equal to HeapRegion->RemSet->state ??
 		// Since the source is always from outside the collection set, here we implicitly know
 		// that this is a cross-region reference too.
 		prefetch_and_push(p, obj);
 	} else if (!HeapRegion::is_in_same_region(p, obj)) {
 		handle_non_cset_obj_common(state, p, obj);
-		_par_scan_state->enqueue_card_if_tracked(p, obj);
+		_par_scan_state->enqueue_card_if_tracked(p, obj);		// [?] What's the meanning of Tracked, for a Region.
 	}
 }
 

@@ -4882,7 +4882,7 @@ HeapRegion* G1CollectedHeap::new_mutator_alloc_region(size_t word_size,
 			set_region_short_lived_locked(new_alloc_region);			// Set Region as Eden Space
 			_hr_printer.alloc(new_alloc_region, !should_allocate);
 			_verifier->check_bitmaps("Mutator Region Allocation", new_alloc_region);
-			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);			// [?] Set HeapRegion Remember set status?
+			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);			// [?] Set HeapRegion->RemSet-> state as Completed ??
 			return new_alloc_region;
 		}
 	}

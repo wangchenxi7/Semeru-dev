@@ -258,6 +258,22 @@ void G1BarrierSetAssembler::g1_write_barrier_pre(MacroAssembler* masm,
   __ bind(done);
 }
 
+
+/**
+ * Tag : Record Corss-Region Referenc.
+ *  
+ * [?] Interpreter ? C1 ?
+ * 
+ * [x] Does it check the source and destination of the cross-reference.
+ *  1) Filter non-Cross-Region reference.
+ *  2) Filter Young-To-* reference.
+ *  3) Filter alreay dirty cards.
+ * 
+ *  Finally, mark all the Old-To-* Cross-Region Reference dirty.
+ * 
+ *  => Mark card as dirty value.
+ *  => invoke "G1BarrierSetRuntime::write_ref_field_post_entry" to enqueue the dirty_card into mutator dirty card queue.
+ */
 void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
                                                   Register store_addr,
                                                   Register new_val,
@@ -268,7 +284,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   assert(thread == r15_thread, "must be");
 #endif // _LP64
 
-  Address queue_index(thread, in_bytes(G1ThreadLocalData::dirty_card_queue_index_offset()));
+  Address queue_index(thread, in_bytes(G1ThreadLocalData::dirty_card_queue_index_offset()));   // What's the queue_index used for?
   Address buffer(thread, in_bytes(G1ThreadLocalData::dirty_card_queue_buffer_offset()));
 
   CardTableBarrierSet* ct =
@@ -280,10 +296,11 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   // Does store cross heap regions?
 
-  __ movptr(tmp, store_addr);
-  __ xorptr(tmp, new_val);
-  __ shrptr(tmp, HeapRegion::LogOfHRGrainBytes);
-  __ jcc(Assembler::equal, done);
+  // 1) Filter non-cross-region.
+  __ movptr(tmp, store_addr);       // Field addr value, store_addr --> tmp.
+  __ xorptr(tmp, new_val);          // XOR with new addr value.
+  __ shrptr(tmp, HeapRegion::LogOfHRGrainBytes);    // Right shift log(RegionSize).
+  __ jcc(Assembler::equal, done);   // if shrptr return non-zero, within same region, goto Label::done.
 
   // crosses regions, storing NULL?
 
@@ -296,15 +313,17 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   const Register cardtable = tmp2;
 
   __ movptr(card_addr, store_addr);
-  __ shrptr(card_addr, CardTable::card_shift);
+  __ shrptr(card_addr, CardTable::card_shift);   // card_addr is indexed at card granularity.
   // Do not use ExternalAddress to load 'byte_map_base', since 'byte_map_base' is NOT
   // a valid address and therefore is not properly handled by the relocation code.
-  __ movptr(cardtable, (intptr_t)ct->card_table()->byte_map_base());
-  __ addptr(card_addr, cardtable);
+  __ movptr(cardtable, (intptr_t)ct->card_table()->byte_map_base());    // Get the cardtable start address.
+  __ addptr(card_addr, cardtable);                // offset + base : Move to the corresponding card byte value.
 
-  __ cmpb(Address(card_addr, 0), (int)G1CardTable::g1_young_card_val());
+  // 2) Filter the Young to *, cross-region.
+  __ cmpb(Address(card_addr, 0), (int)G1CardTable::g1_young_card_val());  
   __ jcc(Assembler::equal, done);
 
+  // 3) Filter the already makred dirty cards.
   __ membar(Assembler::Membar_mask_bits(Assembler::StoreLoad));
   __ cmpb(Address(card_addr, 0), (int)G1CardTable::dirty_card_val());
   __ jcc(Assembler::equal, done);
@@ -315,8 +334,8 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
 
   __ movb(Address(card_addr, 0), (int)G1CardTable::dirty_card_val());
 
-  __ cmpl(queue_index, 0);
-  __ jcc(Assembler::equal, runtime);
+  __ cmpl(queue_index, 0);            // [?] If the queue_index is 0 ?
+  __ jcc(Assembler::equal, runtime);  // [?] Jump into the Runtme function, G1BarrierSetRuntime::write_ref_field_post_entry
   __ subl(queue_index, wordSize);
   __ movptr(tmp2, buffer);
 #ifdef _LP64
@@ -343,7 +362,7 @@ void G1BarrierSetAssembler::g1_write_barrier_post(MacroAssembler* masm,
   __ pop(new_val);
   __ pop(store_addr);
 
-  __ bind(done);
+  __ bind(done);   // label : done
 }
 
 void G1BarrierSetAssembler::oop_store_at(MacroAssembler* masm, DecoratorSet decorators, BasicType type,

@@ -41,9 +41,11 @@ class CollectionSetChooser: public CHeapObj<mtGC> {
   void regions_at_put(uint i, HeapRegion* hr) {
     _regions.at_put((int) i, hr);
   }
+
   void regions_at_put_grow(uint i, HeapRegion* hr) {
     _regions.at_put_grow((int) i, hr);
   }
+  
   void regions_trunc_to(uint i)  { _regions.trunc_to((uint) i); }
 
   // The index of the next candidate old region to be considered for

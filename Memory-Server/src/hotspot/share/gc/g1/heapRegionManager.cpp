@@ -411,6 +411,12 @@ bool HeapRegionManager::allocate_containing_regions(MemRegion range, size_t* com
 	return true;
 }
 
+/**
+ * Tag : Apply closure to HeapRegion parallely.
+ * 	hrclaimer, get a region from freelist. 
+ * 	HeapRegionClosure : The closure applied to the got HeapRegion.
+ * 
+ */
 void HeapRegionManager::par_iterate(HeapRegionClosure* blk, HeapRegionClaimer* hrclaimer, const uint start_index) const {
 	// Every worker will actually look at all regions, skipping over regions that
 	// are currently not committed.

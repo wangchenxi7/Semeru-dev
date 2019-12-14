@@ -215,9 +215,13 @@ public:
 
 private:
 
-	// Both Mutator and GC Dirty Cards should be put into HeapRegion->RemSet ?
-	// [?] Meaning of the RemSet state ?
-	//
+	/**
+	 * What's the meaning of the state for the HeapRegion->RemSet ?
+	 * 	[?] There is a case that the Region isn't in CSet, but its RemSet is marked as Untracked. 
+	 * 
+	 * 	Updating : ?
+	 * 	Complete : ?
+	 */
 	enum RemSetState {
 		Untracked,				// No need to Rebuild RemSet for it. e.g. Old Regions and not in CSet.
 		Updating,
@@ -233,9 +237,9 @@ public:
 	const char* get_state_str() const { return _state_strings[_state]; }
 	const char* get_short_state_str() const { return _short_state_strings[_state]; }
 
-	bool is_tracked() { return _state != Untracked; }
-	bool is_updating() { return _state == Updating; }
-	bool is_complete() { return _state == Complete; }
+	bool is_tracked() 	{ return _state != Untracked; }
+	bool is_updating() 	{ return _state == Updating; }
+	bool is_complete() 	{ return _state == Complete; }
 
 	void set_state_empty() {
 		guarantee(SafepointSynchronize::is_at_safepoint() || !is_tracked(), "Should only set to Untracked during safepoint but is %s.", get_state_str());
@@ -254,6 +258,12 @@ public:
 
 	void set_state_complete() {
 		clear_fcc();
+
+		//debug
+		// if(this->_hr->is_old()){
+		// 	tty->print("%s, Set a Old Region->RemSet->state as Complete.",__func__);
+		// }
+
 		_state = Complete;
 	}
 

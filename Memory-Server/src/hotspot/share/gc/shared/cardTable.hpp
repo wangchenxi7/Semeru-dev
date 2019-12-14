@@ -93,6 +93,9 @@ protected:
 	// region per generation is needed.
 	static const int _max_covered_regions = 2;
 
+	/**
+	 * Card byte, 8 bits. 
+	 */
 	enum CardValues {
 		clean_card                  = -1,
 		// The mask contains zeros in places for all other values.
@@ -103,7 +106,7 @@ protected:
 		claimed_card                =  2,   // [?] Some GC thread acquire this card to scan it ?
 		deferred_card               =  4,		// [?] 
 		last_card                   =  8,
-		CT_MR_BS_last_reserved      = 16
+		CT_MR_BS_last_reserved      = 16		// binary : 0001, 0000.
 	};
 
 	// a word's worth (row) of clean card values

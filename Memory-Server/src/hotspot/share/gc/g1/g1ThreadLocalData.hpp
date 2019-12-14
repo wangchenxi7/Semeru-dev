@@ -33,8 +33,8 @@
 
 class G1ThreadLocalData {
 private:
-  SATBMarkQueue  _satb_mark_queue;
-  DirtyCardQueue _dirty_card_queue;  // [?] Mutator thread local dirty card queue ?
+  SATBMarkQueue  _satb_mark_queue;   // [x] Pre-Write Barrier. Only record during CM.
+  DirtyCardQueue _dirty_card_queue;  // [x] Mutator thread local dirty card queue. Post-Write Barrier, Cross-Region.
 
   G1ThreadLocalData() :
       _satb_mark_queue(&G1BarrierSet::satb_mark_queue_set()),

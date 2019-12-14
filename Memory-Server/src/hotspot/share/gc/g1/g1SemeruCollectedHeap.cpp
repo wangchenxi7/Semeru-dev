@@ -1739,30 +1739,31 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 // }
 
 /**
- * Tag : Allocate and Intialize the Java heap 
+ * Tag : Allocate and Intialize the Java heap. 
  * 
- *  Semeru Memory pool never use this function.
+ *  Semeru use initialize_memory_pool() to initialize a dedicated memory pool.
+ * 	It never initialize a normal Java heap.
  */
 jint G1SemeruCollectedHeap::initialize() {
 	
-	tty->print("Error in %s \n",__func__);
-	assert(false, "%s, Should not reach here.\n",__func__);
+	log_debug(heap)("Error in %s \n",__func__);
+	assert(false, "%s, For SemeruCollectedHeap, Should not reach here.\n",__func__);
 
 	return JNI_OK;
 }
 
 
-// /**
-//  *	Semeru 
-//  *  Main entrance for Java Heap build.
-//  *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_reserved_memory_pool
-//  * 
-//  * 1) Get heap space from OS by mmap.
-//  * 2) Split the Heap into Regions.
-//  * 3) Build RemSet for the Java heap.
-//  * 
-//  * 
-//  */
+/**
+ *	Semeru 
+ *  Main entrance for Java Heap build.
+ *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_reserved_memory_pool
+ * 
+ * 1) Get heap space from OS by mmap.
+ * 2) Split the Heap into Regions.
+ * 3) Build RemSet for the Java heap.
+ * 
+ * 
+ */
 jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	os::enable_vtime();
 
@@ -1804,16 +1805,14 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 																								 									heap_alignment);
 
 	
-	log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
-	//return JNI_OK;
+	//log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
 
 	initialize_reserved_memory_pool((HeapWord*)heap_rs.base(), (HeapWord*)(heap_rs.base() + heap_rs.size()));
 
-
-	 //debug
+	//debug
 	return JNI_OK;
 
-// 	// Create the barrier set for the entire reserved region.
+	// Create the barrier set for the entire reserved region.
 	G1CardTable* ct = new G1CardTable(reserved_region());     // c++ new ? or override operator ?
 	ct->initialize();
 	G1BarrierSet* bs = new G1BarrierSet(ct);
@@ -1887,6 +1886,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 		create_aux_memory_mapper("Prev Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
 // 	G1RegionToSpaceMapper* next_bitmap_storage =
 // 		create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+
+
 
 // 	//
 // 	// [x] Split the reserved space into Heap Region and manage it by HeapRegionManager->_regions/_free_list.
