@@ -667,7 +667,7 @@ private:
   G1ConcurrentMark*           _cm;
   G1CMBitMap*                 _next_mark_bitmap;
   // the task queue of this task
-  G1CMTaskQueue*              _task_queue;
+  G1CMTaskQueue*              _task_queue;      // The StarTask queue for CM ?
 
   G1RegionMarkStatsCache      _mark_stats_cache;
   // Number of calls to this task

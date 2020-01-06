@@ -66,7 +66,15 @@ public:
 };
 
 
-
+/**
+ * Tag : What's connection between DirtyCardQueueSet and a normal DirtyCardQueue?
+ *  There are 2 DirtyCardQueueSet
+ *      G1CollecttedHeap->_dirty_card_queue_set 
+ *      g1BarrierSet->_dirty_card_queue_set
+ *  
+ *  
+ * 
+ */
 class DirtyCardQueueSet: public PtrQueueSet {
   DirtyCardQueue _shared_dirty_card_queue;
 

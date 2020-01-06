@@ -162,6 +162,11 @@ void DirtyCardQueueSet::handle_zero_index_for_thread(JavaThread* t) {
 	G1ThreadLocalData::dirty_card_queue(t).handle_zero_index();
 }
 
+
+/**
+ * Tag : Apply the speficied Closure to the cards in current BufferNode. 
+ * 
+ */
 bool DirtyCardQueueSet::apply_closure_to_buffer(CardTableEntryClosure* cl,
 																								BufferNode* node,
 																								bool consume,
@@ -172,7 +177,7 @@ bool DirtyCardQueueSet::apply_closure_to_buffer(CardTableEntryClosure* cl,
 	size_t i = node->index();
 	size_t limit = buffer_size();
 	for ( ; i < limit; ++i) {
-		jbyte* card_ptr = static_cast<jbyte*>(buf[i]);
+		jbyte* card_ptr = static_cast<jbyte*>(buf[i]);   // the void** buf, should points to G1CollectedHeap->byte_map[] ??
 		assert(card_ptr != NULL, "invariant");
 		if (!cl->do_card_ptr(card_ptr, worker_i)) {
 			result = false;           // Incomplete processing.
@@ -248,6 +253,12 @@ bool DirtyCardQueueSet::apply_closure_during_gc(CardTableEntryClosure* cl, uint 
 	return apply_closure_to_completed_buffer(cl, worker_i, 0, true);
 }
 
+/**
+ * Tag : Process the G1BarrierSet's->_dirty_card_queue_set
+ * 
+ * [?] What's the definition of BufferNode ? several drity cards 
+ * 
+ */
 bool DirtyCardQueueSet::apply_closure_to_completed_buffer(CardTableEntryClosure* cl,
 																													uint worker_i,
 																													size_t stop_at,
@@ -271,16 +282,20 @@ bool DirtyCardQueueSet::apply_closure_to_completed_buffer(CardTableEntryClosure*
 	}
 }
 
+/**
+ * Tag: Parallely apply speficied closure to the bufferNode list.
+ *  
+ */
 void DirtyCardQueueSet::par_apply_closure_to_all_completed_buffers(CardTableEntryClosure* cl) {
 	BufferNode* nd = _cur_par_buffer_node;
 	while (nd != NULL) {
 		BufferNode* next = nd->next();
-		BufferNode* actual = Atomic::cmpxchg(next, &_cur_par_buffer_node, nd);
-		if (actual == nd) {
-			bool b = apply_closure_to_buffer(cl, nd, false);
+		BufferNode* actual = Atomic::cmpxchg(next, &_cur_par_buffer_node, nd);  // (new_val, position, old_val)
+		if (actual == nd) {			// return old_val, set position to new_val successful.
+			bool b = apply_closure_to_buffer(cl, nd, false);		// Process the gotten BufferNode. Contain multiple Card.
 			guarantee(b, "Should not stop early.");
 			nd = next;
-		} else {
+		} else {								// Set new_val failed, continute to scan the BufferNode list.
 			nd = actual;
 		}
 	}

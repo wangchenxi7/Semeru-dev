@@ -97,14 +97,14 @@ protected:
 	 * Card byte, 8 bits. 
 	 */
 	enum CardValues {
-		clean_card                  = -1,
+		clean_card                  = -1,		// 1111 1111, a clean card.
 		// The mask contains zeros in places for all other values.
-		clean_card_mask             = clean_card - 31,
+		clean_card_mask             = clean_card - 31,  // 1..1 1110 0000
 
 		dirty_card                  =  0,   // [x] Contain cross-region reference
 		precleaned_card             =  1,
 		claimed_card                =  2,   // [?] Some GC thread acquire this card to scan it ?
-		deferred_card               =  4,		// [?] 
+		deferred_card               =  4,		// [?] Used in DirtyCard enqueue, if deferred, already enqueued. But may not dirty.
 		last_card                   =  8,
 		CT_MR_BS_last_reserved      = 16		// binary : 0001, 0000.
 	};

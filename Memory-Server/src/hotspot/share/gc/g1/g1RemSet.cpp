@@ -828,7 +828,7 @@ bool G1RemSet::refine_card_during_gc(jbyte* card_ptr,
 	assert(!dirty_region.is_empty(), "sanity");
 
 	HeapRegion* const card_region = _g1h->region_at(card_region_idx); 
-	assert(!card_region->is_young(), "Should not scan card in young region %u", card_region_idx);  //[?] 
+	assert(!card_region->is_young(), "Should not scan card in young region %u", card_region_idx);  // This closure only processes OldToCSet reference
 	bool card_processed = card_region->oops_on_card_seq_iterate_careful<true>(dirty_region, update_rs_cl); //Why do we need to scan the whole region?
 	assert(card_processed, "must be");
 	return true;

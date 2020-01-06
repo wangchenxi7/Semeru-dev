@@ -30,13 +30,23 @@
 #include "runtime/atomic.hpp"
 #include "runtime/orderAccess.hpp"
 
+
+/**
+ * Tag : Check if the Dirty Card already marked during the GC.
+ * 
+ * 1) Used in Young STW GC.
+ *   
+ */
 bool G1CardTable::mark_card_deferred(size_t card_index) {
-  jbyte val = _byte_map[card_index];
+  jbyte val = _byte_map[card_index];      // G1CardTable::_byte_map, one byte for each Card.
+
   // It's already processed
+  // deferred means already enqueued ?
   if ((val & (clean_card_mask_val() | deferred_card_val())) == deferred_card_val()) {
     return false;
   }
 
+  // Mark the card as deferred.
   // Cached bit can be installed either on a clean card or on a claimed card.
   jbyte new_val = val;
   if (val == clean_card_val()) {

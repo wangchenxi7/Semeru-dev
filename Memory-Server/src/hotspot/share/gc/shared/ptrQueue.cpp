@@ -68,17 +68,22 @@ void PtrQueue::flush_impl() {
 
 
 void PtrQueue::enqueue_known_active(void* ptr) {
-	while (_index == 0) {
+	while (_index == 0) {	// _buf is empty ?
 		handle_zero_index();
 	}
 
 	assert(_buf != NULL, "postcondition");
 	assert(index() > 0, "postcondition");
 	assert(index() <= capacity(), "invariant");
-	_index -= _element_size;
-	_buf[index()] = ptr;
+	_index -= _element_size;		// fill items from the end.
+	_buf[index()] = ptr;				// index() return the according byte offset of the index.
 }
 
+//
+// [?] Allocate data from C Heap ? 
+//  		Is this the allocation for the PtrQueueSet's Space ??
+//		Compared to BufferNode::Allocator::allocate()
+//		[?] Not attach the newly allocated C_Heap space to BufferNode->_free_list ??
 BufferNode* BufferNode::allocate(size_t size) {
 	size_t byte_size = size * sizeof(void*);
 	void* data = NEW_C_HEAP_ARRAY(char, buffer_offset() + byte_size, mtGC);
@@ -111,12 +116,14 @@ size_t BufferNode::Allocator::free_count() const {
 	return Atomic::load(&_free_count);
 }
 
+// Allocator for a PtrQueueSet ?
+//
 BufferNode* BufferNode::Allocator::allocate() {
 	BufferNode* node = NULL;
 	{
 		MutexLockerEx ml(_lock, Mutex::_no_safepoint_check_flag);
 		node = _free_list;
-		if (node != NULL) {
+		if (node != NULL) {		// Take a node from the _free_list.
 			_free_list = node->next();
 			--_free_count;
 			node->set_next(NULL);
@@ -124,7 +131,7 @@ BufferNode* BufferNode::Allocator::allocate() {
 			return node;
 		}
 	}
-	return  BufferNode::allocate(_buffer_size);
+	return  BufferNode::allocate(_buffer_size);  // If PtrQueueSet->_free_list is null ?
 }
 
 void BufferNode::Allocator::release(BufferNode* node) {
@@ -183,6 +190,12 @@ PtrQueueSet::~PtrQueueSet() {
 	// doing nothing here.
 }
 
+
+/**
+ * Tag : Initialize a PtrQueueSet.
+ * 	PtrQueueSet->_allocator is managed by BufferNode.  BufferNode::Allocator.
+ * 
+ */
 void PtrQueueSet::initialize(Monitor* cbl_mon,
 														 BufferNode::Allocator* allocator) {
 	assert(cbl_mon != NULL && allocator != NULL, "Init order issue?");
@@ -190,6 +203,15 @@ void PtrQueueSet::initialize(Monitor* cbl_mon,
 	_allocator = allocator;
 }
 
+/**
+ * Tag : Allocate buffer from PtrQueue. 
+ * 			
+ * 		PtrQueueSet->_allocator  BufferNode::Allocator.
+ *  	if PtrQueueSet->_free_list isn't null
+ * 			get BufferNode from _free_list
+ * 		else 
+ * 			request memory from C_Heap.
+ */
 void** PtrQueueSet::allocate_buffer() {
 	BufferNode* node = _allocator->allocate();
 	return BufferNode::make_buffer_from_node(node);
@@ -258,6 +280,14 @@ bool PtrQueueSet::process_or_enqueue_complete_buffer(BufferNode* node) {
 /**
  * Tag : Attach this BufferNode to current ptrQueueSet->tail 
  *  This function is used to merge thread local ptrQueue to their global ptrQueueSet.
+ * 
+ * |cbn|-->|cbn|-->|cbn|-->.....-->|cbn|-->|cbn| <-- Attach the completed_buffer_node here.
+ * ^																				 ^
+ * _completed_buffers_head									_completed_buffers_tail
+ * 
+ * More Explanation
+ * 		completed_buffer_node : Filled in with items, e.g. dirty_card
+ * 
  */
 void PtrQueueSet::enqueue_complete_buffer(BufferNode* cbn) {
 	MutexLockerEx x(_cbl_mon, Mutex::_no_safepoint_check_flag);

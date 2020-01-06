@@ -259,6 +259,19 @@ inline void G1CMTask::abort_marking_if_regular_check_fail() {
   }
 }
 
+/**
+ * Tag : Mark the target object alive in CM->_next_bitmap.
+ *  Only mark the object alive if it's below the finger. 
+ *  Which means that we already scanned it but may bot mark it alive.
+ * 
+ *  This funtion is invoked in Remark Phase.
+ *  1) Root scavenge, Java/VM thread variables.
+ *  2) Java Thread's SATB queue.
+ * 
+ *  [?] Is there any objects is above the global_finger in Remark phase?
+ *    => newly allocated objects ?
+ * 
+ */
 inline bool G1CMTask::make_reference_grey(oop obj) {
   if (!_cm->mark_in_next_bitmap(_worker_id, obj)) {
     return false;

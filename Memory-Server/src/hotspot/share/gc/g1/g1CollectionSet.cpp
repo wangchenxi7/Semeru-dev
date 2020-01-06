@@ -133,8 +133,9 @@ void G1CollectionSet::set_recorded_rs_lengths(size_t rs_lengths) {
  * 
  * Tag : Add an old region into Collection Set.
  * 
- * [?] This old region should be added into G1CollectionSet::_collection_set_regions[] ?
+ * [x] This old region should be added into G1CollectionSet::_collection_set_regions[] ?
  *    Should be added into G1CollectionSet::_optional_regions[] ?
+ * 	=> Add into G1CollectionSet->_collection_set_regions[].
  * 
  */
 void G1CollectionSet::add_old_region(HeapRegion* hr) {
@@ -145,7 +146,7 @@ void G1CollectionSet::add_old_region(HeapRegion* hr) {
 	assert(hr->is_old(), "the region should be old");
 
 	assert(!hr->in_collection_set(), "should not already be in the CSet");
-	_g1h->register_old_region_with_cset(hr);
+	_g1h->register_old_region_with_cset(hr);			// Add the region_index into _in_cset_fast_test.
 
 	_collection_set_regions[_collection_set_cur_length++] = hr->hrm_index();
 	assert(_collection_set_cur_length <= _collection_set_max_length, "Collection set now larger than maximum size.");

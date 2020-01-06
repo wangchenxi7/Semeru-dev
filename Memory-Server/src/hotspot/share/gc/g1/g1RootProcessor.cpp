@@ -76,23 +76,26 @@ G1RootProcessor::G1RootProcessor(G1CollectedHeap* g1h, uint n_workers) :
 		_n_workers_discovered_strong_classes(0) {}
 
 /**
- * Tag : real work of STW Young GC
+ * Tag : Young STW GC, Scan from Stack Variable.
  * 
- * [?] 3 functions:
- *  a. STW Young GC
- *  b. Initial Marking
- *  c. Mixed Cleanup
+ *  1) Java roots 
+ * 	2) VM roots
+ *  3) String variables
  * 
- * [?] Scan from stack variables ?
- * 
+ *  Use the G1EvacuationRootClosure to handle these three roots.
+ * 		sub closrues:
+ *			=> G1ParScanClosure      // All the 3 kinds of roots are scaned by this closure.
+ *		 				First level : G1ParCopyClosure      
+ *						Second level : G1ScanEvacuatedObjClosure
+ *
  */
 void G1RootProcessor::evacuate_roots(G1ParScanThreadState* pss, uint worker_i) {
 	G1GCPhaseTimes* phase_times = _g1h->g1_policy()->phase_times();
 
 	G1EvacPhaseTimesTracker timer(phase_times, pss, G1GCPhaseTimes::ExtRootScan, worker_i);
 
-	G1EvacuationRootClosures* closures = pss->closures();
-	process_java_roots(closures, phase_times, worker_i);  // stack variables of Java application ?
+	G1EvacuationRootClosures* closures = pss->closures();		// The closure used for all the 3 kinds of Roots.
+	process_java_roots(closures, phase_times, worker_i);		// 1) Java Thread roots
 
 	// This is the point where this worker thread will not find more strong CLDs/nmethods.
 	// Report this so G1 can synchronize the strong and weak CLDs/nmethods processing.
@@ -100,8 +103,8 @@ void G1RootProcessor::evacuate_roots(G1ParScanThreadState* pss, uint worker_i) {
 		worker_has_discovered_all_strong_classes();
 	}
 
-	process_vm_roots(closures, phase_times, worker_i);    // stack variables of VM ?
-	process_string_table_roots(closures, phase_times, worker_i); // [?] Handle Strings seperately ??
+	process_vm_roots(closures, phase_times, worker_i);    			 // 2) VM Threads roots 
+	process_string_table_roots(closures, phase_times, worker_i); // 3) String variable roots 
 
 	{
 		// Now the CM ref_processor roots.
@@ -228,7 +231,7 @@ void G1RootProcessor::process_all_roots_no_string_table(OopClosure* oops,
 }
 
 /**
- * Tag : STW Young GC, tracing from Java applications
+ * Tag : STW Young GC, tracing from  Root#1, Java thread stack variables.
  * 
  * [?] What's the cldg/clds ??
  * 
@@ -255,6 +258,11 @@ void G1RootProcessor::process_java_roots(G1RootClosures* closures,
 	}
 }
 
+/**
+ * Tag : STW Young GC, Root#2, VM thread stack variables
+ * 
+ * 
+ */ 
 void G1RootProcessor::process_vm_roots(G1RootClosures* closures,
 																			 G1GCPhaseTimes* phase_times,
 																			 uint worker_i) {
@@ -312,6 +320,12 @@ void G1RootProcessor::process_vm_roots(G1RootClosures* closures,
 	}
 }
 
+
+/**
+ * Tag : STW Young GC, Root#3, String variables
+ * 
+ * 
+ */ 
 void G1RootProcessor::process_string_table_roots(G1RootClosures* closures,
 																								 G1GCPhaseTimes* phase_times,
 																								 uint worker_i) {

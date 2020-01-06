@@ -78,6 +78,11 @@ bool SATBMarkQueue::should_enqueue_buffer() {
   return index() < threshold;
 }
 
+/**
+ * Tag : Process current mutator/Java thread's local SATB queue.
+ *  SATBMarkQueue::PtrQueue->_buf 
+ * 
+ */
 void SATBMarkQueue::apply_closure_and_empty(SATBBufferClosure* cl) {
   assert(SafepointSynchronize::is_at_safepoint(),
          "SATB queues must only be processed at safepoints");

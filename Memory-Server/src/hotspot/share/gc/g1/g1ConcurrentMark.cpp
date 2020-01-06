@@ -1158,6 +1158,16 @@ public:
 	}
 };
 
+
+
+/**
+ * Tag : Remark the alive objects in Old Region between the end of last CM and Cleanup phase.
+ * 
+ * [?] What's the root for the Remark phase ?
+ * 		new stack frames && new dirty cards ?   
+ * 		Only care about the cross-region reference into Tracked Regions ?
+ * 
+ */
 void G1ConcurrentMark::remark() {
 	assert_at_safepoint_on_vm_thread();
 
@@ -1174,6 +1184,7 @@ void G1ConcurrentMark::remark() {
 
 	verify_during_pause(G1HeapVerifier::G1VerifyRemark, VerifyOption_G1UsePrevMarking, "Remark before");
 
+	// Do the remark action.
 	{
 		GCTraceTime(Debug, gc, phases) debug("Finalize Marking", _gc_timer_cm);
 		finalize_marking();
@@ -1771,7 +1782,11 @@ void G1ConcurrentMark::swap_mark_bitmaps() {
 	_g1h->collector_state()->set_clearing_next_bitmap(true);
 }
 
-// Closure for marking entries in SATB buffers.
+/** 
+ * Closure for marking entries in SATB buffers.
+ * Tag : Remark phase. Mark the alive objects recored by SATB (pre_write barrier).
+ * 
+ */ 
 class G1CMSATBBufferClosure : public SATBBufferClosure {
 private:
 	G1CMTask* _task;
@@ -1823,6 +1838,8 @@ class G1RemarkThreadsClosure : public ThreadClosure {
 				// live by the SATB invariant but other oops recorded in nmethods may behave differently.
 				jt->nmethods_do(&_code_cl);
 
+				// 2) Process current mutator/Java thread's SATB queue.
+				//		SATB is recorded by pre_write barrier. It only records  the pre_ref_val of the reference assignment.
 				G1ThreadLocalData::satb_mark_queue(jt).apply_closure_and_empty(&_cm_satb_cl);
 			}
 		} else if (thread->is_VM_thread()) {
@@ -1833,6 +1850,22 @@ class G1RemarkThreadsClosure : public ThreadClosure {
 	}
 };
 
+
+
+/**
+ * Tag : The realy task of STW Remark phase.
+ *  
+ * 	1) Thread marking
+ * 		1.1) Java/Non-Java stack variables. Totally remark.
+ * 		1.2) Java thread's local SATB queue.
+ * 
+ * 2) do_marking_step(STW) ?? why
+ * 		2.1)
+ * 		2.2) Drain global G1BarrierSet->_satb_mark_queue_set.
+ * 
+ * 	[?] is the do_marking_step  a incremental marking ??
+ * 
+ */
 class G1CMRemarkTask : public AbstractGangTask {
 	G1ConcurrentMark* _cm;
 public:
@@ -1844,9 +1877,10 @@ public:
 			HandleMark hm;
 
 			G1RemarkThreadsClosure threads_f(G1CollectedHeap::heap(), task);
-			Threads::threads_do(&threads_f);
+			Threads::threads_do(&threads_f);			// 1) Scan the mutators' stack variables.
 		}
 
+		// 2) Scan the mutators' dirty card queue ?
 		do {
 			task->do_marking_step(1000000000.0 /* something very large */,
 														true         /* do_termination       */,
@@ -1863,6 +1897,10 @@ public:
 	}
 };
 
+/**
+ * Tag : The Remark operations.
+ *  
+ */
 void G1ConcurrentMark::finalize_marking() {
 	ResourceMark rm;
 	HandleMark   hm;
@@ -1887,6 +1925,8 @@ void G1ConcurrentMark::finalize_marking() {
 		_g1h->workers()->run_task(&remarkTask);
 	}
 
+	// [?] Remark process all the items in satb queue ?
+	// 
 	SATBMarkQueueSet& satb_mq_set = G1BarrierSet::satb_mark_queue_set();
 	guarantee(has_overflown() ||
 						satb_mq_set.completed_buffers_num() == 0,
@@ -2357,6 +2397,11 @@ bool G1CMTask::get_entries_from_global_stack() {
 	return true;
 }
 
+
+/**
+ * Tag : Drain the CM->_task_queue, StarTask queue.
+ *  
+ */
 void G1CMTask::drain_local_queue(bool partially) {
 	if (has_aborted()) {
 		return;
@@ -2488,19 +2533,19 @@ bool G1ConcurrentMark::try_stealing(uint worker_id, G1TaskQueueEntry& task_entry
 		with other invocations of do_marking_step() on different tasks
 		(but only one per task, obviously) and concurrently with the
 		mutator threads, or during remark, hence it eliminates the need
-		for two versions of the code. When called during remark, it will
+		for two versions of the code. ** When called during remark, it will    // how ? by using the global_finger ?
 		pick up from where the task left off during the concurrent marking
-		phase. Interestingly, tasks are also claimable during evacuation
+		phase. ** Interestingly, tasks are also claimable during evacuation
 		pauses too, since do_marking_step() ensures that it aborts before
 		it needs to yield.
 
 		The data structures that it uses to do marking work are the
 		following:
 
-			(1) Marking Bitmap. If there are gray objects that appear only
-			on the bitmap (this happens either when dealing with an overflow
+			(1) Marking Bitmap. If there are gray objects that appear only			// gray objects, marked alive in CM->_next_bitmap
+			on the bitmap (this happens either when dealing with an overflow		// e.g. When process the SATB queue, no need to push the target object into StarTask queue.
 			or when the initial marking phase has simply marked the roots
-			and didn't push them on the stack), then tasks claim heap
+			and didn't push them on the stack), then tasks claim heap						// Not push object on the stack, means not enqueue it to scan its fields.
 			regions whose bitmap they then scan to find gray objects. A
 			global finger indicates where the end of the last claimed region
 			is. A local finger indicates how far into the region a task has
@@ -2517,7 +2562,7 @@ bool G1ConcurrentMark::try_stealing(uint worker_id, G1TaskQueueEntry& task_entry
 			tasks. Only when there is no more work, a task will totally
 			drain its local queue.
 
-			(3) Global Mark Stack. This handles local queue overflow. During
+			(3) Global Mark Stack. This handles local queue overflow. During			// (Global) mark stack. it's overflow queue for the local queue ?
 			marking only sets of entries are moved between it and the local
 			queues, as access to it requires a mutex and more fine-grain
 			interaction with it which might cause contention. If it

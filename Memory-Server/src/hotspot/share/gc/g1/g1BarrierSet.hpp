@@ -46,7 +46,7 @@ class G1BarrierSet: public CardTableBarrierSet {
  private:
   BufferNode::Allocator _satb_mark_queue_buffer_allocator;
   BufferNode::Allocator _dirty_card_queue_buffer_allocator;
-  G1SATBMarkQueueSet _satb_mark_queue_set;      // Scan at the begining ?
+  G1SATBMarkQueueSet _satb_mark_queue_set;      // pre_write barrier, scan at the Remark phase ?
   DirtyCardQueueSet _dirty_card_queue_set;      // the global DirtyCard queue set for mutators thread local card queue
 
   static G1BarrierSet* g1_barrier_set() {

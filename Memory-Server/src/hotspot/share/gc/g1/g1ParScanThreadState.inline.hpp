@@ -34,15 +34,18 @@
 
 
 /**
- * Tag : This closure is only used to handle the dirty card ??
+ * Tag : Drain the G1ParScanThreadState->_refs (StarTask queuee)
+ * 		The items (&field,StarTask) are pushed by the 
+ * 		1) RootClosures, Jave Thread, VM Thread, String root 
+ * 		2) Old to CSet, recorded by the RemSet. Partial are in the Threads' Dirtycard queue.
  * 
- * Reach here from Dirty Card traversing. 
- * 
- * [?] Dirty card : field(Young Space) --> oop(Old Space)
  * 
  * [x] field:p may have already been handled.
  * 		If there is a forwading pointer stored in target oop address,
  * 		just return it.	
+ * 
+ * [x] Need to maintain the Tracked Regions' RemSet.
+ * 		 Add new dirty card into Tracked REgion's RemSet if it's caused by the alive object evacuation.
  * 
  */
 template <class T> void G1ParScanThreadState::do_oop_evac(T* p) {
@@ -87,8 +90,8 @@ template <class T> void G1ParScanThreadState::do_oop_evac(T* p) {
 	// b. p -> oop is a cross-region reference,
 	// c. p isn't in Young Space
 	HeapRegion* from = _g1h->heap_region_containing(p);  
-	if (!from->is_young()) {  			// [x]Young -> Old reference ? Keep it in RemSet, not handle it in Young GC/Initial Mark ?
-		enqueue_card_if_tracked(p, obj);
+	if (!from->is_young()) {  					// [x] Record Old to Tracked Region reference.
+		enqueue_card_if_tracked(p, obj);	// Maintain the RemSet for Tracked Region.
 	}
 }
 

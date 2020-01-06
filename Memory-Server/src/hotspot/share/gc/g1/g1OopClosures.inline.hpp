@@ -64,6 +64,8 @@ inline void G1ScanClosureBase::prefetch_and_push(T* p, const oop obj) {
 /**
  * Tag : For a cross-region reference, the target obejct is NOT in CSet.
  * 
+ *  [?] The target object isn't in CSet, but it can be in a Tracked Old Region. How to hanele it ?
+ * 
  * [?] Meaning of optional_region ? 
  * 
  */
@@ -82,7 +84,7 @@ inline void G1ScanClosureBase::trim_queue_partially() {
 
 
 /**
- * Tag : Closure scan and evacate alive objects from object fields. 
+ * Tag : Closure scan the fields of an evacuated objects during Young GC.
  * 
  * Parameter
  * 		Class T : CompressOop* or NormalOop* ?
@@ -100,7 +102,15 @@ inline void G1ScanClosureBase::trim_queue_partially() {
  * 				Enqueue the card of &(field) to a G1ThreadLocalData->DirtyCardQueue
  * 
  * 
- * [?] How to handle the Young --> Old(Not in CSet) reference ?
+ * [x] How to handle the Young --> Old(Not in CSet) reference ?
+ * 		Use _scanning_in_young to filter all the Young to Other reference.
+ * 		RemSet is only used for Young STW GC, we don't need the Young to Other references.
+ * 
+ * [x] After the finish of a Concurrent Marking, Remark and Rebuild phase will also stop running before each mixed Young GC.
+ * 			The Young GC relys on 
+ * 	1) Write Barrier (Concurrent Refine + Update RemSet)   
+ * 	2) Young GC itsefl to maintain the RemSet of Tracked Regions. (G1ScanEvacuatedObjClosure)
+ * 			
  * 
  */
 template <class T>
@@ -121,15 +131,15 @@ inline void G1ScanEvacuatedObjClosure::do_oop_work(T* p) {
 		handle_non_cset_obj_common(state, p, obj);
 		assert(_scanning_in_young != Uninitialized, "Scan location has not been initialized.");
 
-		if (_scanning_in_young == True) {    // True or False, based on the location of source:p
+		if (_scanning_in_young == True) {    //f evacuated obj is in Young, skip Dirty cards update. Skip Young -> other referenes.
 			return;
 		}
 
-		// 2) Enqueue a dirty card:
+		// 2) Enqueue a dirty card:    
 		// 		a. target oop isn't in CSet and && 
 		// 		b. p->oop is a cross-region reference  &&
 		//		c. p is in Old space ()   // Should be in Optional Region, CSet
-		//					=> [?] How to handle the Young --> Old(Not in CSet) reference ?
+		//
 		_par_scan_state->enqueue_card_if_tracked(p, obj);
 	}
 }
@@ -212,10 +222,21 @@ inline void G1ConcurrentRefineOopClosure::do_oop_work(T* p) {
 
 
 /**
- * Used during the Update RS phase to refine remaining cards in the DCQ during garbage collection.
- * Tag : The closure of updating RemSet 
+ * Used during the Update RS phase to refine remaining cards in the DCQ during garbage collection.]
  * 
- * [?] How can this be possible ?  We only insert dirty cards when target oop are not in CSet?
+ * Tag : The closure of Update RemSet. 
+ * 			1) if target object is in CSet, 
+ * 						enequeue the &field into G1ParScanThreadState->_refs (StarTask queue) 
+ * 			2) if the target object is in Tracked Regions, transfer the card into G1ParScanThreadState->_dcqs,
+ * 					which points to G1CollectedHeap->_dirty_card_queue_set.
+ * 
+ * 			Compared to Concurrent Refine,
+ * 				if the target objects is in Tracked Region, transfer it into corresponding Regions's RemSet.
+ * 
+ * 
+ * More Explanation
+ * 		oop p, the field of the objects within the card.
+ * 		
  */
 template <class T>
 inline void G1ScanObjsDuringUpdateRSClosure::do_oop_work(T* p) {
@@ -242,6 +263,18 @@ inline void G1ScanObjsDuringUpdateRSClosure::do_oop_work(T* p) {
 /**
  * Tag : Closure of scanning the RemSet of a HeapRegion
  * 
+ * [?] Scan RemSet is handling the Old to CSet reference.
+ * 		if target object is in CSet
+ * 			evacuate it.
+ * 			[no need to update RemSet ?]
+ * 		else if target object isn't in the same Region
+ * 				if target object is humonguos object
+ * 					mark it alive
+ * 				else if target object is in Optional Region
+ * 					[?]
+ * 				else //[ target object is in Old region]
+ * 					nothing.
+ * 		
  */
 template <class T>
 inline void G1ScanObjsDuringScanRSClosure::do_oop_work(T* p) {
@@ -253,9 +286,9 @@ inline void G1ScanObjsDuringScanRSClosure::do_oop_work(T* p) {
 
 	const InCSetState state = _g1h->in_cset_state(obj);
 	if (state.is_in_cset()) {
-		prefetch_and_push(p, obj);
+		prefetch_and_push(p, obj);			// 1) In CSet. Push &field into G1ParScanThreadState->RefToScanQueue to be evacuated.
 	} else if (!HeapRegion::is_in_same_region(p, obj)) {
-		handle_non_cset_obj_common(state, p, obj);
+		handle_non_cset_obj_common(state, p, obj);  // 2) Cross-Region, target object is Humonguous or in Optional_region.
 	}
 }
 
@@ -265,6 +298,10 @@ inline void G1ScanRSForOptionalClosure::do_oop_work(T* p) {
 	_scan_cl->trim_queue_partially();
 }
 
+/**
+ * Tag: after evacuating alive objects to Survivor Regions, need to update ClassLoder information ?
+ *  
+ */
 void G1ParCopyHelper::do_cld_barrier(oop new_obj) {
 	if (_g1h->heap_region_containing(new_obj)->is_young()) {
 		_scanned_cld->record_modified_oops();
@@ -272,11 +309,10 @@ void G1ParCopyHelper::do_cld_barrier(oop new_obj) {
 }
 
 /**
- * Tag : mark objects in bitmap ?? not in RemSet ?
- * 
- * [?] The bitmap is used for remarking ?
- * 		=> pre_bitmap,
- * 		=> next_bitmap
+ * Tag : Mark the objects alive in ConcurrentMark->next_bitmap.
+ * 	
+ * This marking is in Young STW GC's Root Closure, G1ParCopyClosure.
+ * If an objects is reached by the root (Java Thread, VM Thread, String variables), mark them alive in next_bitmap directly.			
  * 
  */
 void G1ParCopyHelper::mark_object(oop obj) {
@@ -292,6 +328,7 @@ void G1ParCopyHelper::trim_queue_partially() {
 
 /**
  * Tag : Closure of Scanning alive objects from Stack variable 
+ * 	=> only the first level ?
  * 
  * 3 cases:
  * 	1) target object in Collection Set, do the tracing 
@@ -349,7 +386,8 @@ void G1ParCopyClosure<barrier, do_mark_object>::do_oop_work(T* p) {
 			mark_object(obj);													//  Mark object in HeapRegion->next_bitmap 
 		}
 	}
-	trim_queue_partially();
+
+	trim_queue_partially();  // [?] Process the StarTask queue partially, in case it's too long ?	
 }
 
 template <class T> void G1RebuildRemSetClosure::do_oop_work(T* p) {

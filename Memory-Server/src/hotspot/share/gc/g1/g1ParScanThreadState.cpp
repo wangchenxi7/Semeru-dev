@@ -37,13 +37,21 @@
 #include "oops/oop.inline.hpp"
 #include "runtime/prefetch.inline.hpp"
 
+
+/**
+ * Tag : Build the necessary structure and metadata for a GC Thread.
+ * 	_refs : StarTask queue
+ *  _dcq	: DirtyCard queue. [?] How to understand this assignment ?
+ * 	_ct		: Card Table, byte array. 
+ * 
+ */
 G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h,
 																					 uint worker_id,
 																					 size_t young_cset_length,
 																					 size_t optional_cset_length)
 	: _g1h(g1h),
 		_refs(g1h->task_queue(worker_id)),
-		_dcq(&g1h->dirty_card_queue_set()),
+		_dcq(&g1h->dirty_card_queue_set()),   // Assign G1CollectedHeap->_dirty_card_queue_set->_shared_dirty_card_queue to _dcq by the cast.
 		_ct(g1h->card_table()),
 		_closures(NULL),
 		_plab_allocator(NULL),
@@ -88,7 +96,7 @@ G1ParScanThreadState::G1ParScanThreadState(G1CollectedHeap* g1h,
 
 // Pass locally gathered statistics to global state.
 void G1ParScanThreadState::flush(size_t* surviving_young_words) {
-	_dcq.flush();   // [?] Flush to where ?
+	_dcq.flush();   // [?] Flush to where ?  _dcq is a pointer to G1CollectedHeap->_dirty_card_queue_set already.
 	// Update allocation statistics.
 	_plab_allocator->flush_and_retire_stats();
 	_g1h->g1_policy()->record_age_table(&_age_table);

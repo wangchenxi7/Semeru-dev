@@ -243,6 +243,11 @@ bool G1ConcurrentMarkThread::request_concurrent_phase(const char* phase_name) {
   return true;
 }
 
+
+/**
+ * Tag : The main entry of G1 Concurrent Marking.
+ *  
+ */
 void G1ConcurrentMarkThread::run_service() {
   _vtime_start = os::elapsedVTime();
 
@@ -299,11 +304,15 @@ void G1ConcurrentMarkThread::run_service() {
         log_info(gc, marking)("%s (%.3fs)",
                               cm_title,
                               TimeHelper::counter_to_seconds(mark_start));
+
         for (uint iter = 1; !_cm->has_aborted(); ++iter) {
           // Concurrent marking.
+          //
+          // [?] Difference with Mark from Root Regions ?
+          //      Marking from roots, mark from thread variables ??
           {
             G1ConcPhase p(G1ConcurrentPhase::MARK_FROM_ROOTS, this);
-            _cm->mark_from_roots();
+            _cm->mark_from_roots();  
           }
           if (_cm->has_aborted()) {
             break;

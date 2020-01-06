@@ -127,6 +127,13 @@ class RedirtyLoggedCardTableEntryClosure : public CardTableEntryClosure {
 	RedirtyLoggedCardTableEntryClosure(G1CollectedHeap* g1h) : CardTableEntryClosure(),
 		_num_dirtied(0), _g1h(g1h), _g1_ct(g1h->card_table()) { }
 
+	/**
+	 * Tag : Mark the specified Card dirty, when the card's belonging Regions isn't freed.
+	 * 
+	 * [?] This is the only filter ??
+	 * e.g. Only mark the card dirty when it has references into CSet ?
+	 * 
+	 */
 	bool do_card_ptr(jbyte* card_ptr, uint worker_i) {
 		HeapRegion* hr = region_for_card(card_ptr);
 
@@ -2102,6 +2109,7 @@ void G1CollectedHeap::iterate_dirty_card_closure(CardTableEntryClosure* cl, uint
 	while (dcqs.apply_closure_during_gc(cl, worker_i)) {
 		n_completed_buffers++;
 	}
+	
 	g1_policy()->phase_times()->record_thread_work_item(G1GCPhaseTimes::UpdateRS, worker_i, n_completed_buffers, G1GCPhaseTimes::UpdateRSProcessedBuffers);
 	dcqs.clear_n_completed_buffers();   // Reset Mutator Global Mutator DirtyCard buffer size to 0.
 	assert(!dcqs.completed_buffers_exist_dirty(), "Completed buffers exist!");
@@ -3445,9 +3453,9 @@ void G1ParEvacuateFollowersClosure::do_void() {
 /**
  * Tag : STW Young GC task
  * 
- * Main tasks:
- * 	1) Evacuate roots 
- * 	2) 
+ * Main scan closures:
+ * 	1) Stack variables to CSet.
+ * 	2) Old to CSet.
  * 
  * 
  */
@@ -3483,7 +3491,7 @@ public:
 
 			ReferenceProcessor*             rp = _g1h->ref_processor_stw();
 
-			G1ParScanThreadState*           pss = _pss->state_for_worker(worker_id);
+			G1ParScanThreadState*           pss = _pss->state_for_worker(worker_id);  // Build the necessary scan state for the worker.
 			pss->set_ref_discoverer(rp);
 
 			double start_strong_roots_sec = os::elapsedTime();
@@ -3495,8 +3503,7 @@ public:
 			// We only want to make sure that the oops in the nmethods are adjusted with regard to the
 			// objects copied by the current evacuation.
 			//
-			// [?] What's the nmethods ??
-			_g1h->g1_rem_set()->oops_into_collection_set_do(pss, worker_id);	// Task 2) Update the RemSet
+			_g1h->g1_rem_set()->oops_into_collection_set_do(pss, worker_id);	// Task 2) Old to CSet references.
 
 			double strong_roots_sec = os::elapsedTime() - start_strong_roots_sec;
 
@@ -3505,7 +3512,7 @@ public:
 			{
 				double start = os::elapsedTime();
 				G1ParEvacuateFollowersClosure evac(_g1h, pss, _queues, _terminator.terminator(), G1GCPhaseTimes::ObjCopy);
-				evac.do_void();				//[?] followers ??
+				evac.do_void();				//[?] Drain the G1ParScanThreadState->_refs, the StarTask queue
 
 				evac_term_attempts = evac.term_attempts();
 				term_sec = evac.term_time();
@@ -3608,13 +3615,22 @@ class G1RedirtyLoggedCardsTask : public AbstractGangTask {
 	}
 };
 
+
+/** 
+ * Tag : Merge the G1OllectedHeap->_dirty_card_queue_set into G1BarrierSet->_dirty_card_queue_set
+ * 
+ * 
+ */
 void G1CollectedHeap::redirty_logged_cards() {
 	double redirty_logged_cards_start = os::elapsedTime();
 
+	// 1) Redirty the G1CollecttedHeap->_dirty_card_queue_set
+	//		[?] The card in G1CollecttedHeap->_dirty_card_queue_set is not dirty for now ??
 	G1RedirtyLoggedCardsTask redirty_task(&dirty_card_queue_set(), this);
 	dirty_card_queue_set().reset_for_par_iteration();
 	workers()->run_task(&redirty_task);
 
+	// 2) Merge the G1CollectedHeap->_dirty_card_queue_set into G1BarrierSet->_dirty_card_queue_set.
 	DirtyCardQueueSet& dcq = G1BarrierSet::dirty_card_queue_set();
 	dcq.merge_bufferlists(&dirty_card_queue_set());
 	assert(dirty_card_queue_set().completed_buffers_num() == 0, "All should be consumed");
@@ -3919,7 +3935,7 @@ void G1CollectedHeap::pre_evacuate_collection_set() {
 	_hot_card_cache->reset_hot_cache_claimed_index();
 	_hot_card_cache->set_use_cache(false);
 
-	g1_rem_set()->prepare_for_oops_into_collection_set_do();
+	g1_rem_set()->prepare_for_oops_into_collection_set_do();		// Flush Mutator DirtyCard queue into BarrierSet's DirtyCard queue
 	_preserved_marks_set.assert_empty();
 
 	G1GCPhaseTimes* phase_times = g1_policy()->phase_times();
@@ -3947,6 +3963,7 @@ void G1CollectedHeap::evacuate_collection_set(G1ParScanThreadStateSet* per_threa
 	// Should G1EvacuationFailureALot be in effect for this GC?
 	NOT_PRODUCT(set_evacuation_failure_alot_for_current_gc();)
 
+	// [?]Before the Young STW GC, G1CollectedHeap->_dirty_card_queue_set should be empty ?
 	assert(dirty_card_queue_set().completed_buffers_num() == 0, "Should be empty");
 
 	G1GCPhaseTimes* phase_times = g1_policy()->phase_times();

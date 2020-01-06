@@ -45,6 +45,8 @@ class PtrQueue {
 	PtrQueue& operator=(const PtrQueue&);
 
 	// The ptr queue set to which this queue belongs.
+	// Get from buffer fomr PtrQueueSet, return the buffer to it after it's filled ?
+	// 
 	PtrQueueSet* const _qset;
 
 	// Whether updates should be logged.
@@ -85,16 +87,19 @@ class PtrQueue {
 		return ind / _element_size;
 	}
 
+	// Item index to byte size.
 	static size_t index_to_byte_index(size_t ind) {
 		return ind * _element_size;
 	}
 
 protected:
 	// The buffer, the actual content 
+	// indexed by _index, filled from end(_capacity_in_bytes) to zero.
+	// pointer-size aligned.
 	void** _buf;
 
 	size_t index() const {
-		return byte_index_to_index(_index);
+		return byte_index_to_index(_index);   // Calculate the byte offset according to item index.
 	}
 
 	void set_index(size_t new_index) {
@@ -131,7 +136,7 @@ public:
 	// Forcibly set empty.
 	void reset() {
 		if (_buf != NULL) {
-			_index = capacity_in_bytes();
+			_index = capacity_in_bytes();    // Fill items from the end.
 		}
 	}
 
@@ -212,16 +217,27 @@ protected:
 
 };
 
+
+/**
+ * Tag : Content of PtrQueueSet. 
+ * 			The PtrQueue get BufferNode from its attached PtrQueueSet's the BufferNode allocator
+ * 
+ * [?] size of each Node ?
+ * 	PtrQueue->_bufs point to its gotten BufferNode ??
+ *  
+ * 
+ */
 class BufferNode {
 	size_t _index;
 	BufferNode* _next;
-	void* _buffer[1];             // Pseudo flexible array member.
+	void* _buffer[1];             // Pseudo flexible array member.   // flexible ? its length can be adjusted ? It's at the end of the class.
 
 	BufferNode() : _index(0), _next(NULL) { }
 	~BufferNode() { }
 
+	// [?] meanning ??
 	static size_t buffer_offset() {
-		return offset_of(BufferNode, _buffer);
+		return offset_of(BufferNode, _buffer);   // offsetof(klass, field)  ???
 	}
 
 AIX_ONLY(public:)               // xlC 12 on AIX doesn't implement C++ DR45.
@@ -238,6 +254,8 @@ public:
 	void set_index(size_t i)     { _index = i; }
 
 	// Return the BufferNode containing the buffer, after setting its index.
+	// Reserver space for the BufferNode fields : _index, _next.
+	// 
 	static BufferNode* make_node_from_buffer(void** buffer, size_t index) {
 		BufferNode* node =
 			reinterpret_cast<BufferNode*>(
@@ -247,6 +265,8 @@ public:
 	}
 
 	// Return the buffer for node.
+	// the space after the BufferNode->_buffer[] is the real space.
+	//
 	static void** make_buffer_from_node(BufferNode *node) {
 		// &_buffer[0] might lead to index out of bounds warnings.
 		return reinterpret_cast<void**>(
@@ -255,7 +275,7 @@ public:
 
 	// Free-list based allocator.
 	class Allocator {
-		size_t _buffer_size;
+		size_t _buffer_size;				// The total available size for thsi BufferNode::Allocator ?
 		Mutex* _lock;
 		BufferNode* _free_list;
 		volatile size_t _free_count;
@@ -277,13 +297,13 @@ public:
 // set, and return completed buffers to the set.
 // All these variables are are protected by the TLOQ_CBL_mon. XXX ???
 class PtrQueueSet {
-	BufferNode::Allocator* _allocator;
+	BufferNode::Allocator* _allocator;				// Allocate BufferNode for the PtrQueue.
 
 protected:
 	Monitor* _cbl_mon;  // Protects the fields below.
-	BufferNode* _completed_buffers_head;
-	BufferNode* _completed_buffers_tail;
-	size_t _n_completed_buffers;
+	BufferNode* _completed_buffers_head;			// If a BufferNode is filled up with items, attach it here.
+	BufferNode* _completed_buffers_tail;			// points to the tail of cbn list.
+	size_t _n_completed_buffers;							//	Number of the cbn, between _completed_buffers_head and _completed_buffers_tail.
 	size_t _process_completed_buffers_threshold;
 	volatile bool _process_completed;
 

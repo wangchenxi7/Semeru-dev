@@ -147,6 +147,7 @@ public:
 		if (!_g1h->heap_region_containing((HeapWord*)o)->rem_set()->is_tracked()) {   // [?] Check the HeapRegionRemSet->rem_set()  first
 			return;
 		}
+		
 		size_t card_index = ct()->index_for(p);   // Get the card which contains this field p.
 		// If the card hasn't been added to the buffer, do it.
 		if (ct()->mark_card_deferred(card_index)) {
