@@ -191,14 +191,19 @@ STATIC_ASSERT(max_yellow_zone <= max_red_zone);
 // Package for pair of refinement thread activation and deactivation
 // thresholds.  The activation and deactivation levels are resp. the first
 // and second values of the pair.
-typedef Pair<size_t, size_t> Thresholds;
+typedef Pair<size_t, size_t> Thresholds;    // < large_value(activate_offset), small_value(deactivate_offset) >
 inline size_t activation_level(const Thresholds& t) { return t.first; }
 inline size_t deactivation_level(const Thresholds& t) { return t.second; }
 
+
+/**
+ * Tag : The activate and deactivate zone for the specific concurrent refinement thread, worker_i.
+ *  
+ */
 static Thresholds calc_thresholds(size_t green_zone,
                                   size_t yellow_zone,
                                   uint worker_i) {
-  double yellow_size = yellow_zone - green_zone;
+  double yellow_size = yellow_zone - green_zone;       // [?] Meaning of the size ? count by BufferNode ?
   double step = yellow_size / G1ConcurrentRefine::max_num_threads();
   if (worker_i == 0) {
     // Potentially activate worker 0 more aggressively, to keep
@@ -208,6 +213,7 @@ static Thresholds calc_thresholds(size_t green_zone,
     // than green_zone buffers to be processed by update_rs.
     step = MIN2(step, ParallelGCThreads / 2.0);
   }
+
   size_t activate_offset = static_cast<size_t>(ceil(step * (worker_i + 1)));
   size_t deactivate_offset = static_cast<size_t>(floor(step * worker_i));
   return Thresholds(green_zone + activate_offset,
@@ -426,10 +432,15 @@ void G1ConcurrentRefine::maybe_activate_more_threads(uint worker_id, size_t num_
   }
 }
 
+/**
+ * Tag : Use concurrent refinement  thread to transfer dirty cards from G1BarrierSet->_dirty_card_queue_set 
+ *       to HeapRegion->RemSet.
+ *  
+ */
 bool G1ConcurrentRefine::do_refinement_step(uint worker_id) {
   DirtyCardQueueSet& dcqs = G1BarrierSet::dirty_card_queue_set();
 
-  size_t curr_buffer_num = dcqs.completed_buffers_num();
+  size_t curr_buffer_num = dcqs.completed_buffers_num();          // number of nodes full of dirty cards ?
   // If the number of the buffers falls down into the yellow zone,
   // that means that the transition period after the evacuation pause has ended.
   // Since the value written to the DCQS is the same for all threads, there is no

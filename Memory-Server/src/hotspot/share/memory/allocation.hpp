@@ -180,8 +180,13 @@ void FreeHeap(void* p);
  * Tag : rewrite new Operator for Class CHeapObj.
  *  e.g. Allocate objects into normal C-Heap by using os::mallocc OR allocate into some ReservedSpace of JVM. 
  * 
+ * [x] If any class inherit from CHeapObj, then new class() will go into here ?
+ *    e.g. HeapRegion -> G1ContiguousSpace -> CompactibleSpace -> Space -> CHeapObj.
+ *     new HeapRegion() will invoke the new(size) Operator here.
+ * 
  * [?] What's the meaning of AllocateHeap, just function name ??
  *    => meaning that allocate object into C-Heap ?
+ *       This function request memory from OS by using os::malloc().
  * 
  */
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {

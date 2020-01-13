@@ -130,6 +130,9 @@ void RSHashTable::clear() {
   _free_region = 0;
 }
 
+/**
+ * Tag : Add <region_index, card_index> into SparkPRT. 
+ */
 bool RSHashTable::add_card(RegionIdx_t region_ind, CardIdx_t card_index) {
   SparsePRTEntry* e = entry_for_region_ind_create(region_ind);
   assert(e != NULL && e->r_ind() == region_ind,
@@ -140,6 +143,12 @@ bool RSHashTable::add_card(RegionIdx_t region_ind, CardIdx_t card_index) {
   return res != SparsePRTEntry::overflow;
 }
 
+/**
+ * Tag : Get the entry by the region_index.
+ *  hash function :: region_ind & capacity_mask() 
+ *  Then, traverse the rest entries in sequence. 
+ * 
+ */
 SparsePRTEntry* RSHashTable::get_entry(RegionIdx_t region_ind) const {
   int ind = (int) (region_ind & capacity_mask());
   int cur_ind = _buckets[ind];
@@ -178,25 +187,35 @@ bool RSHashTable::delete_entry(RegionIdx_t region_ind) {
 
 SparsePRTEntry*
 RSHashTable::entry_for_region_ind_create(RegionIdx_t region_ind) {
+  // 1) Retrieve the existing items.
   SparsePRTEntry* res = get_entry(region_ind);
+
+  // 2) Create a new SparsePRTEntry.  
   if (res == NULL) {
-    int new_ind = alloc_entry();
-    res = entry(new_ind);
-    res->init(region_ind);
+    int new_ind = alloc_entry();    // SparsePRTEntry iter: Allocate (or get) a SparsePRTEntry for the region_ind.
+    res = entry(new_ind);           // SparsePRTEntry instance :  _entries + SparsePRTEntry::size() * new_ind.
+    res->init(region_ind);          // 
+    
     // Insert at front.
-    int ind = (int) (region_ind & capacity_mask());
-    res->set_next_index(_buckets[ind]);
-    _buckets[ind] = new_ind;
+    int ind = (int) (region_ind & capacity_mask()); // Hash_key: Calculate the hash key by " region_ind & capacity_mask()  "
+    res->set_next_index(_buckets[ind]);  // insert current entry, new_ind, before the old entries under this _buckets[ind].
+    _buckets[ind] = new_ind;        // Points to the newly created SparsePRTEntry iter. 
     _occupied_entries++;
   }
+
   return res;
 }
 
+/**
+ *  Tag : Allocte a SparsePRTEntry for a <hash_key, hash_val> 
+ *      The entry has nothing to do with the hash_key value ??
+ *  
+ */
 int RSHashTable::alloc_entry() {
   int res;
   if (_free_list != NullEntry) {
-    res = _free_list;
-    _free_list = entry(res)->next_index();
+    res = _free_list;     // [?] _free_list is just a int number ??
+    _free_list = entry(res)->next_index();    // Move _free_list point to next Region_ind.
     return res;
   } else if ((size_t)_free_region < _num_entries) {
     res = _free_region;
@@ -328,13 +347,19 @@ void SparsePRT::clear() {
   }
 }
 
+/**
+ *  Tag : Double the capacity of SparkPRT->_table.
+ *  [?] We need to find a way to fix its range and address for communication between CPU server and Memory Server.
+ *    e.g. Allocate enough Initial Capacity. Expand will cause error.
+ * 
+ */
 void SparsePRT::expand() {
   RSHashTable* last = _table;
   _table = new RSHashTable(last->capacity() * 2);
   for (size_t i = 0; i < last->num_entries(); i++) {
     SparsePRTEntry* e = last->entry((int)i);
     if (e->valid_entry()) {
-      _table->add_entry(e);
+      _table->add_entry(e);     // Add the old _table into newly created _table.
     }
   }
   delete last;

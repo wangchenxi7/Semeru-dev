@@ -173,7 +173,7 @@ bool DirtyCardQueueSet::apply_closure_to_buffer(CardTableEntryClosure* cl,
 																								uint worker_i) {
 	if (cl == NULL) return true;
 	bool result = true;
-	void** buf = BufferNode::make_buffer_from_node(node);
+	void** buf = BufferNode::make_buffer_from_node(node);   // Change the BufferNode to a void** buf, what's the size of the buf ?
 	size_t i = node->index();
 	size_t limit = buffer_size();
 	for ( ; i < limit; ++i) {
@@ -184,6 +184,7 @@ bool DirtyCardQueueSet::apply_closure_to_buffer(CardTableEntryClosure* cl,
 			break;
 		}
 	}
+	
 	if (consume) {
 		assert(i <= buffer_size(), "invariant");
 		node->set_index(i);
@@ -220,7 +221,10 @@ bool DirtyCardQueueSet::mut_process_buffer(BufferNode* node) {
 	return result;
 }
 
-
+/**
+ * Tag : Take a BufferNode from the DirtyCardQueueSet's head. 
+ *  
+ */
 BufferNode* DirtyCardQueueSet::get_completed_buffer(size_t stop_at) {
 	MutexLockerEx x(_cbl_mon, Mutex::_no_safepoint_check_flag);
 
@@ -233,8 +237,9 @@ BufferNode* DirtyCardQueueSet::get_completed_buffer(size_t stop_at) {
 	assert(_completed_buffers_tail != NULL, "invariant");
 
 	BufferNode* nd = _completed_buffers_head;
-	_completed_buffers_head = nd->next();
+	_completed_buffers_head = nd->next();				// Take a BufferNode from the head.			
 	_n_completed_buffers--;
+
 	if (_completed_buffers_head == NULL) {
 		assert(_n_completed_buffers == 0, "Invariant");
 		_completed_buffers_tail = NULL;
@@ -243,6 +248,11 @@ BufferNode* DirtyCardQueueSet::get_completed_buffer(size_t stop_at) {
 	return nd;
 }
 
+
+/**
+ * Tag: Concurrent refine the dirty cards in G1BarrierSet->_dirty_card_queue_set from [stop_at, worker_id_activate )
+ *  
+ */
 bool DirtyCardQueueSet::refine_completed_buffer_concurrently(uint worker_i, size_t stop_at) {
 	G1RefineCardConcurrentlyClosure cl;
 	return apply_closure_to_completed_buffer(&cl, worker_i, stop_at, false);
@@ -254,7 +264,7 @@ bool DirtyCardQueueSet::apply_closure_during_gc(CardTableEntryClosure* cl, uint 
 }
 
 /**
- * Tag : Process the G1BarrierSet's->_dirty_card_queue_set
+ * Tag : Process the G1BarrierSet's->_dirty_card_queue_set according to specified closure.
  * 
  * [?] What's the definition of BufferNode ? several drity cards 
  * 

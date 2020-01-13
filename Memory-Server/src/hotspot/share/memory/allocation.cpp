@@ -48,6 +48,11 @@ char* AllocateHeap(size_t size,
   return p;
 }
 
+/**
+ * Tag : The overwrite function, new , in hotspot.
+ *      How to implement the mapping from "new" to current AllocateHeap ? 
+ * 
+ */
 char* AllocateHeap(size_t size,
                    MEMFLAGS flags,
                    AllocFailType alloc_failmode /* = AllocFailStrategy::EXIT_OOM*/) {

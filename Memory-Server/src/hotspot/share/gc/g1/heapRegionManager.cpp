@@ -117,6 +117,10 @@ bool HeapRegionManager::is_free(HeapRegion* hr) const {
 }
 #endif
 
+/**
+ * Tag : Build HeapRegion management.
+ *  
+ */
 HeapRegion* HeapRegionManager::new_heap_region(uint hrm_index) {
 	G1CollectedHeap* g1h = G1CollectedHeap::heap();
 	HeapWord* bottom = g1h->bottom_addr_for_region(hrm_index);
@@ -170,20 +174,30 @@ void HeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 	_card_counts_mapper->uncommit_regions(start, num_regions);
 }
 
+
+/**
+ * Tag : Allocate HeapRegion management metadata.
+ *  
+ * [?] Where to allocate these data ? Normal C++ heap ? C_HEAP ? meta space ?
+ * 
+ */
 void HeapRegionManager::make_regions_available(uint start, uint num_regions, WorkGang* pretouch_gang) {
 	guarantee(num_regions > 0, "No point in calling this for zero regions");
+	
+	// 1) Allocate && initialize the HeapRegion management meta data
 	commit_regions(start, num_regions, pretouch_gang);
 	for (uint i = start; i < start + num_regions; i++) {
 		if (_regions.get_by_index(i) == NULL) {
 			HeapRegion* new_hr = new_heap_region(i);
 			OrderAccess::storestore();
-			_regions.set_by_index(i, new_hr);
+			_regions.set_by_index(i, new_hr);   //  G1HeapRegionTable _regions; <region_index, HeapRegion*>
 			_allocated_heapregions_length = MAX2(_allocated_heapregions_length, i + 1);
 		}
 	}
 
 	_available_map.par_set_range(start, start + num_regions, BitMap::unknown_range);
 
+	// 2) Initialize the management for the space 
 	for (uint i = start; i < start + num_regions; i++) {
 		assert(is_available(i), "Just made region %u available but is apparently not.", i);
 		HeapRegion* hr = at(i);

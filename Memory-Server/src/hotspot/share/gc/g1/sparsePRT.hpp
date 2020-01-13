@@ -40,7 +40,7 @@
 class SparsePRTEntry: public CHeapObj<mtGC> {
 private:
   // The type of a card entry.
-  typedef uint16_t card_elem_t;
+  typedef uint16_t card_elem_t;           // 16 bits, 64K.  
 
   // We need to make sizeof(SparsePRTEntry) an even multiple of maximum member size,
   // in order to force correct alignment that could otherwise cause SIGBUS errors
@@ -48,13 +48,14 @@ private:
   // array elements required to get that alignment.
   static const size_t card_array_alignment = sizeof(int) / sizeof(card_elem_t);
 
-  RegionIdx_t _region_ind;
-  int         _next_index;
+  RegionIdx_t _region_ind;                // Source Region index.
+  int         _next_index;                // [?] Why records this ? this is a hash table ?
   int         _next_null;
   // The actual cards stored in this array.
   // WARNING: Don't put any data members beyond this line. Card array has, in fact, variable length.
   // It should always be the last data member.
-  card_elem_t _cards[card_array_alignment];
+  // [x] Also a Flexible Array ?
+  card_elem_t _cards[card_array_alignment];   // [?] Store the cards here ? not in the bucket?
 
   // Copy the current entry's cards into "cards".
   inline void copy_cards(card_elem_t* cards) const;
@@ -103,6 +104,18 @@ public:
   }
 };
 
+/**
+ * Tag : The HashTable for <Region_index, dirty cards>
+ * 
+ * hash_key  : = hash_func(region_index).
+ * hash_func(parameter) : parameter & capacity_mask.  
+ * entry_index    : _bucket[hash_key]
+ * entry_instance : _entries + SparsePRTEntry::size() * entry_index
+ * 
+ *  The key, Region_index is stored in SparsePRTEntry->region_index.
+ *  The value, cards are stored in SparsePRTEntry->_cards[]
+ * 
+ */
 class RSHashTable : public CHeapObj<mtGC> {
 
   friend class RSHashTableIter;
@@ -115,13 +128,13 @@ class RSHashTable : public CHeapObj<mtGC> {
 
   size_t _capacity;
   size_t _capacity_mask;
-  size_t _occupied_entries;
+  size_t _occupied_entries;   // Number of inserted entries.
   size_t _occupied_cards;
 
-  SparsePRTEntry* _entries;
-  int* _buckets;
-  int  _free_region;
-  int  _free_list;
+  SparsePRTEntry* _entries;  // The content instance, indexed by entry_index.. entry = _entries + SparsePRTEntry::size() * entry_index.
+  int* _buckets;             // The hashtable.  _buckets[hash_key].  
+  int  _free_region;         // [?] What's this ?
+  int  _free_list;           // Free_list of SparsePRTEntries, points to the first free entry's index.
 
   // Requires that the caller hold a lock preventing parallel modifying
   // operations, and that the the table be less than completely full.  If
@@ -170,6 +183,12 @@ public:
   // The number of SparsePRTEntry instances available.
   size_t num_entries() const { return _num_entries; }
 
+  /**
+   * Tag : get the SparsePRTEntry for a hash_index, e.g. the Region_index.
+   *  
+   *  SparsePRTEntry->_entries points to the SparsePRTEntry array.
+   * 
+   */
   SparsePRTEntry* entry(int i) const {
     assert(i >= 0 && (size_t)i < _num_entries, "precondition");
     return (SparsePRTEntry*)((char*)_entries + SparsePRTEntry::size() * i);
@@ -209,14 +228,23 @@ public:
   bool has_next(size_t& card_index);
 };
 
-// Concurrent access to a SparsePRT must be serialized by some external mutex.
-
+/** 
+ * Concurrent access to a SparsePRT must be serialized by some external mutex.
+ * 
+ * Tag : Sparse hash table for dirty card.
+ *       PRT : Per Region Table.
+ *       Sparse means that the value is a link list of diry card. Not bitmap. 
+ *       
+ *  hash_key    : region_index.
+ *  hash_value  : linked card.
+ * 
+ */
 class SparsePRTIter;
 
 class SparsePRT {
   friend class SparsePRTIter;
 
-  RSHashTable* _table;
+  RSHashTable* _table;      // RemSet hash table, to store the <Region_index, cards[]>
 
   enum SomeAdditionalPrivateConstants {
     InitialCapacity = 16

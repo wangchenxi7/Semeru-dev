@@ -230,7 +230,7 @@ protected:
 class BufferNode {
 	size_t _index;
 	BufferNode* _next;
-	void* _buffer[1];             // Pseudo flexible array member.   // flexible ? its length can be adjusted ? It's at the end of the class.
+	void* _buffer[1];             // Pseudo flexible array member.   // a flexible array?
 
 	BufferNode() : _index(0), _next(NULL) { }
 	~BufferNode() { }
@@ -275,9 +275,9 @@ public:
 
 	// Free-list based allocator.
 	class Allocator {
-		size_t _buffer_size;				// The total available size for thsi BufferNode::Allocator ?
+		size_t _buffer_size;				// The size of the BufferNode, decided by the BufferNode::Allocator
 		Mutex* _lock;
-		BufferNode* _free_list;
+		BufferNode* _free_list;			// Filled by freed BufferNode.
 		volatile size_t _free_count;
 
 	public:
@@ -315,7 +315,7 @@ protected:
 	// Maximum number of elements allowed on completed queue: after that,
 	// enqueuer does the work itself.
 	size_t _max_completed_buffers;
-	size_t _completed_buffers_padding;
+	size_t _completed_buffers_padding;				// [?] padding for what ??
 
 	size_t completed_buffers_list_length();
 	void assert_completed_buffer_list_len_correct_locked();

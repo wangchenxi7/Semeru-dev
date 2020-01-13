@@ -114,8 +114,8 @@ class DirtyCardQueueSet: public PtrQueueSet {
 
   // The number of completed buffers processed by mutator and rs thread,
   // respectively.
-  jint _processed_buffers_mut;
-  jint _processed_buffers_rs_thread;
+  jint _processed_buffers_mut;          // [?] mutator process dirty card queue ??
+  jint _processed_buffers_rs_thread;    // number of dirty card BufferNode, processed by concurrent refinement thread.
 
   // Current buffer node used for parallel iteration.
   BufferNode* volatile _cur_par_buffer_node;

@@ -80,7 +80,7 @@ void PtrQueue::enqueue_known_active(void* ptr) {
 }
 
 //
-// [?] Allocate data from C Heap ? 
+// [?] Allocate a BufferNode from C Heap ? 
 //  		Is this the allocation for the PtrQueueSet's Space ??
 //		Compared to BufferNode::Allocator::allocate()
 //		[?] Not attach the newly allocated C_Heap space to BufferNode->_free_list ??
@@ -116,8 +116,9 @@ size_t BufferNode::Allocator::free_count() const {
 	return Atomic::load(&_free_count);
 }
 
-// Allocator for a PtrQueueSet ?
-//
+// Allocator for a PtrQueueSet
+// BufferNode->_free_list stores the previously freed BufferNode.
+// 
 BufferNode* BufferNode::Allocator::allocate() {
 	BufferNode* node = NULL;
 	{
@@ -131,8 +132,9 @@ BufferNode* BufferNode::Allocator::allocate() {
 			return node;
 		}
 	}
-	return  BufferNode::allocate(_buffer_size);  // If PtrQueueSet->_free_list is null ?
+	return  BufferNode::allocate(_buffer_size);  // Allocate a BufferNode, the size of the BufferNode->_buffer is _buffer_size.
 }
+
 
 void BufferNode::Allocator::release(BufferNode* node) {
 	MutexLockerEx ml(_lock, Mutex::_no_safepoint_check_flag);

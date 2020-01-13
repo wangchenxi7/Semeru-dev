@@ -73,11 +73,11 @@ class OtherRegionsTable {
 	Mutex*           _m;
 
 	// These are protected by "_m".
-	CHeapBitMap _coarse_map;
+	CHeapBitMap _coarse_map;							// Level#3. 1 bit for a Region. Needs to scan the whole source Region. 
 	size_t      _n_coarse_entries;
 	static jint _n_coarsenings;
 
-	PerRegionTable** _fine_grain_regions;  // The fine grained Card Table entry
+	PerRegionTable** _fine_grain_regions;  // Level#2, <Region, bitmap_for_all_cards>. Cost some memory.
 	size_t           _n_fine_entries;
 
 	// The fine grain remembered sets are doubly linked together using
@@ -94,7 +94,7 @@ class OtherRegionsTable {
 	static size_t _fine_eviction_stride;
 	static size_t _fine_eviction_sample_size;
 
-	SparsePRT   _sparse_table;
+	SparsePRT   _sparse_table;						// Level#1, <region_index, dirty_cards>
 
 	// These are static after init.
 	static size_t _max_fine_entries;
@@ -159,9 +159,10 @@ public:
 
 
 /**
- * Tag : How to use the HeapRegionRemSet ?
+ * Tag : RemSet attached for each HeapRegion.
+ * 	1) Iherit from CHeapObj, it allocates into native heap.
  * 
- * some local byte arrary ??
+ * 	2) [?] Is the size of HeapRegionRemSet fixed ?? or it contains flexible array ?
  * 
  */
 class HeapRegionRemSet : public CHeapObj<mtGC> {
@@ -169,7 +170,7 @@ class HeapRegionRemSet : public CHeapObj<mtGC> {
 	friend class HeapRegionRemSetIterator;
 
 private:
-	G1BlockOffsetTable* _bot;
+	G1BlockOffsetTable* _bot;			// [?]
 
 	// A set of code blobs (nmethods) whose code contains pointers into
 	// the region that owns this RSet.
@@ -177,9 +178,9 @@ private:
 
 	Mutex _m;
 
-	OtherRegionsTable _other_regions;   // [?] which region ?
+	OtherRegionsTable _other_regions;   // [?] The structure to store the dirty_card information
 
-	HeapRegion* _hr;
+	HeapRegion* _hr;							// Points to attached HeapRegion.
 
 	void clear_fcc();
 

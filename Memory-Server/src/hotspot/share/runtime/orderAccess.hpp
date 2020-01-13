@@ -339,7 +339,7 @@ inline T OrderAccess::load_acquire(const volatile T* p) {
 
 template <typename T, typename D>
 inline void OrderAccess::release_store(volatile D* p, T v) {
-  StoreImpl<T, D, PlatformOrderedStore<sizeof(D), RELEASE_X> >()(v, p);
+  StoreImpl<T, D, PlatformOrderedStore<sizeof(D), RELEASE_X> >()(v, p);  // (new_value, destination)
 }
 
 template <typename T, typename D>

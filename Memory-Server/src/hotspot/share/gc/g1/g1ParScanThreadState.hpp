@@ -49,6 +49,12 @@ class outputStream;
  * Fields:
  *    DirtyCardQueue   _dcq : The GC thread should have the same dirty card queue.
  * 
+ * 
+ * More Explanation:
+ * 
+ * 	typedef OverflowTaskQueue<StarTask, mtGC>    RefToScanQueue;     // Override the typedef of OopTaskQueue
+ * 		
+ * 
  */
 class G1ParScanThreadState : public CHeapObj<mtGC> {
 	G1CollectedHeap* _g1h;

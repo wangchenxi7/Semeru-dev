@@ -121,7 +121,7 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1HeapRegionTable _regions;                 // The whole reserved space. Region handler for all the Regions for current G1 Heap.
+  G1HeapRegionTable _regions;                 // <region_index, heapRegion*> Get the HeapRegion management handler for the committed HeapRegions.
   G1RegionToSpaceMapper* _heap_mapper;
   G1RegionToSpaceMapper* _prev_bitmap_mapper;
   G1RegionToSpaceMapper* _next_bitmap_mapper;

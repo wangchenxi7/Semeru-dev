@@ -188,6 +188,12 @@ class G1ContiguousSpace: public CompactibleSpace {
   }
 };
 
+
+/**
+ * Tag: HeapRegion management handler.
+ *      HeapRegion is also a CHeapObj, allocated into native memory. 
+ * 
+ */
 class HeapRegion: public G1ContiguousSpace {
   friend class VMStructs;
   // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
@@ -198,6 +204,7 @@ class HeapRegion: public G1ContiguousSpace {
   // The remembered set for this region.
   // (Might want to make this "inline" later, to avoid some alloc failure
   // issues.)
+  // 
   HeapRegionRemSet* _rem_set;  //[x] Region Local RemSet
 
   // Auxiliary functions for scan_and_forward support.

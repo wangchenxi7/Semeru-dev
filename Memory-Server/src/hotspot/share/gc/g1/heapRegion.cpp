@@ -332,6 +332,13 @@ void HeapRegion::clear_humongous() {
   _bot_part.set_object_can_span(false);
 }
 
+
+/**
+ * Tag : Initialize a HeapRegion
+ * 
+ * [?] Where to store this handler ?
+ *  
+ */
 HeapRegion::HeapRegion(uint hrm_index,
                        G1BlockOffsetTable* bot,
                        MemRegion mr) :
@@ -351,7 +358,7 @@ HeapRegion::HeapRegion(uint hrm_index,
     _prev_top_at_mark_start(NULL), _next_top_at_mark_start(NULL),
     _recorded_rs_length(0), _predicted_elapsed_time_ms(0)
 {
-  _rem_set = new HeapRegionRemSet(bot, this);
+  _rem_set = new HeapRegionRemSet(bot, this);   // The new operator is overwriten by CHeapObj.
 
   initialize(mr);
 }

@@ -160,7 +160,11 @@ void G1RegionMappingChangedListener::on_commit(uint start_idx, size_t num_region
 	reset_from_card_cache(start_idx, num_regions);
 }
 
-
+/**
+ * Tag : Allocate the HeapRegion handler.
+ * 				Operator::new, allocated into native heap.
+ * 				os::malloc(). 
+ */
 HeapRegion* G1CollectedHeap::new_heap_region(uint hrs_index,
 																						 MemRegion mr) {
 	return new HeapRegion(hrs_index, bot(), mr);
@@ -2109,7 +2113,7 @@ void G1CollectedHeap::iterate_dirty_card_closure(CardTableEntryClosure* cl, uint
 	while (dcqs.apply_closure_during_gc(cl, worker_i)) {
 		n_completed_buffers++;
 	}
-	
+
 	g1_policy()->phase_times()->record_thread_work_item(G1GCPhaseTimes::UpdateRS, worker_i, n_completed_buffers, G1GCPhaseTimes::UpdateRSProcessedBuffers);
 	dcqs.clear_n_completed_buffers();   // Reset Mutator Global Mutator DirtyCard buffer size to 0.
 	assert(!dcqs.completed_buffers_exist_dirty(), "Completed buffers exist!");
@@ -3512,7 +3516,7 @@ public:
 			{
 				double start = os::elapsedTime();
 				G1ParEvacuateFollowersClosure evac(_g1h, pss, _queues, _terminator.terminator(), G1GCPhaseTimes::ObjCopy);
-				evac.do_void();				//[?] Drain the G1ParScanThreadState->_refs, the StarTask queue
+				evac.do_void();				// Drain the G1ParScanThreadState->_refs, the StarTask queue
 
 				evac_term_attempts = evac.term_attempts();
 				term_sec = evac.term_time();

@@ -322,7 +322,7 @@ bool HeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
 
 
 /**
- * Tag : Scan a specific card/MemRegion of this HeapRegion
+ * Tag : Scan a specific card(Dirty Card) of this HeapRegion
  *  
  * The real action of handling the oop is based on the Closure definition.
  * 

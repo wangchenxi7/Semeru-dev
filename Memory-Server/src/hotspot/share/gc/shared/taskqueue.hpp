@@ -108,10 +108,13 @@ protected:
   typedef NOT_LP64(uint16_t) LP64_ONLY(uint32_t) idx_t;
 
   // The first free element after the last one pushed (mod N).
-  volatile uint _bottom;
+  volatile uint _bottom;  // [?] points to the free item ?? I thought _top points to the first free item. 
 
   enum { MOD_N_MASK = N - 1 };
 
+  // Tag : Used for work stealing. 
+  // If other threads steal a elem by pop_global, _age.top++.
+  //
   class Age {
   public:
     Age(size_t data = 0)         { _data = data; }
@@ -135,10 +138,14 @@ protected:
     bool operator ==(const Age& other) const { return _data == other._data; }
 
   private:
+
+    // [?] What's the purpose of _top and _tag ?
+    //
     struct fields {
       idx_t _top;
       idx_t _tag;
     };
+
     union {
       size_t _data;
       fields _fields;
@@ -157,13 +164,19 @@ protected:
 
   // Returns a number in the range [0..N).  If the result is "N-1", it should be
   // interpreted as 0.
+  //
+  // [?] dirty_size means the pushed and not handled element size ??
+  //
   uint dirty_size(uint bot, uint top) const {
-    return (bot - top) & MOD_N_MASK;
+    return (bot - top) & MOD_N_MASK;    // -1 & MOD_N_MASK  = MOD_N_MASK (N-1).
   }
 
   // Returns the size corresponding to the given "bot" and "top".
+  //
+  // [?] Same with dirty_size, except for the boundary case. 
+  //
   uint size(uint bot, uint top) const {
-    uint sz = dirty_size(bot, top);
+    uint sz = dirty_size(bot, top);     // (_bottom - _top) & MOD_N_MASK
     // Has the queue "wrapped", so that bottom is less than top?  There's a
     // complicated special case here.  A pair of threads could perform pop_local
     // and pop_global operations concurrently, starting from a state in which
@@ -248,18 +261,18 @@ public:
 template <class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
 class GenericTaskQueue: public TaskQueueSuper<N, F> {
 protected:
-  typedef typename TaskQueueSuper<N, F>::Age Age;
-  typedef typename TaskQueueSuper<N, F>::idx_t idx_t;
+  typedef typename TaskQueueSuper<N, F>::Age Age;       // [?] What's the Age used for ?
+  typedef typename TaskQueueSuper<N, F>::idx_t idx_t;   // [?] purpose ?
 
   using TaskQueueSuper<N, F>::_bottom;
   using TaskQueueSuper<N, F>::_age;
   using TaskQueueSuper<N, F>::increment_index;
   using TaskQueueSuper<N, F>::decrement_index;
-  using TaskQueueSuper<N, F>::dirty_size;
+  using TaskQueueSuper<N, F>::dirty_size;         // [?] Definition of dirty ??
 
 public:
-  using TaskQueueSuper<N, F>::max_elems;
-  using TaskQueueSuper<N, F>::size;
+  using TaskQueueSuper<N, F>::max_elems;      // N-2, 2 slots are reserved for "complicated" reasons.
+  using TaskQueueSuper<N, F>::size;           // _top - _bottom ?
 
 #if  TASKQUEUE_STATS
   using TaskQueueSuper<N, F>::stats;
@@ -301,7 +314,7 @@ public:
 private:
   DEFINE_PAD_MINUS_SIZE(0, DEFAULT_CACHE_LINE_SIZE, 0);
   // Element array.
-  volatile E* _elems;
+  volatile E* _elems;       // The real content, buffer, of the GenericTaskQueue. 
 
   DEFINE_PAD_MINUS_SIZE(1, DEFAULT_CACHE_LINE_SIZE, sizeof(E*));
   // Queue owner local variables. Not to be accessed by other threads.
@@ -341,7 +354,7 @@ template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
 class OverflowTaskQueue: public GenericTaskQueue<E, F, N>
 {
 public:
-  typedef Stack<E, F>               overflow_t;
+  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size, N, limitation.
   typedef GenericTaskQueue<E, F, N> taskqueue_t;
 
   TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)

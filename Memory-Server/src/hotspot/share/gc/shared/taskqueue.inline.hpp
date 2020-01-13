@@ -75,12 +75,32 @@ bool GenericTaskQueue<E, F, N>::push_slow(E t, uint dirty_n_elems) {
   return false;
 }
 
+
+/**
+ * Tag : Push a elements into GenericTaskQueue
+ * 
+ * if dirty_n_elems < max_elems,   // N -2
+ *    push elem into _elem[_bottom]
+ *    _bottom++
+ * else
+ *    // push slow path 
+ *    if dirty_n_lemes == max_elems +1 // N-1
+ *      push elem into _elem[_bottom]
+ *      _bottom++
+ *    else
+ *      return false
+ *    
+ *    return false.
+ * 
+ *  [?]  the elements between _bottom and _age.top() are dirty ??
+ * 
+ */
 template<class E, MEMFLAGS F, unsigned int N> inline bool
 GenericTaskQueue<E, F, N>::push(E t) {
   uint localBot = _bottom;
   assert(localBot < N, "_bottom out of range.");
-  idx_t top = _age.top();
-  uint dirty_n_elems = dirty_size(localBot, top);
+  idx_t top = _age.top();         // _age.top ??
+  uint dirty_n_elems = dirty_size(localBot, top);       // [?] What's the definition of dirty elements ?
   assert(dirty_n_elems < N, "n_elems out of range.");
   if (dirty_n_elems < max_elems()) {
     // g++ complains if the volatile result of the assignment is
@@ -89,7 +109,7 @@ GenericTaskQueue<E, F, N>::push(E t) {
     // assignment.  However, casting to E& means that we trigger an
     // unused-value warning.  So, we cast the E& to void.
     (void) const_cast<E&>(_elems[localBot] = t);
-    OrderAccess::release_store(&_bottom, increment_index(localBot));
+    OrderAccess::release_store(&_bottom, increment_index(localBot));   // _bottom = (++localBot)
     TASKQUEUE_STATS_ONLY(stats.record_push());
     return true;
   } else {

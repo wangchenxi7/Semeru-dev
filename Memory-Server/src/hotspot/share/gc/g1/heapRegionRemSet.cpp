@@ -42,13 +42,24 @@
 const char* HeapRegionRemSet::_state_strings[] =  {"Untracked", "Updating", "Complete"};
 const char* HeapRegionRemSet::_short_state_strings[] =  {"UNTRA", "UPDAT", "CMPLT"};
 
+
+/**
+ * Tag : <Region_index, Card_bitmap> , each bit represents a card.
+ *  			This is the 2nd level of HeapRegion->RemSet.
+ * 	Space usage:
+ * 			e.g. For a 512MB region, 512 Bytes card, 1M bits are need. 128KB per CHeapBitMap.
+ * 	To next leve:
+ * 			[?] What's the condition of going to level#3, coarse_grained bitmap ?
+ * 	Search :			
+ * 			Regions are linked as a list. Search a Region is O(n).
+ */
 class PerRegionTable: public CHeapObj<mtGC> {
 	friend class OtherRegionsTable;
 	friend class HeapRegionRemSetIterator;
 
-	HeapRegion*     _hr;
-	CHeapBitMap     _bm;
-	jint            _occupied;
+	HeapRegion*     _hr;					// The source region
+	CHeapBitMap     _bm;					// The card bitmap for this region.
+	jint            _occupied;		// Number of bits (cards) marked.
 
 	// next pointer for free/allocated 'all' list
 	PerRegionTable* _next;

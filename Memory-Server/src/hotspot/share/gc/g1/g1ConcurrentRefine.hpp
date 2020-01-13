@@ -86,6 +86,13 @@ class G1ConcurrentRefine : public CHeapObj<mtGC> {
    *    machinery during a collection.
    * 2) green = 0. Means no caching. Can be a good way to minimize the
    *    amount of time spent updating remembered sets during a collection.
+   * 
+   * Semeru
+   * 
+   * [?] Is there any befenits to maintain a cache, [0, green_zone), of dirty cards in the G1BarrierSet->_dirty_card_queue_set ? 
+   *    
+   * [?] The size is counted by number of BufferNode ?
+   * 
    */
   size_t _green_zone;
   size_t _yellow_zone;
