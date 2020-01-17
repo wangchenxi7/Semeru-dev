@@ -758,7 +758,8 @@ CollectedHeap* Universe::create_heap() {
 }
 
 
-// Controlled by Java option : -X ?
+// Controlled by Java option : 
+// -XX:SemeruMemPoolMaxSize=#, -XX:SemeruMemPoolInitialSize=#,-XX:SemeruMemPoolAlignment=#.
 // Use the G1Argument to build the G1SemeruCollectedHeap.
 CollectedHeap* Universe::create_semeru_memory_pool(){
 	assert(_SemeruCollectedHeap == NULL, "Semeru memory pool already created.");
@@ -782,6 +783,8 @@ CollectedHeap* Universe::create_semeru_memory_pool(){
  * 
  */  
 jint Universe::initialize_heap() {
+
+	// [!]Build universe->_collectedHeap
 	_collectedHeap = create_heap();							 // 1) Build the arguments and policy for G1CollectedHeap.
 	jint status = _collectedHeap->initialize();  // 2) Allocate && Intialize the Java heap.
 	if (status != JNI_OK) {
@@ -799,7 +802,7 @@ jint Universe::initialize_heap() {
 		// Create the G1SemeruCollectedHeap policy and heap space.
 
 		// Semeru
-		// 1) Build the Semeru Colloctor Policy
+		// 1) [!!]Build the Semeru Colloctor Policy  : universe->_SemeruCollectedHeap
 		log_info(heap)("%s, Build the G1SemeruCollectorPolicy. \n",__func__);
 		_SemeruCollectedHeap	=	create_semeru_memory_pool();
 
@@ -969,7 +972,7 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 
 	// Now create the space.
 	// ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
-	char* heap_start_addr = (char*)0x7fef00000000;		// Not set the memory pool start address yet.
+	char* heap_start_addr = (char*)0x400000000000;		// Not set the memory pool start address yet.
 	ReservedHeapSpace total_rs(total_reserved, alignment, heap_start_addr);			// [X] Get virtual space from OS.
 
 	// ==> Reserve Java heap from OS successfully 

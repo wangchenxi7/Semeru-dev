@@ -29,6 +29,10 @@
 
 // ReservedSpace is a data structure for reserving a contiguous address range.
 // Just reserve it, need to commit it as VirtualSpace before using it.
+// 
+//  [?] During the Reserve, we need to use mmap() to reserve the virtual range.
+//      For commit, we need to use mmap to initialize this memory agian ?? 
+//
 class ReservedSpace {
   friend class VMStructs;
  protected:
@@ -39,7 +43,7 @@ class ReservedSpace {
   bool   _special;
   int    _fd_for_heap;      // [?] What's this for ?
  private:
-  bool   _executable;
+  bool   _executable;       // [?] For Reserved space, this is always false ?
 
   // ReservedSpace
   ReservedSpace(char* base, size_t size, size_t alignment, bool special,

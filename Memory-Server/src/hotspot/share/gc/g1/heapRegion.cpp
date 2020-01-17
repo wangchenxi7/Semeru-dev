@@ -336,8 +336,9 @@ void HeapRegion::clear_humongous() {
 /**
  * Tag : Initialize a HeapRegion
  * 
- * [?] Where to store this handler ?
- *  
+ * [x] All the HeapRegion, HeapRegionRemSet are CHeapObj, which will be allocated native buffer.
+ *     Check the operator new of CHeapObj.
+ * 
  */
 HeapRegion::HeapRegion(uint hrm_index,
                        G1BlockOffsetTable* bot,

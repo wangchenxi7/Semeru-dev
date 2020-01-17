@@ -51,7 +51,7 @@ private:
   MemRegion _reserved;
 
   // Array for keeping offsets for retrieving object start fast given an
-  // address.
+  // address.  // [?] What's the size for the array ??
   u_char* _offset_array;          // byte array keeping backwards offsets
 
   void check_offset(size_t offset, const char* msg) const {
@@ -83,13 +83,13 @@ public:
   // Return the number of slots needed for an offset array
   // that covers mem_region_words words.
   static size_t compute_size(size_t mem_region_words) {
-    size_t number_of_slots = (mem_region_words / BOTConstants::N_words);
-    return ReservedSpace::allocation_align_size_up(number_of_slots);
+    size_t number_of_slots = (mem_region_words / BOTConstants::N_words);   // e.g. 32GB heap.  4G words/64 words per block
+    return ReservedSpace::allocation_align_size_up(number_of_slots);       // 64M slots
   }
 
   // Returns how many bytes of the heap a single byte of the BOT corresponds to.
   static size_t heap_map_factor() {
-    return BOTConstants::N_bytes;
+    return BOTConstants::N_bytes;     // Same as card, 512 bytes per block.
   }
 
   // Initialize the Block Offset Table to cover the memory region passed
@@ -124,6 +124,7 @@ private:
   G1BlockOffsetTable* _bot;
 
   // The space that owns this subregion.
+  // Usually, this is a Region. A contiguous space.
   G1ContiguousSpace* _space;
 
   // Sets the entries

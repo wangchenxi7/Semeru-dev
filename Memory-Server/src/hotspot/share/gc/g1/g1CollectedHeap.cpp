@@ -1666,10 +1666,25 @@ static size_t actual_reserved_page_size(ReservedSpace rs) {
 	return page_size;
 }
 
+/**
+ * Tag : Calculating the mapping information between Region and Page for specific Reserved Space.
+ * 	
+ * Take bitmap allocation for eample. 
+ * It's invoked from G1CollectedHeap::initialize()
+ * 	Parameters:
+ *		size : the requested HeapWord size 
+ * 		translation_factor : a ratio, e.g. For bitmap, translation_factor means the ratior of  heap_size/bitmap_size = 64.
+ * 
+ * 	Under this scenario, we think the Region size is at least 64 pages. And then we can use 1 page for the bitmap.
+ * 	Because when we allocate any space, bitmap or for normal space, it should be page alignment.
+ * 
+ * 
+ */
 G1RegionToSpaceMapper* G1CollectedHeap::create_aux_memory_mapper(const char* description,
 																																 size_t size,
 																																 size_t translation_factor) {
 	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
+
 	// Allocate a new reserved space, preferring to use large pages.
 	ReservedSpace rs(size, preferred_page_size);
 	size_t page_size = actual_reserved_page_size(rs);

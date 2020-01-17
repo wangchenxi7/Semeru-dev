@@ -31,6 +31,10 @@
 class G1ConcurrentMark;
 class G1Policy;
 
+// Semeru
+class G1SemeruConcurrentMark;
+
+
 /**
  * The concurrent mark thread triggers the various steps of the concurrent marking
  * cycle, including various marking cleanup.
@@ -48,7 +52,6 @@ class G1Policy;
  * 
  * 
  */
-
 class G1ConcurrentMarkThread: public ConcurrentGCThread {
   friend class VMStructs;
 
@@ -80,6 +83,9 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
  public:
   // Constructor
   G1ConcurrentMarkThread(G1ConcurrentMark* cm);
+
+  // Semeru
+  G1ConcurrentMarkThread(G1SemeruConcurrentMark* cm);
 
   // Total virtual time so far for this thread and concurrent marking tasks.
   double vtime_accum();

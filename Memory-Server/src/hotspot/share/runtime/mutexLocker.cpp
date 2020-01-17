@@ -123,6 +123,10 @@ Mutex*   PerfDataManager_lock         = NULL;
 Mutex*   OopMapCacheAlloc_lock        = NULL;
 
 Mutex*   FreeList_lock                = NULL;
+
+// Semeru
+Mutex*   Semeru_FreeList_lock         = NULL;
+
 Mutex*   OldSets_lock                 = NULL;
 Monitor* RootRegionScan_lock          = NULL;
 
@@ -224,6 +228,10 @@ void mutex_init() {
     def(Shared_DirtyCardQ_lock     , PaddedMutex  , access + 1,  true,  Monitor::_safepoint_check_never);
 
     def(FreeList_lock              , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
+
+    // Semeru
+    def(Semeru_FreeList_lock       , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
+
     def(OldSets_lock               , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
     def(RootRegionScan_lock        , PaddedMonitor, leaf     ,   true,  Monitor::_safepoint_check_never);
 

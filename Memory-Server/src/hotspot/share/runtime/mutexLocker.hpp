@@ -126,6 +126,10 @@ extern Mutex*   ParkerFreeList_lock;
 extern Mutex*   OopMapCacheAlloc_lock;           // protects allocation of oop_map caches
 
 extern Mutex*   FreeList_lock;                   // protects the free region list during safepoints
+
+// Semeru
+extern Mutex*   Semeru_FreeList_lock;            // protects the semeru free region list during safepoints.
+
 extern Mutex*   OldSets_lock;                    // protects the old region sets
 extern Monitor* RootRegionScan_lock;             // used to notify that the CM threads have finished scanning the IM snapshot regions
 

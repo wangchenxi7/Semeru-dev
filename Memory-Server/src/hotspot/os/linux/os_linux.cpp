@@ -2644,10 +2644,14 @@ static void warn_fail_commit_memory(char* addr, size_t size,
 //       All it does is to check if there are enough free pages
 //       left at the time of mmap(). This could be a potential
 //       problem.
+//
+// [x] Commit memory means re-mmap memory range within the Reserved memory with flag MAP_FIXED.
+//     mmap with MAP_FIXED will override  the origial flag and protect domain.
+//
 int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
 	int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
 	uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
-																		 MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
+																		 MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);   // MAP_FIXED will override the old mapping ?
 	if (res != (uintptr_t) MAP_FAILED) {
 		if (UseNUMAInterleaving) {
 			numa_make_global(addr, size);
@@ -3226,12 +3230,12 @@ bool os::remove_stack_guard_pages(char* addr, size_t size) {
 /**
  * If 'fixed' is true, anon_mmap() will attempt to reserve anonymous memory
  * at 'requested_addr'. If there are existing memory mappings at the same
- * location, however, they will be overwritten. If 'fixed' is false,
+ * location, however, they will be overwritten. If 'fixed' is false,          // MAP_FIXED can overwritten existing memory mapping??
  * 'requested_addr' is only treated as a hint, the return value may or
  * may not start from the requested address. Unlike Linux mmap(), this
  * function returns NULL to indicate failure.
  * 
- * Tag : Jave get memory from OS to build its heap.
+ * Tag : Jave RESERVE memory from OS to build its heap.   // is this function only used for Reverse ? or also commit ?
  * 				The original version.
  */
 static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed) {
@@ -3384,7 +3388,7 @@ static int anon_munmap(char * addr, size_t size) {
 
 /**
  * Tag : Get virtual memory from OS at any start address.
- *  
+ *  		For reserve_memory, it should be PROR_NONE ?? but can't see any parameters here.
  */
 char* os::pd_reserve_memory(size_t bytes, char* requested_addr,
 														size_t alignment_hint) {

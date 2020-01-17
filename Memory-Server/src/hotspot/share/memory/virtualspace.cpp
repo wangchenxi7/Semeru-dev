@@ -55,6 +55,10 @@ ReservedSpace::ReservedSpace(size_t size, size_t preferred_page_size) : _fd_for_
     // since that will waste memory.
     alignment = os::vm_allocation_granularity();
   }
+
+  // [?] for the ReservedSpace, requested_addr is NULL,  executable is NULL ?
+  //      This reserved heap needs to be committed before being used ?
+  //
   initialize(size, alignment, large_pages, NULL, false);
 }
 
@@ -214,12 +218,12 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     //
     if (base == NULL) return;
 
-    // Check alignment constraints
+    // Check start address's alignment constraints
     if ((((size_t)base) & (alignment - 1)) != 0) {
       // Base not aligned, retry
       unmap_or_release_memory(base, size, _fd_for_heap != -1 /*is_file_mapped*/);
 
-      // Make sure that size is aligned
+      // Make sure that the start address is aligned
       size = align_up(size, alignment);
       base = os::reserve_memory_aligned(size, alignment, _fd_for_heap);
 

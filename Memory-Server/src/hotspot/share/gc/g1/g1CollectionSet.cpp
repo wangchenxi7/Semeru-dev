@@ -75,6 +75,35 @@ G1CollectionSet::G1CollectionSet(G1CollectedHeap* g1h, G1Policy* policy) :
 	_inc_predicted_elapsed_time_ms_diffs(0.0) {
 }
 
+// Semeru memory server
+G1CollectionSet::G1CollectionSet(G1SemeruCollectedHeap* g1h, G1Policy* policy) :
+	//_g1h(g1h),
+	_policy(policy),
+	_cset_chooser(new CollectionSetChooser()),
+	_eden_region_length(0),
+	_survivor_region_length(0),
+	_old_region_length(0),
+	_collection_set_regions(NULL),
+	_collection_set_cur_length(0),
+	_collection_set_max_length(0),
+	_optional_regions(NULL),
+	_optional_region_length(0),
+	_optional_region_max_length(0),
+	_bytes_used_before(0),
+	_recorded_rs_lengths(0),
+	_inc_build_state(Inactive),
+	_inc_bytes_used_before(0),
+	_inc_recorded_rs_lengths(0),
+	_inc_recorded_rs_lengths_diffs(0),
+	_inc_predicted_elapsed_time_ms(0.0),
+	_inc_predicted_elapsed_time_ms_diffs(0.0) {
+
+		//debug
+		printf("Warning in %s, please fix there. \n",__func__);
+
+}
+
+
 G1CollectionSet::~G1CollectionSet() {
 	if (_collection_set_regions != NULL) {
 		FREE_C_HEAP_ARRAY(uint, _collection_set_regions);

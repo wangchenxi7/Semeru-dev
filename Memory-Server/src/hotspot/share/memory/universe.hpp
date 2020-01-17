@@ -385,6 +385,9 @@ class Universe: AllStatic {
   // The particular choice of collected heap.
   static CollectedHeap* heap() { return _collectedHeap; }
 
+  // Semeru
+  static CollectedHeap* semeru_heap() { return _SemeruCollectedHeap; }
+
   // For UseCompressedOops
   // Narrow Oop encoding mode:
   // 0 - Use 32-bits oops without encoding when

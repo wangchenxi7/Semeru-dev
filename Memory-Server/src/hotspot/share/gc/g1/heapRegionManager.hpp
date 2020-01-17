@@ -32,6 +32,9 @@
 #include "gc/shared/collectorPolicy.hpp"
 #include "services/memoryUsage.hpp"
 
+// Semeru
+#include "gc/g1/g1SemeruCollectorPolicy.hpp"
+
 class HeapRegion;
 class HeapRegionClosure;
 class HeapRegionClaimer;
@@ -73,23 +76,25 @@ class G1HeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
 // 
 // [x] What's the difference between "commited regions" and "allocated regions" ?
 //    => Commited  : The heap size of current heap. 
-//                    For octupus, we limit the commited regions range for each Memory server heap.
-//    => Allocated : Regions which are allocated to young/old space. Resrved space.
+//                    For Semeru, we limit the commited regions range for each Memory server heap.
+//    => Allocated : Regions which are allocated to current Java heap. Resrved space.
+//  
+//    => Uncommited : When free a region, add it into the _free_list for reuse ?
 //
 // Overview:
-//    |--- Reserved regions --- | --- commited regions --- |----- Reserved regions  Xmx size of heap --- | 
+//    |--- Reserved regions --- | --- commited regions --- |----- Reserved regions  (Xmx size of heap) --- | 
 //
 class HeapRegionManager: public CHeapObj<mtGC> {
   friend class VMStructs;
   friend class HeapRegionClaimer;
 
-  G1RegionToSpaceMapper* _bot_mapper;
+  G1RegionToSpaceMapper* _bot_mapper;         // [?] What's the purpose of these Mapper ??
   G1RegionToSpaceMapper* _cardtable_mapper;
   G1RegionToSpaceMapper* _card_counts_mapper;
 
   // Each bit in this bitmap indicates that the corresponding region is available
   // for allocation.
-  CHeapBitMap _available_map;         // For the whole Reserved space, available bitmap for _regions.
+  CHeapBitMap _available_map;         // For the whole Reserved space.
 
    // The number of regions committed in the heap.
   uint _num_committed;
@@ -121,13 +126,15 @@ class HeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1HeapRegionTable _regions;                 // <region_index, heapRegion*> Get the HeapRegion management handler for the committed HeapRegions.
-  G1RegionToSpaceMapper* _heap_mapper;
-  G1RegionToSpaceMapper* _prev_bitmap_mapper;
+  G1HeapRegionTable _regions;                 // <region_index, heapRegion*>. Records for the whole reserved Java heap.
+  G1RegionToSpaceMapper* _heap_mapper;        
+  G1RegionToSpaceMapper* _prev_bitmap_mapper; //[?] Does the pre_bitmap have anything to do with the HeapRegion ?
   G1RegionToSpaceMapper* _next_bitmap_mapper;
-  FreeRegionList _free_list;                  // The committed free Regions. Each space request Region from this freelist.
+  FreeRegionList _free_list;                  // The un-committed free Regions.
 
-  // Semeru
+  // Semeru Memory Server 
+  //  [?] Each Semeru memory server only manages a range of regions of the Java heap 
+  //
   //G1HeapRegionTable   _semeru_regions;        
   //FreeRegionList      _semeru_free_list;
 
@@ -145,6 +152,7 @@ public:
   HeapRegionManager();
 
   static HeapRegionManager* create_manager(G1CollectedHeap* heap, G1CollectorPolicy* policy);
+
 
   virtual void initialize(G1RegionToSpaceMapper* heap_storage,
                           G1RegionToSpaceMapper* prev_bitmap,

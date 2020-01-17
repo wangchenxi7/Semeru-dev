@@ -28,10 +28,16 @@
 #include "gc/g1/g1BarrierSet.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.hpp"
 #include "gc/g1/g1CollectorState.hpp"
-#include "gc/g1/heapRegionManager.inline.hpp"
+//#include "gc/g1/heapRegionManager.inline.hpp"
 #include "gc/g1/heapRegionSet.inline.hpp"
 #include "gc/shared/taskqueue.inline.hpp"
 #include "runtime/orderAccess.hpp"
+
+
+// Semeru
+#include "gc/g1/SemeruHeapRegionManager.inline.hpp"
+
+
 
 // G1EvacStats* G1SemeruCollectedHeap::alloc_buffer_stats(InCSetState dest) {
 //   switch (dest.value()) {
@@ -54,10 +60,10 @@
 //   return MIN2(_humongous_object_threshold_in_words, gclab_word_size);
 // }
 
-// // Inline functions for G1SemeruCollectedHeap
+// Inline functions for G1SemeruCollectedHeap
 
-// // Return the region with the given index. It assumes the index is valid.
-// inline HeapRegion* G1SemeruCollectedHeap::region_at(uint index) const { return _hrm->at(index); }
+// Return the region with the given index. It assumes the index is valid.
+inline HeapRegion* G1SemeruCollectedHeap::region_at(uint index) const { return _hrm->at(index); }
 
 // Return the region with the given index, or NULL if unmapped. It assumes the index is valid.
 inline HeapRegion* G1SemeruCollectedHeap::region_at_or_null(uint index) const { return _hrm->at_or_null(index); }
@@ -66,16 +72,16 @@ inline HeapRegion* G1SemeruCollectedHeap::region_at_or_null(uint index) const { 
 //   return _hrm->next_region_in_humongous(hr);
 // }
 
-// inline uint G1SemeruCollectedHeap::addr_to_region(HeapWord* addr) const {
-//   assert(is_in_reserved(addr),
-//          "Cannot calculate region index for address " PTR_FORMAT " that is outside of the heap [" PTR_FORMAT ", " PTR_FORMAT ")",
-//          p2i(addr), p2i(reserved_region().start()), p2i(reserved_region().end()));
-//   return (uint)(pointer_delta(addr, reserved_region().start(), sizeof(uint8_t)) >> HeapRegion::LogOfHRGrainBytes);
-// }
+inline uint G1SemeruCollectedHeap::addr_to_region(HeapWord* addr) const {
+  assert(is_in_reserved(addr),
+         "Cannot calculate region index for address " PTR_FORMAT " that is outside of the heap [" PTR_FORMAT ", " PTR_FORMAT ")",
+         p2i(addr), p2i(reserved_region().start()), p2i(reserved_region().end()));
+  return (uint)(pointer_delta(addr, reserved_region().start(), sizeof(uint8_t)) >> HeapRegion::SemeruLogOfHRGrainBytes);
+}
 
-// inline HeapWord* G1SemeruCollectedHeap::bottom_addr_for_region(uint index) const {
-//   return _hrm->reserved().start() + index * HeapRegion::GrainWords;
-// }
+inline HeapWord* G1SemeruCollectedHeap::bottom_addr_for_region(uint index) const {
+  return _hrm->reserved().start() + index * HeapRegion::SemeruGrainWords;
+}
 
 template <class T>
 inline HeapRegion* G1SemeruCollectedHeap::heap_region_containing(const T addr) const {
@@ -243,12 +249,12 @@ bool G1SemeruCollectedHeap::is_in_cset_or_humongous(const oop obj) {
 //   return heap_region_containing(obj)->is_young();
 // }
 
-// inline bool G1SemeruCollectedHeap::is_obj_dead(const oop obj) const {
-//   if (obj == NULL) {
-//     return false;
-//   }
-//   return is_obj_dead(obj, heap_region_containing(obj));
-// }
+inline bool G1SemeruCollectedHeap::is_obj_dead(const oop obj) const {
+  if (obj == NULL) {
+    return false;
+  }
+  return is_obj_dead(obj, heap_region_containing(obj));
+}
 
 inline bool G1SemeruCollectedHeap::is_obj_ill(const oop obj) const {
   if (obj == NULL) {

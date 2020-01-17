@@ -40,16 +40,20 @@ class G1MappingChangedListener {
   virtual void on_commit(uint start_idx, size_t num_regions, bool zero_filled) = 0;
 };
 
-// Maps region based commit/uncommit requests to the underlying page sized virtual
-// space.
+/**
+ * Maps region based commit/uncommit requests to the underlying page sized virtual space.
+ * 
+ * Tag : purpose ? Map HeapRegion to the ReversedSpace ?
+ * 
+ */ 
 class G1RegionToSpaceMapper : public CHeapObj<mtGC> {
  private:
   G1MappingChangedListener* _listener;
  protected:
   // Backing storage.
-  G1PageBasedVirtualSpace _storage;
+  G1PageBasedVirtualSpace _storage;   // page based ?
 
-  size_t _region_granularity;
+  size_t _region_granularity;         // region size ?? duplicated with HeapRegion::GrainBytes ?
   // Mapping management
   CHeapBitMap _commit_map;
 

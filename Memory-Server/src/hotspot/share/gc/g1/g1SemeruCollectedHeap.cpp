@@ -31,7 +31,6 @@
 #include "gc/g1/g1Allocator.inline.hpp"
 #include "gc/g1/g1Allocator.hpp"
 #include "gc/g1/g1BarrierSet.hpp"
-#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1CollectionSet.hpp"
 //#include "gc/g1/g1CollectorPolicy.hpp"
 #include "gc/g1/g1CollectorState.hpp"
@@ -97,6 +96,11 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/stack.inline.hpp"
 
+// Semeru
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
+#include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.hpp"
+
 size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 
 // // INVARIANTS/NOTES
@@ -145,21 +149,21 @@ size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 // };
 
 
-// void G1SemeruRegionMappingChangedListener::reset_from_card_cache(uint start_idx, size_t num_regions) {
-// 	HeapRegionRemSet::invalidate_from_card_cache(start_idx, num_regions);
-// }
+void G1SemeruRegionMappingChangedListener::reset_from_card_cache(uint start_idx, size_t num_regions) {
+	HeapRegionRemSet::invalidate_from_card_cache(start_idx, num_regions);
+}
 
-// void G1SemeruRegionMappingChangedListener::on_commit(uint start_idx, size_t num_regions, bool zero_filled) {
-// 	// The from card cache is not the memory that is actually committed. So we cannot
-// 	// take advantage of the zero_filled parameter.
-// 	reset_from_card_cache(start_idx, num_regions);
-// }
+void G1SemeruRegionMappingChangedListener::on_commit(uint start_idx, size_t num_regions, bool zero_filled) {
+	// The from card cache is not the memory that is actually committed. So we cannot
+	// take advantage of the zero_filled parameter.
+	reset_from_card_cache(start_idx, num_regions);
+}
 
 
-// HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
-// 																						 MemRegion mr) {
-// 	return new HeapRegion(hrs_index, bot(), mr);
-// }
+HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
+																						 MemRegion mr) {
+	return new HeapRegion(hrs_index, bot(), mr);
+}
 
 // //  Private methods.
 
@@ -334,15 +338,15 @@ size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 // }
 
 
-// /** 
-//  * Tag : Calculate the needed Region number.     
-//  * 
-//  * 
-//  */
-// size_t G1SemeruCollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
-// 	assert(is_humongous(word_size), "Object of size " SIZE_FORMAT " must be humongous here", word_size);
-// 	return align_up(word_size, HeapRegion::GrainWords) / HeapRegion::GrainWords;
-// }
+/** 
+ * Tag : Calculate the needed Region number.     
+ * 
+ * 
+ */
+size_t G1SemeruCollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
+	assert(is_humongous(word_size), "Object of size " SIZE_FORMAT " must be humongous here", word_size);
+	return align_up(word_size, HeapRegion::GrainWords) / HeapRegion::GrainWords;
+}
 
 // // If could fit into free regions w/o expansion, try.
 // // Otherwise, if can expand, do so.
@@ -1232,85 +1236,85 @@ void G1SemeruCollectedHeap::do_full_collection(bool clear_all_soft_refs) {
 																	clear_all_soft_refs);
 }
 
-// void G1SemeruCollectedHeap::resize_heap_if_necessary() {
-// 	assert_at_safepoint_on_vm_thread();
+void G1SemeruCollectedHeap::resize_heap_if_necessary() {
+	assert_at_safepoint_on_vm_thread();
 
-// 	// Capacity, free and used after the GC counted as full regions to
-// 	// include the waste in the following calculations.
-// 	const size_t capacity_after_gc = capacity();
-// 	const size_t used_after_gc = capacity_after_gc - unused_committed_regions_in_bytes();
+	// Capacity, free and used after the GC counted as full regions to
+	// include the waste in the following calculations.
+	const size_t capacity_after_gc = capacity();
+	const size_t used_after_gc = capacity_after_gc - unused_committed_regions_in_bytes();
 
-// 	// This is enforced in arguments.cpp.
-// 	assert(MinHeapFreeRatio <= MaxHeapFreeRatio,
-// 				 "otherwise the code below doesn't make sense");
+	// This is enforced in arguments.cpp.
+	assert(MinHeapFreeRatio <= MaxHeapFreeRatio,
+				 "otherwise the code below doesn't make sense");
 
-// 	// We don't have floating point command-line arguments
-// 	const double minimum_free_percentage = (double) MinHeapFreeRatio / 100.0;
-// 	const double maximum_used_percentage = 1.0 - minimum_free_percentage;
-// 	const double maximum_free_percentage = (double) MaxHeapFreeRatio / 100.0;
-// 	const double minimum_used_percentage = 1.0 - maximum_free_percentage;
+	// We don't have floating point command-line arguments
+	const double minimum_free_percentage = (double) MinHeapFreeRatio / 100.0;
+	const double maximum_used_percentage = 1.0 - minimum_free_percentage;
+	const double maximum_free_percentage = (double) MaxHeapFreeRatio / 100.0;
+	const double minimum_used_percentage = 1.0 - maximum_free_percentage;
 
-// 	const size_t min_heap_size = collector_policy()->min_heap_byte_size();
-// 	const size_t max_heap_size = collector_policy()->max_heap_byte_size();
+	const size_t min_heap_size = collector_policy()->min_heap_byte_size();
+	const size_t max_heap_size = collector_policy()->max_heap_byte_size();
 
-// 	// We have to be careful here as these two calculations can overflow
-// 	// 32-bit size_t's.
-// 	double used_after_gc_d = (double) used_after_gc;
-// 	double minimum_desired_capacity_d = used_after_gc_d / maximum_used_percentage;
-// 	double maximum_desired_capacity_d = used_after_gc_d / minimum_used_percentage;
+	// We have to be careful here as these two calculations can overflow
+	// 32-bit size_t's.
+	double used_after_gc_d = (double) used_after_gc;
+	double minimum_desired_capacity_d = used_after_gc_d / maximum_used_percentage;
+	double maximum_desired_capacity_d = used_after_gc_d / minimum_used_percentage;
 
-// 	// Let's make sure that they are both under the max heap size, which
-// 	// by default will make them fit into a size_t.
-// 	double desired_capacity_upper_bound = (double) max_heap_size;
-// 	minimum_desired_capacity_d = MIN2(minimum_desired_capacity_d,
-// 																		desired_capacity_upper_bound);
-// 	maximum_desired_capacity_d = MIN2(maximum_desired_capacity_d,
-// 																		desired_capacity_upper_bound);
+	// Let's make sure that they are both under the max heap size, which
+	// by default will make them fit into a size_t.
+	double desired_capacity_upper_bound = (double) max_heap_size;
+	minimum_desired_capacity_d = MIN2(minimum_desired_capacity_d,
+																		desired_capacity_upper_bound);
+	maximum_desired_capacity_d = MIN2(maximum_desired_capacity_d,
+																		desired_capacity_upper_bound);
 
-// 	// We can now safely turn them into size_t's.
-// 	size_t minimum_desired_capacity = (size_t) minimum_desired_capacity_d;
-// 	size_t maximum_desired_capacity = (size_t) maximum_desired_capacity_d;
+	// We can now safely turn them into size_t's.
+	size_t minimum_desired_capacity = (size_t) minimum_desired_capacity_d;
+	size_t maximum_desired_capacity = (size_t) maximum_desired_capacity_d;
 
-// 	// This assert only makes sense here, before we adjust them
-// 	// with respect to the min and max heap size.
-// 	assert(minimum_desired_capacity <= maximum_desired_capacity,
-// 				 "minimum_desired_capacity = " SIZE_FORMAT ", "
-// 				 "maximum_desired_capacity = " SIZE_FORMAT,
-// 				 minimum_desired_capacity, maximum_desired_capacity);
+	// This assert only makes sense here, before we adjust them
+	// with respect to the min and max heap size.
+	assert(minimum_desired_capacity <= maximum_desired_capacity,
+				 "minimum_desired_capacity = " SIZE_FORMAT ", "
+				 "maximum_desired_capacity = " SIZE_FORMAT,
+				 minimum_desired_capacity, maximum_desired_capacity);
 
-// 	// Should not be greater than the heap max size. No need to adjust
-// 	// it with respect to the heap min size as it's a lower bound (i.e.,
-// 	// we'll try to make the capacity larger than it, not smaller).
-// 	minimum_desired_capacity = MIN2(minimum_desired_capacity, max_heap_size);
-// 	// Should not be less than the heap min size. No need to adjust it
-// 	// with respect to the heap max size as it's an upper bound (i.e.,
-// 	// we'll try to make the capacity smaller than it, not greater).
-// 	maximum_desired_capacity =  MAX2(maximum_desired_capacity, min_heap_size);
+	// Should not be greater than the heap max size. No need to adjust
+	// it with respect to the heap min size as it's a lower bound (i.e.,
+	// we'll try to make the capacity larger than it, not smaller).
+	minimum_desired_capacity = MIN2(minimum_desired_capacity, max_heap_size);
+	// Should not be less than the heap min size. No need to adjust it
+	// with respect to the heap max size as it's an upper bound (i.e.,
+	// we'll try to make the capacity smaller than it, not greater).
+	maximum_desired_capacity =  MAX2(maximum_desired_capacity, min_heap_size);
 
-// 	if (capacity_after_gc < minimum_desired_capacity) {
-// 		// Don't expand unless it's significant
-// 		size_t expand_bytes = minimum_desired_capacity - capacity_after_gc;
+	if (capacity_after_gc < minimum_desired_capacity) {
+		// Don't expand unless it's significant
+		size_t expand_bytes = minimum_desired_capacity - capacity_after_gc;
 
-// 		log_debug(gc, ergo, heap)("Attempt heap expansion (capacity lower than min desired capacity). "
-// 															"Capacity: " SIZE_FORMAT "B occupancy: " SIZE_FORMAT "B live: " SIZE_FORMAT "B "
-// 															"min_desired_capacity: " SIZE_FORMAT "B (" UINTX_FORMAT " %%)",
-// 															capacity_after_gc, used_after_gc, used(), minimum_desired_capacity, MinHeapFreeRatio);
+		log_debug(gc, ergo, heap)("Attempt heap expansion (capacity lower than min desired capacity). "
+															"Capacity: " SIZE_FORMAT "B occupancy: " SIZE_FORMAT "B live: " SIZE_FORMAT "B "
+															"min_desired_capacity: " SIZE_FORMAT "B (" UINTX_FORMAT " %%)",
+															capacity_after_gc, used_after_gc, used(), minimum_desired_capacity, MinHeapFreeRatio);
 
-// 		expand(expand_bytes, _workers);
+		expand(expand_bytes, _workers);
 
-// 		// No expansion, now see if we want to shrink
-// 	} else if (capacity_after_gc > maximum_desired_capacity) {
-// 		// Capacity too large, compute shrinking size
-// 		size_t shrink_bytes = capacity_after_gc - maximum_desired_capacity;
+		// No expansion, now see if we want to shrink
+	} else if (capacity_after_gc > maximum_desired_capacity) {
+		// Capacity too large, compute shrinking size
+		size_t shrink_bytes = capacity_after_gc - maximum_desired_capacity;
 
-// 		log_debug(gc, ergo, heap)("Attempt heap shrinking (capacity higher than max desired capacity). "
-// 															"Capacity: " SIZE_FORMAT "B occupancy: " SIZE_FORMAT "B live: " SIZE_FORMAT "B "
-// 															"maximum_desired_capacity: " SIZE_FORMAT "B (" UINTX_FORMAT " %%)",
-// 															capacity_after_gc, used_after_gc, used(), maximum_desired_capacity, MaxHeapFreeRatio);
+		log_debug(gc, ergo, heap)("Attempt heap shrinking (capacity higher than max desired capacity). "
+															"Capacity: " SIZE_FORMAT "B occupancy: " SIZE_FORMAT "B live: " SIZE_FORMAT "B "
+															"maximum_desired_capacity: " SIZE_FORMAT "B (" UINTX_FORMAT " %%)",
+															capacity_after_gc, used_after_gc, used(), maximum_desired_capacity, MaxHeapFreeRatio);
 
-// 		shrink(shrink_bytes);
-// 	}
-// }
+		shrink(shrink_bytes);
+	}
+}
 
 // HeapWord* G1SemeruCollectedHeap::satisfy_failed_allocation_helper(size_t word_size,
 // 																														bool do_gc,
@@ -1416,51 +1420,51 @@ void G1SemeruCollectedHeap::do_full_collection(bool clear_all_soft_refs) {
 // 	return NULL;
 // }
 
-// /**
-//  * Tag : expand current heap until reach the limits setted by -Xmx#G/M/K
-//  * 
-//  * Inital size is setted by -Xms, the reserved size is setted by -Xmx.
-//  * 
-//  */
-// bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_workers, double* expand_time_ms) {
-// 	size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);	// Frist align up to page size.
-// 	aligned_expand_bytes = align_up(aligned_expand_bytes,
-// 																			 HeapRegion::GrainBytes);  // Second, align up to Regions size. 
+/**
+ * Tag : expand and commmit current heap until reach the limits setted by -Xmx#G/M/K
+ * 
+ * 		Inital committed size is setted by -Xms, the reserved size is setted by -Xmx.
+ *  	Initialize the HeapRegion management at the same time.
+ */
+bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_workers, double* expand_time_ms) {
+	size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);	// Frist align up to page size.
+	aligned_expand_bytes = align_up(aligned_expand_bytes,
+																			 HeapRegion::SemeruGrainBytes);  // Second, align up to Regions size. 
 
-// 	log_debug(gc, ergo, heap)("Expand the heap. requested expansion amount: " SIZE_FORMAT "B expansion amount: " SIZE_FORMAT "B",
-// 														expand_bytes, aligned_expand_bytes);
+	log_debug(gc, ergo, heap)("Expand the heap. requested expansion amount: " SIZE_FORMAT "B expansion amount: " SIZE_FORMAT "B",
+														expand_bytes, aligned_expand_bytes);
 
-// 	if (is_maximal_no_gc()) {
-// 		log_debug(gc, ergo, heap)("Did not expand the heap (heap already fully expanded)");
-// 		return false;
-// 	}
+	if (is_maximal_no_gc()) {
+		log_debug(gc, ergo, heap)("Did not expand the heap (heap already fully expanded)");
+		return false;
+	}
 
-// 	double expand_heap_start_time_sec = os::elapsedTime();
-// 	uint regions_to_expand = (uint)(aligned_expand_bytes / HeapRegion::GrainBytes);  // Expanding Region numbers.
-// 	assert(regions_to_expand > 0, "Must expand by at least one region");
+	double expand_heap_start_time_sec = os::elapsedTime();
+	uint regions_to_expand = (uint)(aligned_expand_bytes / HeapRegion::SemeruGrainBytes);  // Expanding Region numbers.
+	assert(regions_to_expand > 0, "Must expand by at least one region");
 
-// 	uint expanded_by = _hrm->expand_by(regions_to_expand, pretouch_workers);					// Do the expansion operation.
-// 	if (expand_time_ms != NULL) {
-// 		*expand_time_ms = (os::elapsedTime() - expand_heap_start_time_sec) * MILLIUNITS;
-// 	}
+	uint expanded_by = _hrm->expand_by(regions_to_expand, pretouch_workers);					// Do the expansion operation.
+	if (expand_time_ms != NULL) {
+		*expand_time_ms = (os::elapsedTime() - expand_heap_start_time_sec) * MILLIUNITS;
+	}
 
-// 	if (expanded_by > 0) {
-// 		size_t actual_expand_bytes = expanded_by * HeapRegion::GrainBytes;
-// 		assert(actual_expand_bytes <= aligned_expand_bytes, "post-condition");
-// 		g1_policy()->record_new_heap_size(num_regions());
-// 	} else {
-// 		log_debug(gc, ergo, heap)("Did not expand the heap (heap expansion operation failed)");
+	if (expanded_by > 0) {
+		size_t actual_expand_bytes = expanded_by * HeapRegion::GrainBytes;
+		assert(actual_expand_bytes <= aligned_expand_bytes, "post-condition");
+		g1_policy()->record_new_heap_size(num_regions());
+	} else {
+		log_debug(gc, ergo, heap)("Did not expand the heap (heap expansion operation failed)");
 
-// 		// The expansion of the virtual storage space was unsuccessful.
-// 		// Let's see if it was because we ran out of swap.
-// 		if (G1ExitOnExpansionFailure &&
-// 				_hrm->available() >= regions_to_expand) {
-// 			// We had head room...
-// 			vm_exit_out_of_memory(aligned_expand_bytes, OOM_MMAP_ERROR, "G1 heap expansion");
-// 		}
-// 	}
-// 	return regions_to_expand > 0;
-// }
+		// The expansion of the virtual storage space was unsuccessful.
+		// Let's see if it was because we ran out of swap.
+		if (G1ExitOnExpansionFailure &&
+				_hrm->available() >= regions_to_expand) {
+			// We had head room...
+			vm_exit_out_of_memory(aligned_expand_bytes, OOM_MMAP_ERROR, "G1 heap expansion");
+		}
+	}
+	return regions_to_expand > 0;
+}
 
 // void G1SemeruCollectedHeap::shrink_helper(size_t shrink_bytes) {
 // 	size_t aligned_shrink_bytes =
@@ -1482,24 +1486,28 @@ void G1SemeruCollectedHeap::do_full_collection(bool clear_all_soft_refs) {
 // 	}
 // }
 
-// void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
-// 	_verifier->verify_region_sets_optional();
+void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
+	
+	// Error
+	printf("Error in %s, please fix this.\n",__func__);
 
-// 	// We should only reach here at the end of a Full GC or during Remark which
-// 	// means we should not not be holding to any GC alloc regions. The method
-// 	// below will make sure of that and do any remaining clean up.
-// 	_allocator->abandon_gc_alloc_regions();
+	// _verifier->verify_region_sets_optional();
 
-// 	// Instead of tearing down / rebuilding the free lists here, we
-// 	// could instead use the remove_all_pending() method on free_list to
-// 	// remove only the ones that we need to remove.
-// 	tear_down_region_sets(true /* free_list_only */);
-// 	shrink_helper(shrink_bytes);
-// 	rebuild_region_sets(true /* free_list_only */);
+	// // We should only reach here at the end of a Full GC or during Remark which
+	// // means we should not not be holding to any GC alloc regions. The method
+	// // below will make sure of that and do any remaining clean up.
+	// _allocator->abandon_gc_alloc_regions();
 
-// 	_hrm->verify_optional();
-// 	_verifier->verify_region_sets_optional();
-// }
+	// // Instead of tearing down / rebuilding the free lists here, we
+	// // could instead use the remove_all_pending() method on free_list to
+	// // remove only the ones that we need to remove.
+	// tear_down_region_sets(true /* free_list_only */);
+	// shrink_helper(shrink_bytes);
+	// rebuild_region_sets(true /* free_list_only */);
+
+	// _hrm->verify_optional();
+	// _verifier->verify_region_sets_optional();
+}
 
 // class OldRegionSetChecker : public HeapRegionSetChecker {
 // public:
@@ -1572,15 +1580,19 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 	_collector_policy(collector_policy),
 	_card_table(NULL),
 	_soft_ref_policy(),
+	_bot(NULL),				// BlockOffetTable, records the first object's offet for each object.
+	_listener(),
 	_hrm(NULL),
 	_allocator(NULL),
 	_verifier(NULL),
 	_summary_bytes_used(0),
+	_collector_state(),
  	_eden(),
  	_survivor(),
 	_gc_timer_stw(new (ResourceObj::C_HEAP, mtGC) STWGCTimer()),
 	_g1_policy(G1Policy::create_policy(collector_policy, _gc_timer_stw)),
 	_heap_sizing_policy(NULL),
+	_collection_set(this, _g1_policy),
 	_g1_rem_set(NULL),
 	_ref_processor_stw(NULL),
  	_is_alive_closure_stw(this),
@@ -1588,11 +1600,38 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 	_ref_processor_cm(NULL),
 	_is_alive_closure_cm(this),
  	_is_subject_to_discovery_cm(this),
-	 _in_cset_fast_test() {
+	_in_cset_fast_test() {
 
-		_humongous_object_threshold_in_words = humongous_threshold_for(HeapRegion::GrainWords);
+ //	_verifier = new G1HeapVerifier(this);   //[?] Need to make it support semeru
 
-		 tty->print("%s, a fake constructor. \n", __func__);
+ //	_allocator = new G1Allocator(this);			//[?] Need to make it support semeru
+
+ //	_heap_sizing_policy = G1HeapSizingPolicy::create(this, _g1_policy->analytics());  //[?] Need to make it support semeru
+
+ 	_humongous_object_threshold_in_words = humongous_threshold_for(HeapRegion::GrainWords);
+
+// 	// Override the default _filler_array_max_size so that no humongous filler
+// 	// objects are created.
+// 	_filler_array_max_size = _humongous_object_threshold_in_words;
+
+// 	uint n_queues = ParallelGCThreads;
+// 	_task_queues = new RefToScanQueueSet(n_queues);
+
+// 	_evacuation_failed_info_array = NEW_C_HEAP_ARRAY(EvacuationFailedInfo, n_queues, mtGC);
+
+// 	for (uint i = 0; i < n_queues; i++) {
+// 		RefToScanQueue* q = new RefToScanQueue();
+// 		q->initialize();
+// 		_task_queues->register_queue(i, q);
+// 		::new (&_evacuation_failed_info_array[i]) EvacuationFailedInfo();
+// 	}
+
+// 	// Initialize the G1EvacuationFailureALot counters and flags.
+// 	NOT_PRODUCT(reset_evacuation_should_fail();)
+
+// 	guarantee(_task_queues != NULL, "task_queues allocation failure.");
+
+		tty->print("%s, a fake constructor. \n", __func__);
 }
 
 // G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_policy) :
@@ -1682,46 +1721,65 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 // 	guarantee(_task_queues != NULL, "task_queues allocation failure.");
 // }
 
-// static size_t actual_reserved_page_size(ReservedSpace rs) {
-// 	size_t page_size = os::vm_page_size();
-// 	if (UseLargePages) {
-// 		// There are two ways to manage large page memory.
-// 		// 1. OS supports committing large page memory.
-// 		// 2. OS doesn't support committing large page memory so ReservedSpace manages it.
-// 		//    And ReservedSpace calls it 'special'. If we failed to set 'special',
-// 		//    we reserved memory without large page.
-// 		if (os::can_commit_large_page_memory() || rs.special()) {
-// 			page_size = rs.alignment();
-// 		}
-// 	}
+/**
+ * Tag : Check the page size of current reserved heap, 4k or huge page.
+ * 		   For current static function, it's limited in current usespace.  
+ */
+static size_t actual_reserved_page_size(ReservedSpace rs) {
+	size_t page_size = os::vm_page_size();
+	if (UseLargePages) {
+		// There are two ways to manage large page memory.
+		// 1. OS supports committing large page memory.
+		// 2. OS doesn't support committing large page memory so ReservedSpace manages it.
+		//    And ReservedSpace calls it 'special'. If we failed to set 'special',
+		//    we reserved memory without large page.
+		if (os::can_commit_large_page_memory() || rs.special()) {
+			page_size = rs.alignment();
+		}
+	}
 
-// 	return page_size;
-// }
+	return page_size;
+}
 
-// G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const char* description,
-// 																																 size_t size,
-// 																																 size_t translation_factor) {
-// 	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
-// 	// Allocate a new reserved space, preferring to use large pages.
-// 	ReservedSpace rs(size, preferred_page_size);
-// 	size_t page_size = actual_reserved_page_size(rs);
-// 	G1RegionToSpaceMapper* result  =
-// 		G1RegionToSpaceMapper::create_mapper(rs,
-// 																				 size,
-// 																				 page_size,
-// 																				 HeapRegion::GrainBytes,
-// 																				 translation_factor,
-// 																				 mtGC);
+/**
+ * Tag : Create the mapping between JVM's Region and OS's Page for a specific structure.
+ *  		 So everytime we commit a Region, 
+ * 			 the mapper translates the committed Region size to needed page size for this structure.
+ * 		
+ * [x] This mapping is for the auxiliary structure, Le's take the G1BlockOffsetTable for example. 
+ * 		First, reserve space for the G1BlockOffsetTable according to the size of Heap size.
+ * 						1 byte of G1BlockOffsetTable can cover one card. So, the translation_factor is 512.
+ * 		Second, the Java heap is allocated in Region granularity, 1GB.
+ * 		Third, calculate the mapping  for Region and page for BOT. 
+ * 					 1 GB / 512 bytes = 2M cards
+ * 					 1 byte per card, 2M bytes 
+ * 					 For 4K page, it needs 256 pages.
+ * 					 Finally, for this structure, allocate  256 pages per Region. 
+ */
+G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const char* description,
+																																 size_t size,
+																																 size_t translation_factor) {
+	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
+	// Allocate a new reserved space, preferring to use large pages.
+	ReservedSpace rs(size, preferred_page_size);					// [?] Reserve space for the auxiliary structure.
+	size_t page_size = actual_reserved_page_size(rs);
+	G1RegionToSpaceMapper* result  =
+		G1RegionToSpaceMapper::create_mapper(rs,
+																				 size,
+																				 page_size,
+																				 HeapRegion::SemeruGrainBytes,
+																				 translation_factor,
+																				 mtGC);
 
-// 	os::trace_page_sizes_for_requested_size(description,
-// 																					size,
-// 																					preferred_page_size,
-// 																					page_size,
-// 																					rs.base(),
-// 																					rs.size());
+	os::trace_page_sizes_for_requested_size(description,
+																					size,
+																					preferred_page_size,
+																					page_size,
+																					rs.base(),
+																					rs.size());
 
-// 	return result;
-// }
+	return result;
+}
 
 // jint G1SemeruCollectedHeap::initialize_concurrent_refinement() {
 // 	jint ecode = JNI_OK;
@@ -1805,21 +1863,35 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 																								 									heap_alignment);
 
 	
-	//log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
+	#ifdef ASSERT
+		log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
+	#endif
 
 	initialize_reserved_memory_pool((HeapWord*)heap_rs.base(), (HeapWord*)(heap_rs.base() + heap_rs.size()));
 
-	//debug
-	return JNI_OK;
+	//debug - Code passed here.
+	//return JNI_OK;
+
+	// Semeru Memory Server - Write Barrier
+	// Memory Server doesn't need to Write Barrier mechanism.
+	// 1) Applications only run on CPU server. 
+	// All the cross-region references produced by applications are recoreded in CPU server's Write Barrier.
+	// 2) Memory server's compaction can produce new cross-region references. Send these information back to CPU and CPU server update RemSet. 
+	// 		Because all the Regions' RemSet are stored in CPU server.
+	//
 
 	// Create the barrier set for the entire reserved region.
-	G1CardTable* ct = new G1CardTable(reserved_region());     // c++ new ? or override operator ?
-	ct->initialize();
-	G1BarrierSet* bs = new G1BarrierSet(ct);
-	bs->initialize();
-	assert(bs->is_a(BarrierSet::G1BarrierSet), "sanity");
-	BarrierSet::set_barrier_set(bs);
-	_card_table = ct;
+	//G1CardTable* ct = new G1CardTable(reserved_region());     // c++ new ? or override operator ?
+	//ct->initialize();
+	//G1BarrierSet* bs = new G1BarrierSet(ct);
+	//bs->initialize();
+	//assert(bs->is_a(BarrierSet::G1BarrierSet), "sanity");
+	//BarrierSet::set_barrier_set(bs);
+	//_card_table = ct;	   // Semeru compaction doesn't need to update the RemSet. Let CPU server do this.
+
+
+	// Semeru Memory Server - SATB Buffer, Pre-Write Barrier. 
+	// satb buffer is only maintained by CPU server.
 
 // 	G1BarrierSet::satb_mark_queue_set().initialize(this,
 // 																								 SATB_Q_CBL_mon,
@@ -1842,59 +1914,85 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 	// Create the hot card cache.
 // 	_hot_card_cache = new G1HotCardCache(this);
 
-// 	// Carve out the G1 part of the heap.
-// 	ReservedSpace g1_rs = heap_rs.first_part(max_byte_size);
-// 	size_t page_size = actual_reserved_page_size(heap_rs);
-// 	G1RegionToSpaceMapper* heap_storage =
-// 		G1RegionToSpaceMapper::create_heap_mapper(g1_rs,
-// 																							g1_rs.size(),
-// 																							page_size,
-// 																							HeapRegion::GrainBytes,
-// 																							1,
-// 																							mtJavaHeap);
-// 	if(heap_storage == NULL) {
-// 		vm_shutdown_during_initialization("Could not initialize G1 heap");
-// 		return JNI_ERR;
-// 	}
-
-// 	os::trace_page_sizes("Heap",
-// 											 collector_policy()->min_heap_byte_size(),
-// 											 max_byte_size,
-// 											 page_size,
-// 											 heap_rs.base(),
-// 											 heap_rs.size());
-// 	heap_storage->set_mapping_changed_listener(&_listener);
-
-// 	// Create storage for the BOT, card table, card counts table (hot card cache) and the bitmaps.
-// 	G1RegionToSpaceMapper* bot_storage =
-// 		create_aux_memory_mapper("Block Offset Table",
-// 														 G1BlockOffsetTable::compute_size(g1_rs.size() / HeapWordSize),
-// 														 G1BlockOffsetTable::heap_map_factor());
-
-// 	G1RegionToSpaceMapper* cardtable_storage =
-// 		create_aux_memory_mapper("Card Table",
-// 														 G1CardTable::compute_size(g1_rs.size() / HeapWordSize),
-// 														 G1CardTable::heap_map_factor());
-
-// 	G1RegionToSpaceMapper* card_counts_storage =
-// 		create_aux_memory_mapper("Card Counts Table",
-// 														 G1CardCounts::compute_size(g1_rs.size() / HeapWordSize),
-// 														 G1CardCounts::heap_map_factor());
-
-// 	size_t bitmap_size = G1CMBitMap::compute_size(g1_rs.size());
-// 	G1RegionToSpaceMapper* prev_bitmap_storage =
-// 		create_aux_memory_mapper("Prev Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
-// 	G1RegionToSpaceMapper* next_bitmap_storage =
-// 		create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
 
 
 
-// 	//
-// 	// [x] Split the reserved space into Heap Region and manage it by HeapRegionManager->_regions/_free_list.
-// 	//
-// 	_hrm = HeapRegionManager::create_manager(this, g1_collector_policy());
+ 	// Carve out the G1 part of the heap.
+	//  [?]  What's the connection between heap_rs and g1_rs ??
+	//
+ 	ReservedSpace g1_rs = heap_rs.first_part(max_byte_size);   // Carve out a Reserved space from  the heap_rs ??
+ 	size_t page_size = actual_reserved_page_size(heap_rs);			// page size, actually used in current heap.
+ 	G1RegionToSpaceMapper* heap_storage =
+ 		G1RegionToSpaceMapper::create_heap_mapper(g1_rs,
+ 																							g1_rs.size(),
+ 																							page_size,
+ 																							HeapRegion::SemeruGrainBytes,  // mapper for Semeru regions.
+ 																							1,
+ 																							mtJavaHeap);
+ 	if(heap_storage == NULL) {
+ 		vm_shutdown_during_initialization("Could not initialize G1 heap");
+ 		return JNI_ERR;
+ 	}
 
-// 	_hrm->initialize(heap_storage, prev_bitmap_storage, next_bitmap_storage, bot_storage, cardtable_storage, card_counts_storage);
+	os::trace_page_sizes("Heap",
+											 collector_policy()->min_heap_byte_size(),
+											 max_byte_size,
+											 page_size,
+											 heap_rs.base(),
+											 heap_rs.size());
+ 	heap_storage->set_mapping_changed_listener(&_listener);  // [?] meanning of mapping change ?  free or committed ?
+
+	// Reserve storage for the BOT, card table, card counts table (hot card cache) and the bitmaps.
+	// [?] They have to commit the space before using it ?
+	G1RegionToSpaceMapper* bot_storage =
+		create_aux_memory_mapper("Block Offset Table",
+														 G1BlockOffsetTable::compute_size(g1_rs.size() / HeapWordSize),
+														 G1BlockOffsetTable::heap_map_factor());
+
+	// [?] Seems that Semeru doesn't need this information ?
+	//
+	G1RegionToSpaceMapper* cardtable_storage =
+		create_aux_memory_mapper("Card Table",
+														 G1CardTable::compute_size(g1_rs.size() / HeapWordSize),
+														 G1CardTable::heap_map_factor());
+
+	G1RegionToSpaceMapper* card_counts_storage =
+		create_aux_memory_mapper("Card Counts Table",
+														 G1CardCounts::compute_size(g1_rs.size() / HeapWordSize),
+														 G1CardCounts::heap_map_factor());
+
+	//
+	// Semeru Memory Server - bitmap for Concurrent Marking. 
+	// 
+	// [?] All the prev/next_bitmap are stored in some specific area of the Java heap.
+	//
+	// [?] Do we need the pre_bitmap/next_bitmap ? 
+	//		 Seems not.
+	//     Semeru needs alive_bitmap and dest_bitmap
+	size_t bitmap_size = G1CMBitMap::compute_size(g1_rs.size());		// size for each bitmap, represent the whole heap.
+	G1RegionToSpaceMapper* prev_bitmap_storage =
+		create_aux_memory_mapper("Prev Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+	G1RegionToSpaceMapper* next_bitmap_storage =
+		create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+
+	// Allocate our alive_bitmap and dest_bitmap.
+	// 
+	// Warning : Both the alive_bitmap and dest_bitmap are Network structure.
+	// Semeru transfers these data between CPU server and Memory Servers.
+	//
+	G1RegionToSpaceMapper* alive_bitmap_storage =
+		create_aux_memory_mapper("Alive Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+	G1RegionToSpaceMapper* dest_bitmap_storage =
+		create_aux_memory_mapper("Destination Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+
+
+	//
+	// [x] Split the reserved space into Heap Region and manage it by HeapRegionManager->_regions/_free_list.
+	//
+	_hrm = SemeruHeapRegionManager::create_manager(this, semeru_collector_policy());
+
+	// [?] For Semeru heap, does it need these bitmap ?
+	_hrm->initialize(heap_storage, prev_bitmap_storage, next_bitmap_storage, bot_storage, cardtable_storage, card_counts_storage);
 	
 	
 // 	//
@@ -1906,12 +2004,12 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 // 	// 6843694 - ensure that the maximum region index can fit
 // 	// in the remembered set structures.
-// 	const uint max_region_idx = (1U << (sizeof(RegionIdx_t)*BitsPerByte-1)) - 1;
-// 	guarantee((max_regions() - 1) <= max_region_idx, "too many regions");
+	const uint max_region_idx = (1U << (sizeof(RegionIdx_t)*BitsPerByte-1)) - 1;
+	guarantee((max_regions() - 1) <= max_region_idx, "too many regions");
 
-// 	// The G1FromCardCache reserves card with value 0 as "invalid", so the heap must not
-// 	// start within the first card.
-// 	guarantee(g1_rs.base() >= (char*)G1CardTable::card_size, "Java heap must not start within the first card.");
+	// The G1FromCardCache reserves card with value 0 as "invalid", so the heap must not
+	// start within the first card.
+	guarantee(g1_rs.base() >= (char*)G1CardTable::card_size, "Java heap must not start within the first card.");
 // 	// Also create a G1 rem set.
 // 	_g1_rem_set = new G1RemSet(this, _card_table, _hot_card_cache);   // G1SemeruCollectedHeap->CardTable->ByteMap
 // 	_g1_rem_set->initialize(max_reserved_capacity(), max_regions());
@@ -1921,52 +2019,69 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 	guarantee(HeapRegion::CardsPerRegion < max_cards_per_region,
 // 						"too many cards per region");
 
-// 	FreeRegionList::set_unrealistically_long_length(max_expandable_regions() + 1);
+//	FreeRegionList::set_unrealistically_long_length(max_expandable_regions() + 1);  // This global variable can only be set once.
 
-// 	_bot = new G1BlockOffsetTable(reserved_region(), bot_storage);
+	// do we initialize the  _reserved_semeru successfully ?
+	// 
+	_bot = new G1BlockOffsetTable(reserved_memory_pool(), bot_storage);
 
-// 	//
-// 	// [x] Collection Set related structures ?
-// 	//
-// 	{
-// 		HeapWord* start = _hrm->reserved().start();
-// 		HeapWord* end = _hrm->reserved().end();
-// 		size_t granularity = HeapRegion::GrainBytes;
+	//
+	// [x] Collection Set related structures ?
+	// Semeru Memory Server
+	// The CSet is sent by CPU Server. The evicted Regions in memory server.
+	//
+	{
+		HeapWord* start = _hrm->reserved().start();
+		HeapWord* end = _hrm->reserved().end();
+		size_t granularity = HeapRegion::SemeruGrainBytes;    // Change to Semeru granulairty ??  => yes.
 
-// 		_in_cset_fast_test.initialize(start, end, granularity);
-// 		_humongous_reclaim_candidates.initialize(start, end, granularity);
-// 	}
+		// Semeru memory server doesn't need the CSet.
+		// Not need the traditional CSet at lest.
+	//	_in_cset_fast_test.initialize(start, end, granularity);
 
-// 	//
-// 	// [x] Initialize the GC threads,
-// 	//		Both Parallel and Concurrent GC threads.
-// 	//
-// 	_workers = new WorkGang("GC Thread", ParallelGCThreads,
-// 													true /* are_GC_task_threads */,
-// 													false /* are_ConcurrentGC_threads */);
-// 	if (_workers == NULL) {
-// 		return JNI_ENOMEM;
-// 	}
-// 	_workers->initialize_workers();
 
-// 	// Create the G1ConcurrentMark data structure and thread.
-// 	// (Must do this late, so that "max_regions" is defined.)
-// 	_cm = new G1ConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
-// 	if (_cm == NULL || !_cm->completed_initialization()) {
-// 		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
-// 		return JNI_ENOMEM;
-// 	}
-// 	_cm_thread = _cm->cm_thread();
+	//	_humongous_reclaim_candidates.initialize(start, end, granularity);
+	}
 
-// 	//
-// 	// [x] Commit Java Heap size according to -Xms from reserved Space, -Xmx.
-// 	//		 Add the committed Regions into HeapRegionManager->_free_list. 
-// 	// Now expand into the initial heap size.
-// 	//
-// 	if (!expand(init_byte_size, _workers)) {   // [?] Adjust the Young/Old Generation ?
-// 		vm_shutdown_during_initialization("Failed to allocate initial heap.");
-// 		return JNI_ENOMEM;
-// 	}
+	//
+	// [x] Initialize the GC threads,
+	//			Both Parallel and Concurrent GC threads.
+	//  		Semeru memory server only needs the Concurrent Thread ?
+	//			But these Concurrent Thread only can do tracing. We need add compact support for them.
+	//
+	_workers = new WorkGang("GC Thread", ParallelGCThreads,
+													true /* are_GC_task_threads */,
+													false /* are_ConcurrentGC_threads */);
+	if (_workers == NULL) {
+		return JNI_ENOMEM;
+	}
+	_workers->initialize_workers();
+
+	// Create the G1ConcurrentMark data structure and thread.
+	// (Must do this late, so that "max_regions" is defined.)
+	_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
+	if (_cm == NULL || !_cm->completed_initialization()) {
+		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
+		return JNI_ENOMEM;
+	}
+	_cm_thread = _cm->cm_thread(); // Semeru should have its own CM thread ? or use the same thread but unique tracing closure ?
+
+
+	//debug - Pass
+	//return JNI_OK;
+
+	//
+	// [x] Commit Java Heap size according to -Xms from reserved Space, -Xmx.
+	//		 Add the committed Regions into HeapRegionManager->_free_list. 
+	// Now expand into the initial heap size.
+	//
+	// Semeru Memory server, allocate and maintian its own hreap range.
+	//     |-------|-> my heap range <-|-------------------|
+	//
+	if (!expand(init_byte_size, _workers)) {   // [?] Adjust the Young/Old Generation ?
+		vm_shutdown_during_initialization("Failed to allocate initial heap.");
+		return JNI_ENOMEM;
+	}
 
 // 	// Perform any initialization actions delegated to the policy.
 // 	g1_policy()->init(this, &_collection_set);
@@ -2013,7 +2128,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 // 	_preserved_marks_set.init(ParallelGCThreads);
 
-// 	_collection_set.initialize(max_regions());
+	_collection_set.initialize(max_regions());
 
  	return JNI_OK;
 }
@@ -2140,9 +2255,9 @@ size_t G1SemeruCollectedHeap::capacity() const {
 	return _hrm->length() * HeapRegion::GrainBytes;
 }
 
-// size_t G1SemeruCollectedHeap::unused_committed_regions_in_bytes() const {
-// 	return _hrm->total_free_bytes();
-// }
+size_t G1SemeruCollectedHeap::unused_committed_regions_in_bytes() const {
+	return _hrm->total_free_bytes();
+}
 
 // void G1SemeruCollectedHeap::iterate_hcc_closure(CardTableEntryClosure* cl, uint worker_i) {
 // 	_hot_card_cache->drain(cl, worker_i);
@@ -2437,14 +2552,14 @@ void G1SemeruCollectedHeap::heap_region_iterate(HeapRegionClosure* cl) const {
 	_hrm->iterate(cl);
 }
 
-// void G1SemeruCollectedHeap::heap_region_par_iterate_from_worker_offset(HeapRegionClosure* cl,
-// 																																 HeapRegionClaimer *hrclaimer,
-// 																																 uint worker_id) const {
-// 	_hrm->par_iterate(cl, hrclaimer, hrclaimer->offset_for_worker(worker_id));
-// }
+void G1SemeruCollectedHeap::heap_region_par_iterate_from_worker_offset(HeapRegionClosure* cl,
+																																 SemeruHeapRegionClaimer *hrclaimer,
+																																 uint worker_id) const {
+	_hrm->par_iterate(cl, hrclaimer, hrclaimer->offset_for_worker(worker_id));
+}
 
 // void G1SemeruCollectedHeap::heap_region_par_iterate_from_start(HeapRegionClosure* cl,
-// 																												 HeapRegionClaimer *hrclaimer) const {
+// 																												 SemeruHeapRegionClaimer *hrclaimer) const {
 // 	_hrm->par_iterate(cl, hrclaimer, 0);
 // }
 
@@ -2741,12 +2856,13 @@ void G1SemeruCollectedHeap::trace_heap(GCWhen::Type when, const GCTracer* gc_tra
 /**
  * Tag : get the static heap handler
  * 
- * 	[?] G1SemeruCollectedHeap -> CollectedHeap, and then cast it to current G1SemeruCollectedHeap*.
- * 		
+ * 	[x] G1SemeruCollectedHeap -> CollectedHeap, and then cast it to current G1SemeruCollectedHeap*.
+ * 			=> Warning, there are two collected heaps in Memory server.
+ * 				 Make sure to the right one, universe->_SemeruCollectedHeap.
  * 
  */
 G1SemeruCollectedHeap* G1SemeruCollectedHeap::heap() {
-	CollectedHeap* heap = Universe::heap();
+	CollectedHeap* heap = Universe::semeru_heap();
 	assert(heap != NULL, "Uninitialized access to G1SemeruCollectedHeap::heap()");
 	assert(heap->kind() == CollectedHeap::G1, "Invalid name");
 	return (G1SemeruCollectedHeap*)heap;
@@ -3636,27 +3752,27 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 // 							 undo_waste * HeapWordSize / K);
 // }
 
-// void G1SemeruCollectedHeap::complete_cleaning(BoolObjectClosure* is_alive,
-// 																				bool class_unloading_occurred) {
-// 	uint n_workers = workers()->active_workers();
+void G1SemeruCollectedHeap::complete_cleaning(BoolObjectClosure* is_alive,
+																				bool class_unloading_occurred) {
+	uint n_workers = workers()->active_workers();
 
-// 	G1StringDedupUnlinkOrOopsDoClosure dedup_closure(is_alive, NULL, false);
-// 	ParallelCleaningTask g1_unlink_task(is_alive, &dedup_closure, n_workers, class_unloading_occurred);
-// 	workers()->run_task(&g1_unlink_task);
-// }
+	G1StringDedupUnlinkOrOopsDoClosure dedup_closure(is_alive, NULL, false);
+	ParallelCleaningTask g1_unlink_task(is_alive, &dedup_closure, n_workers, class_unloading_occurred);
+	workers()->run_task(&g1_unlink_task);
+}
 
-// void G1SemeruCollectedHeap::partial_cleaning(BoolObjectClosure* is_alive,
-// 																			 bool process_strings,
-// 																			 bool process_string_dedup) {
-// 	if (!process_strings && !process_string_dedup) {
-// 		// Nothing to clean.
-// 		return;
-// 	}
+void G1SemeruCollectedHeap::partial_cleaning(BoolObjectClosure* is_alive,
+																			 bool process_strings,
+																			 bool process_string_dedup) {
+	if (!process_strings && !process_string_dedup) {
+		// Nothing to clean.
+		return;
+	}
 
-// 	G1StringDedupUnlinkOrOopsDoClosure dedup_closure(is_alive, NULL, false);
-// 	StringCleaningTask g1_unlink_task(is_alive, process_string_dedup ? &dedup_closure : NULL, process_strings);
-// 	workers()->run_task(&g1_unlink_task);
-// }
+	G1StringDedupUnlinkOrOopsDoClosure dedup_closure(is_alive, NULL, false);
+	StringCleaningTask g1_unlink_task(is_alive, process_string_dedup ? &dedup_closure : NULL, process_strings);
+	workers()->run_task(&g1_unlink_task);
+}
 
 // class G1RedirtyLoggedCardsTask : public AbstractGangTask {
 //  private:
@@ -4258,61 +4374,72 @@ bool G1SemeruSTWSubjectToDiscoveryClosure::do_object_b(oop obj) {
 // 																							 create_g1_evac_summary(&_old_evac_stats));
 // }
 
-// void G1SemeruCollectedHeap::free_region(HeapRegion* hr,
-// 																	FreeRegionList* free_list,
-// 																	bool skip_remset,
-// 																	bool skip_hot_card_cache,
-// 																	bool locked) {
-// 	assert(!hr->is_free(), "the region should not be free");
-// 	assert(!hr->is_empty(), "the region should not be empty");
-// 	assert(_hrm->is_available(hr->hrm_index()), "region should be committed");
-// 	assert(free_list != NULL, "pre-condition");
+void G1SemeruCollectedHeap::free_region(HeapRegion* hr,
+																	FreeRegionList* free_list,
+																	bool skip_remset,
+																	bool skip_hot_card_cache,
+																	bool locked) {
 
-// 	if (G1VerifyBitmaps) {
-// 		MemRegion mr(hr->bottom(), hr->end());
-// 		concurrent_mark()->clear_range_in_prev_bitmap(mr);
-// 	}
+	// Error
+	printf("Error in %s, please fix this. \n",__func__);
 
-// 	// Clear the card counts for this region.
-// 	// Note: we only need to do this if the region is not young
-// 	// (since we don't refine cards in young regions).
-// 	if (!skip_hot_card_cache && !hr->is_young()) {
-// 		_hot_card_cache->reset_card_counts(hr);
-// 	}
-// 	hr->hr_clear(skip_remset, true /* clear_space */, locked /* locked */);
-// 	_g1_policy->remset_tracker()->update_at_free(hr);
-// 	free_list->add_ordered(hr);
-// }
 
-// void G1SemeruCollectedHeap::free_humongous_region(HeapRegion* hr,
-// 																						FreeRegionList* free_list) {
-// 	assert(hr->is_humongous(), "this is only for humongous regions");
-// 	assert(free_list != NULL, "pre-condition");
-// 	hr->clear_humongous();
-// 	free_region(hr, free_list, false /* skip_remset */, false /* skip_hcc */, true /* locked */);
-// }
+	// assert(!hr->is_free(), "the region should not be free");
+	// assert(!hr->is_empty(), "the region should not be empty");
+	// assert(_hrm->is_available(hr->hrm_index()), "region should be committed");
+	// assert(free_list != NULL, "pre-condition");
 
-// void G1SemeruCollectedHeap::remove_from_old_sets(const uint old_regions_removed,
-// 																					 const uint humongous_regions_removed) {
-// 	if (old_regions_removed > 0 || humongous_regions_removed > 0) {
-// 		MutexLockerEx x(OldSets_lock, Mutex::_no_safepoint_check_flag);
-// 		_old_set.bulk_remove(old_regions_removed);
-// 		_humongous_set.bulk_remove(humongous_regions_removed);
-// 	}
+	// if (G1VerifyBitmaps) {
+	// 	MemRegion mr(hr->bottom(), hr->end());
+	// 	concurrent_mark()->clear_range_in_prev_bitmap(mr);
+	// }
 
-// }
+	// // Clear the card counts for this region.
+	// // Note: we only need to do this if the region is not young
+	// // (since we don't refine cards in young regions).
+	// if (!skip_hot_card_cache && !hr->is_young()) {
+	// 	_hot_card_cache->reset_card_counts(hr);
+	// }
+	// hr->hr_clear(skip_remset, true /* clear_space */, locked /* locked */);
+	// _g1_policy->remset_tracker()->update_at_free(hr);
+	// free_list->add_ordered(hr);
+}
 
-// void G1SemeruCollectedHeap::prepend_to_freelist(FreeRegionList* list) {
-// 	assert(list != NULL, "list can't be null");
-// 	if (!list->is_empty()) {
-// 		MutexLockerEx x(FreeList_lock, Mutex::_no_safepoint_check_flag);
-// 		_hrm->insert_list_into_free_list(list);
-// 	}
-// }
+void G1SemeruCollectedHeap::free_humongous_region(HeapRegion* hr,
+																						FreeRegionList* free_list) {
+	assert(hr->is_humongous(), "this is only for humongous regions");
+	assert(free_list != NULL, "pre-condition");
+	hr->clear_humongous();
+	free_region(hr, free_list, false /* skip_remset */, false /* skip_hcc */, true /* locked */);
+}
 
-// void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
-// 	decrease_used(bytes);
-// }
+void G1SemeruCollectedHeap::remove_from_old_sets(const uint old_regions_removed,
+																					 const uint humongous_regions_removed) {
+	
+	// Error
+	printf("Error in %s, please fix this. \n",__func__);
+
+	/*
+	if (old_regions_removed > 0 || humongous_regions_removed > 0) {
+		MutexLockerEx x(OldSets_lock, Mutex::_no_safepoint_check_flag);
+		_old_set.bulk_remove(old_regions_removed);
+		_humongous_set.bulk_remove(humongous_regions_removed);
+	}
+	*/
+
+}
+
+void G1SemeruCollectedHeap::prepend_to_freelist(FreeRegionList* list) {
+	assert(list != NULL, "list can't be null");
+	if (!list->is_empty()) {
+		MutexLockerEx x(FreeList_lock, Mutex::_no_safepoint_check_flag);
+		_hrm->insert_list_into_free_list(list);
+	}
+}
+
+void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
+	decrease_used(bytes);
+}
 
 // class G1FreeCollectionSetTask : public AbstractGangTask {
 // private:

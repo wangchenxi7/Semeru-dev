@@ -41,7 +41,7 @@
 G1BlockOffsetTable::G1BlockOffsetTable(MemRegion heap, G1RegionToSpaceMapper* storage) :
   _reserved(heap), _offset_array(NULL) {
 
-  MemRegion bot_reserved = storage->reserved();
+  MemRegion bot_reserved = storage->reserved();  // The storage is allocated in 
 
   _offset_array = (u_char*)bot_reserved.start();
 

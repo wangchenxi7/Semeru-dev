@@ -609,7 +609,7 @@ void CollectedHeap::initialize_reserved_region(HeapWord *start, HeapWord *end) {
 	_reserved_memory_pool.set_start(start);
 	_reserved_memory_pool.set_end(end);
 
-	log_debug(heap)("%s, Allocated G1 Memory Pool[0x%llx, 0x%llx] ", __func__, 
+	log_debug(heap)("%s, Allocated G1 Memory Pool[0x%llx, 0x%llx] successfully.", __func__, 
 																	(unsigned long long)start, (unsigned long long)end);
 
 }

@@ -61,6 +61,9 @@ public:
  * [?] _available_map(mtGC)  ?? Multiple thread GC ?
  * 
  * [?] _regions()  ??
+ * 
+ * [?] _prev_bitmap_mapper ?
+ * 		 _next_bitmap_mapper ?
  *  
  */
 HeapRegionManager::HeapRegionManager() :
@@ -83,6 +86,8 @@ HeapRegionManager* HeapRegionManager::create_manager(G1CollectedHeap* heap, G1Co
 	return new HeapRegionManager();
 }
 
+
+
 void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 															 G1RegionToSpaceMapper* prev_bitmap,
 															 G1RegionToSpaceMapper* next_bitmap,
@@ -91,7 +96,7 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 															 G1RegionToSpaceMapper* card_counts) {
 	_allocated_heapregions_length = 0;
 
-	_heap_mapper = heap_storage;
+	_heap_mapper = heap_storage;				// [?] purpose ?
 
 	_prev_bitmap_mapper = prev_bitmap;
 	_next_bitmap_mapper = next_bitmap;
@@ -101,10 +106,11 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 
 	_card_counts_mapper = card_counts;
 
+	// Both _regions[] and _availale_map cover the whole reserved Java heap.
 	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
 	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::GrainBytes);  // Split the Java heap into Regions.
 
-	_available_map.initialize(_regions.length());			// [?] Free Region ?
+	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
 }
 
 bool HeapRegionManager::is_available(uint region) const {
@@ -112,6 +118,12 @@ bool HeapRegionManager::is_available(uint region) const {
 }
 
 #ifdef ASSERT
+
+/**
+ * Tag : free means commited and then uncommited ? 
+ * 		The difference between free and available ?
+ * 		
+ */
 bool HeapRegionManager::is_free(HeapRegion* hr) const {
 	return _free_list.contains(hr);
 }
@@ -135,7 +147,7 @@ void HeapRegionManager::commit_regions(uint index, size_t num_regions, WorkGang*
 
 	_num_committed += (uint)num_regions;
 
-	_heap_mapper->commit_regions(index, num_regions, pretouch_gang);
+	_heap_mapper->commit_regions(index, num_regions, pretouch_gang);		// Do initializaion on the corresponding pages of the Region.
 
 	// Also commit auxiliary data
 	_prev_bitmap_mapper->commit_regions(index, num_regions, pretouch_gang);
@@ -146,6 +158,9 @@ void HeapRegionManager::commit_regions(uint index, size_t num_regions, WorkGang*
 
 	_card_counts_mapper->commit_regions(index, num_regions, pretouch_gang);
 }
+
+
+
 
 void HeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 	guarantee(num_regions >= 1, "Need to specify at least one region to uncommit, tried to uncommit zero regions at %u", start);
@@ -178,8 +193,8 @@ void HeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 /**
  * Tag : Allocate HeapRegion management metadata.
  *  
- * [?] Where to allocate these data ? Normal C++ heap ? C_HEAP ? meta space ?
- * 
+ * [x] Where to allocate these data ? Normal C++ heap ? C_HEAP ? meta space ?
+ * 			All the classes inherit from CHeapObj are allicated into native heap be overidden operator new.
  */
 void HeapRegionManager::make_regions_available(uint start, uint num_regions, WorkGang* pretouch_gang) {
 	guarantee(num_regions > 0, "No point in calling this for zero regions");
@@ -211,6 +226,10 @@ void HeapRegionManager::make_regions_available(uint start, uint num_regions, Wor
 		insert_into_free_list(at(i));
 	}
 }
+
+
+
+
 
 MemoryUsage HeapRegionManager::get_auxiliary_data_memory_usage() const {
 	size_t used_sz =

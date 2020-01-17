@@ -35,6 +35,13 @@
 #include "gc/shared/spaceDecorator.hpp"
 #include "utilities/macros.hpp"
 
+// Smeru
+
+// The inlcude order is that : HeapRegionSet include HeapRegion.
+//                             SemeruHeapRegionManager.hpp include HeapRegionSet.
+//    Don't make a circle here.
+//#include "gc/g1/SemeruHeapRegionManager.hpp"   
+
 // A HeapRegion is the smallest piece of a G1CollectedHeap that
 // can be collected independently.
 
@@ -98,7 +105,7 @@ class G1ContiguousSpace: public CompactibleSpace {
   friend class VMStructs;
   HeapWord* volatile _top;
  protected:
-  G1BlockOffsetTablePart _bot_part;
+  G1BlockOffsetTablePart _bot_part;  // [?] 1 byte for each card. To record the start object offset for each card.
   Mutex _par_alloc_lock;
   // When we need to retire an allocation region, while other threads
   // are also concurrently trying to allocate into it, we typically
@@ -742,6 +749,7 @@ class HeapRegionClosure : public StackObj {
   friend class HeapRegionManager;
   friend class G1CollectionSet;
   friend class CollectionSetChooser;
+  friend class SemeruHeapRegionManager; // to access its private fields.
 
   bool _is_complete;
   void set_incomplete() { _is_complete = false; }

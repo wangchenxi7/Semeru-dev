@@ -48,8 +48,13 @@ public:
   bool do_addr(HeapWord* const addr);
 };
 
+
+/**
+ * Tag : Record the free/usage status for a MemoryRegion ?
+ *  
+ */
 class G1CMBitMapMappingChangedListener : public G1MappingChangedListener {
-  G1CMBitMap* _bm;
+  G1CMBitMap* _bm;      // [?] Interesting, record the memory information ? What's kind of information ??
 public:
   G1CMBitMapMappingChangedListener() : _bm(NULL) {}
 

@@ -65,6 +65,10 @@
 #include "utilities/align.hpp"
 #include "utilities/growableArray.hpp"
 
+// Semeru
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
+
+
 bool G1CMBitMapClosure::do_addr(HeapWord* const addr) {
 	assert(addr < _cm->finger(), "invariant");
 	assert(addr >= _task->finger(), "invariant");
@@ -503,6 +507,7 @@ G1ConcurrentMark::G1ConcurrentMark(G1CollectedHeap* g1h,
 	reset_at_marking_complete();
 	_completed_initialization = true;
 }
+
 
 void G1ConcurrentMark::reset() {
 	_has_aborted = false;

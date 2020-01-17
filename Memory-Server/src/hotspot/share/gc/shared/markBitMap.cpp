@@ -34,8 +34,9 @@ size_t MarkBitMap::compute_size(size_t heap_size) {
   return ReservedSpace::allocation_align_size_up(heap_size / mark_distance());
 }
 
+// Calculate the range can be represented by 1 bit.
 size_t MarkBitMap::mark_distance() {
-  return MinObjAlignmentInBytes * BitsPerByte;
+  return MinObjAlignmentInBytes * BitsPerByte;   // 8 bytes alignment * 8 bits per byte.
 }
 
 void MarkBitMap::initialize(MemRegion heap, MemRegion storage) {

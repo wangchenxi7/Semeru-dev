@@ -39,18 +39,15 @@
 #include "gc/shared/taskqueue.inline.hpp"
 #include "utilities/bitMap.inline.hpp"
 
-// Semeru
-#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
-
 
 inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
   return !_g1h->is_obj_ill(obj);
 }
 
-// Semeru
-inline bool G1CMIsAliveClosure::semeru_do_object_b(oop obj) {
-  return !_g1_semeru_h->is_obj_ill(obj);
-}
+// // Semeru
+// inline bool G1CMIsAliveClosure::semeru_do_object_b(oop obj) {
+//   return !_g1_semeru_h->is_obj_ill(obj);
+// }
 
 
 inline bool G1CMSubjectToDiscoveryClosure::do_object_b(oop obj) {
@@ -66,18 +63,18 @@ inline bool G1CMSubjectToDiscoveryClosure::do_object_b(oop obj) {
 }
 
 
-// Semeru
-inline bool G1CMSubjectToDiscoveryClosure::semeru_do_object_b(oop obj) {
-  // Re-check whether the passed object is null. With ReferentBasedDiscovery the
-  // mutator may have changed the referent's value (i.e. cleared it) between the
-  // time the referent was determined to be potentially alive and calling this
-  // method.
-  if (obj == NULL) {
-    return false;
-  }
-  assert(_g1_semeru_h->is_in_semeru_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
-  return _g1_semeru_h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
-}
+// // Semeru
+// inline bool G1CMSubjectToDiscoveryClosure::semeru_do_object_b(oop obj) {
+//   // Re-check whether the passed object is null. With ReferentBasedDiscovery the
+//   // mutator may have changed the referent's value (i.e. cleared it) between the
+//   // time the referent was determined to be potentially alive and calling this
+//   // method.
+//   if (obj == NULL) {
+//     return false;
+//   }
+//   assert(_g1_semeru_h->is_in_semeru_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
+//   return _g1_semeru_h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
+// }
 
 
 inline bool G1ConcurrentMark::mark_in_next_bitmap(uint const worker_id, oop const obj) {

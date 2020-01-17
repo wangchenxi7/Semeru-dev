@@ -43,6 +43,13 @@
 #include "runtime/vmThread.hpp"
 #include "utilities/debug.hpp"
 
+
+// Semeru
+#include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
+
+
+
 // ======= Concurrent Mark Thread ========
 
 // Check order in EXPAND_CURRENT_PHASES
@@ -86,6 +93,28 @@ G1ConcurrentMarkThread::G1ConcurrentMarkThread(G1ConcurrentMark* cm) :
   set_name("G1 Main Marker");
   create_and_start();
 }
+
+/**
+ * Semeru
+ *  
+ */
+G1ConcurrentMarkThread::G1ConcurrentMarkThread(G1SemeruConcurrentMark* cm) :
+  ConcurrentGCThread(),
+  _vtime_start(0.0),
+  _vtime_accum(0.0),
+  _vtime_mark_accum(0.0),
+  //_cm(cm),                        // [?] Need to fix this.
+  _state(Idle),
+  _phase_manager_stack() {
+
+  set_name("G1 Main Marker");
+  create_and_start();
+
+  // debug
+  printf("ERROR in %s, Please fix me.\n", __func__);
+}
+
+
 
 class CMRemark : public VoidClosure {
   G1ConcurrentMark* _cm;
@@ -314,6 +343,7 @@ void G1ConcurrentMarkThread::run_service() {
             G1ConcPhase p(G1ConcurrentPhase::MARK_FROM_ROOTS, this);
             _cm->mark_from_roots();  
           }
+
           if (_cm->has_aborted()) {
             break;
           }

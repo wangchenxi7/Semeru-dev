@@ -56,9 +56,17 @@ G1RegionToSpaceMapper::G1RegionToSpaceMapper(ReservedSpace rs,
 // Basically, the space corresponding to one region region spans several OS pages.
 class G1RegionsLargerThanCommitSizeMapper : public G1RegionToSpaceMapper {
  private:
-  size_t _pages_per_region;
+  size_t _pages_per_region;   // 
 
  public:
+
+ /**
+  * Tag : Build the mapping between JVM's Region and OS's page.
+  *       Then when JVM manipulate memory at Region level, the mapper can process the page memory. 
+  * Parameters:
+  *   alloc_granularity : Region size.
+  * 
+  */
   G1RegionsLargerThanCommitSizeMapper(ReservedSpace rs,
                                       size_t actual_size,
                                       size_t page_size,
@@ -73,7 +81,7 @@ class G1RegionsLargerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
   virtual void commit_regions(uint start_idx, size_t num_regions, WorkGang* pretouch_gang) {
     size_t const start_page = (size_t)start_idx * _pages_per_region;
-    bool zero_filled = _storage.commit(start_page, num_regions * _pages_per_region);
+    bool zero_filled = _storage.commit(start_page, num_regions * _pages_per_region);  // Commit the pages from the reserved space
     if (AlwaysPreTouch) {
       _storage.pretouch(start_page, num_regions * _pages_per_region, pretouch_gang);
     }
@@ -97,7 +105,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
      virtual uint default_value() const { return 0; }
   };
 
-  size_t _regions_per_page;
+  size_t _regions_per_page;   // For current structure, bitmap, one page space can cover how many Regions.
 
   CommitRefcountArray _refcounts;
 
@@ -129,7 +137,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
     for (uint i = start_idx; i < start_idx + num_regions; i++) {
       assert(!_commit_map.at(i), "Trying to commit storage at region %u that is already committed", i);
-      size_t idx = region_idx_to_page_idx(i);
+      size_t idx = region_idx_to_page_idx(i);           // [?] Calculate the start page index ?
       uint old_refcount = _refcounts.get_by_index(idx);
 
       bool zero_filled = false;
@@ -293,6 +301,15 @@ uint G1RegionToHeteroSpaceMapper::num_committed_nvdimm() const {
   return _num_committed_nvdimm;
 }
 
+/**
+ * Tag : Build the mapping between HeapRegion and OS's page for the ReservedSpace.
+ *       e.g. When JVM commit a Region, the mapper will commit responds memory in OS page level. 
+ *       Commit means re-mmap the virtual memory range with MAX_FLIXED flag, which will override the orginal flag and protect domain.
+ * [?] What's the commit_factor ?
+ *    It's 1, for the Java heap and Semeru heap.
+ *    means the virtual memory allocation granularity, e.g.  the granularity of os::malloc, mmap ? 
+ *    page * commit_factor.
+ */
 G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_heap_mapper(ReservedSpace rs,
                                                                  size_t actual_size,
                                                                  size_t page_size,
@@ -300,6 +317,7 @@ G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_heap_mapper(ReservedSpace r
                                                                  size_t commit_factor,
                                                                  MemoryType type) {
   if (AllocateOldGenAt != NULL) {
+    // 1) Heterougenous Java heap
     G1RegionToHeteroSpaceMapper* mapper = new G1RegionToHeteroSpaceMapper(rs, actual_size, page_size, region_granularity, commit_factor, type);
     if (!mapper->initialize()) {
       delete mapper;
@@ -307,10 +325,17 @@ G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_heap_mapper(ReservedSpace r
     }
     return (G1RegionToSpaceMapper*)mapper;
   } else {
+    // 2) Normal Java heap
     return create_mapper(rs, actual_size, page_size, region_granularity, commit_factor, type);
   }
 }
 
+/**
+ * Tag : Calculate how many HeapRegions are needed for the this specific RecerdSpace
+ *      Take G1BlockOffsetTable as example.
+ *      actual_size = 32GB/8bytes = 
+ * 
+ */
 G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_mapper(ReservedSpace rs,
                                                             size_t actual_size,
                                                             size_t page_size,

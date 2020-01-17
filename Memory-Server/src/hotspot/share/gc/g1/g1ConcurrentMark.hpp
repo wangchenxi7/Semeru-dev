@@ -113,32 +113,32 @@ typedef GenericTaskQueueSet<G1CMTaskQueue, mtGC> G1CMTaskQueueSet;
 class G1CMIsAliveClosure : public BoolObjectClosure {
   G1CollectedHeap* _g1h;
 
-  // Semeru
-  G1SemeruCollectedHeap *_g1_semeru_h;
+  // // Semeru
+  // G1SemeruCollectedHeap *_g1_semeru_h;
 
 public:
   G1CMIsAliveClosure(G1CollectedHeap* g1h) : _g1h(g1h) { }
   bool do_object_b(oop obj);
 
-  // Semeru
-  G1CMIsAliveClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
-  bool semeru_do_object_b(oop obj);
+  // // Semeru
+  // G1CMIsAliveClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  // bool semeru_do_object_b(oop obj);
 };
 
 
 class G1CMSubjectToDiscoveryClosure : public BoolObjectClosure {
   G1CollectedHeap* _g1h;
 
-  // Semeru
-  G1SemeruCollectedHeap *_g1_semeru_h;
+  // // Semeru
+  // G1SemeruCollectedHeap *_g1_semeru_h;
 
 public:
   G1CMSubjectToDiscoveryClosure(G1CollectedHeap* g1h) : _g1h(g1h) { }
   bool do_object_b(oop obj);
 
-    // Semeru
-  G1CMSubjectToDiscoveryClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
-  bool semeru_do_object_b(oop obj);
+  // // Semeru
+  // G1CMSubjectToDiscoveryClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  // bool semeru_do_object_b(oop obj);
 };
 
 
@@ -329,7 +329,7 @@ class G1ConcurrentMark : public CHeapObj<mtGC> {
   bool                    _completed_initialization; // Set to true when initialization is complete
 
   // Concurrent marking support structures
-  G1CMBitMap              _mark_bitmap_1;
+  G1CMBitMap              _mark_bitmap_1;    // [??] this is the _prev_mark_bitmap ?
   G1CMBitMap              _mark_bitmap_2;
   G1CMBitMap*             _prev_mark_bitmap; // Completed mark bitmap
   G1CMBitMap*             _next_mark_bitmap; // Under-construction mark bitmap
@@ -555,6 +555,8 @@ public:
   G1ConcurrentMark(G1CollectedHeap* g1h,
                    G1RegionToSpaceMapper* prev_bitmap_storage,
                    G1RegionToSpaceMapper* next_bitmap_storage);
+
+
   ~G1ConcurrentMark();
 
   G1ConcurrentMarkThread* cm_thread() { return _cm_thread; }

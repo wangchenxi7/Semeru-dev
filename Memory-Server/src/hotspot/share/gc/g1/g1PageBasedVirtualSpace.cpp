@@ -189,6 +189,11 @@ void G1PageBasedVirtualSpace::pretouch_internal(size_t start_page, size_t end_pa
   os::pretouch_memory(page_start(start_page), bounded_end_addr(end_page), _page_size);
 }
 
+/**
+ * Tag : meaning of commit a page ??
+ *    => Request the memory from os by mmap ??
+ * 
+ */
 bool G1PageBasedVirtualSpace::commit(size_t start_page, size_t size_in_pages) {
   // We need to make sure to commit all pages covered by the given area.
   guarantee(is_area_uncommitted(start_page, size_in_pages), "Specified area is not uncommitted");

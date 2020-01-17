@@ -28,6 +28,7 @@
 #include "oops/oopsHierarchy.hpp"
 
 class G1CMTask;
+class G1SemeruCMTask;
 
 // Helper class to mark through large objArrays during marking in an efficient way.
 // Instead of pushing large object arrays, we push continuations onto the
@@ -38,6 +39,9 @@ private:
   // Reference to the task for doing the actual work.
   G1CMTask* _task;
 
+  // Semeru memory server
+  G1SemeruCMTask* _semeru_task;
+
   // Push the continuation at the given address onto the mark stack.
   void push_array_slice(HeapWord* addr);
 
@@ -47,6 +51,10 @@ public:
   static bool should_be_sliced(oop obj);
 
   G1CMObjArrayProcessor(G1CMTask* task) : _task(task) {
+  }
+
+  // Semeru memory server
+   G1CMObjArrayProcessor(G1SemeruCMTask* task) : _semeru_task(task) {
   }
 
   // Process the given continuation. Returns the number of words scanned.

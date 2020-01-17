@@ -40,6 +40,11 @@ class G1ScanEvacuatedObjClosure;
 class G1CMTask;
 class ReferenceProcessor;
 
+// Semeru
+class G1SemeruCollectedHeap;
+class G1SemeruConcurrentMark;
+class G1SemeruCMTask;
+
 class G1ScanClosureBase : public BasicOopIterateClosure {
 protected:
 	G1CollectedHeap* _g1h;
@@ -222,8 +227,17 @@ public:
 class G1CMOopClosure : public MetadataVisitingOopIterateClosure {
 	G1CollectedHeap*   _g1h;
 	G1CMTask*          _task;
+
+	// Semeru support
+	G1SemeruCollectedHeap*	_g1_semeru_h;
+	G1SemeruCMTask*						_semeru_task;
+
 public:
 	G1CMOopClosure(G1CollectedHeap* g1h,G1CMTask* task);
+
+	// Semeru support
+	G1CMOopClosure(G1SemeruCollectedHeap* g1h,G1SemeruCMTask* task);
+
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
@@ -238,6 +252,15 @@ private:
 public:
 	G1RootRegionScanClosure(G1CollectedHeap* g1h, G1ConcurrentMark* cm, uint worker_id) :
 		_g1h(g1h), _cm(cm), _worker_id(worker_id) { }
+
+	// Semeru memory server
+	G1RootRegionScanClosure(G1SemeruCollectedHeap* g1h, G1SemeruConcurrentMark* cm, uint worker_id) :
+		//_g1h(g1h), 
+		//_cm(cm), 
+		_worker_id(worker_id) {
+			printf("Error in %s, Please fix me .\n",__func__);	
+		}
+
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }

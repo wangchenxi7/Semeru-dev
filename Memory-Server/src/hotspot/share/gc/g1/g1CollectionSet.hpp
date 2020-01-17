@@ -37,6 +37,10 @@ class G1Policy;
 class G1SurvivorRegions;
 class HeapRegion;
 
+// Semeru
+class G1SemeruCollectedHeap;
+
+
 class G1CollectionSet {
   G1CollectedHeap* _g1h;
   G1Policy* _policy;
@@ -124,6 +128,10 @@ class G1CollectionSet {
 
 public:
   G1CollectionSet(G1CollectedHeap* g1h, G1Policy* policy);
+
+  //Semeru
+  G1CollectionSet(G1SemeruCollectedHeap* g1h, G1Policy* policy);
+
   ~G1CollectionSet();
 
   // Initializes the collection set giving the maximum possible length of the collection set.
