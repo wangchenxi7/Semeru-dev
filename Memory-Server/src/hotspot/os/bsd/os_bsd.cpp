@@ -2190,7 +2190,7 @@ char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr) {
         unmap_memory(base[i], top_overlap);
         base[i] += top_overlap;
         size[i] = bytes - top_overlap;
-      } else {
+      } else {    
         size_t bottom_overlap = base[i] + bytes - requested_addr;
         if (bottom_overlap >= 0 && bottom_overlap < bytes) {
           unmap_memory(requested_addr, bottom_overlap);

@@ -32,6 +32,9 @@
 #include "services/memTracker.hpp"
 #include "utilities/align.hpp"
 
+// Semeru - headers
+#include "memory/rdma_comm.hpp"
+
 // ReservedSpace
 
 // Dummy constructor
@@ -210,6 +213,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     } else {
       // 2.2 Request any available annoymous memory from OS.
       //
+      //  [?] For semeru memory pool allocation, we already assign the start address, so  never goes to here ??
       base = os::reserve_memory(size, NULL, alignment, _fd_for_heap);
     }
 
@@ -260,6 +264,9 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
  * 3) Initialize the fields of Reserved Heap space.
  * 
  */ 
+
+pthread_t rdma_cma_thread;    // a global variable.
+
 void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
                                char* requested_address,
                                bool executable) {
@@ -340,7 +347,7 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 
       // 2.1 Request fixed start address for this ReservedSpace
     if (requested_address != NULL) {
-      base = os::attempt_reserve_memory_pool_at(size, requested_address, alignment, _fd_for_heap );
+      base = os::semeru_attempt_reserve_memory_at(size, requested_address, alignment, _fd_for_heap );
       if (failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
         // OS ignored requested address. Try different address.
         base = NULL;
@@ -390,6 +397,31 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
   if (_fd_for_heap != -1) {
     _special = true;
   }
+
+
+  //
+  // Semeru RDMA support
+  //    Build && initialize the RDMA model.
+  //
+	if(requested_address != NULL && base == requested_address ){
+		// Confirming the reserved heap is at the start address we are expected.
+		//assert(base == requested_addr, "Allocated addr != requested_addr");
+
+		struct rdma_main_thread_args *args = (struct rdma_main_thread_args *)malloc(sizeof(struct rdma_main_thread_args));
+		args->heap_start	=	base;			// char*
+		args->heap_size		= size;    // size_t
+		if(pthread_create(&rdma_cma_thread, NULL, Build_rdma_to_cpu_server, (void*)args) != 0) {
+			tty->print("Create the daemon thread failed.");
+			//return NULL;
+		}else{
+      // success
+      //assert(false, "%s, Must specify the start address for the Sermeru heap. \n",__func__);
+      tty->print("Create the RDMA daemon thread successfully.\n");
+    }
+
+	} // end of RDMA support
+
+
 }
 
 
@@ -399,7 +431,15 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 
 
 
-
+/**
+ * Tag : Carve out a range of memory from the reserved space.  
+ *  split->ture:   
+ *      reaclloc or not. ?     
+ * 
+ *  split->false
+ *      Just create a new reserved space based on the [base(), base()+partition_size);
+ *      Not modify the origial reserved space.
+ */
 ReservedSpace ReservedSpace::first_part(size_t partition_size, size_t alignment,
                                         bool split, bool realloc) {
   assert(partition_size <= size(), "partition failed");
@@ -412,6 +452,10 @@ ReservedSpace ReservedSpace::first_part(size_t partition_size, size_t alignment,
 }
 
 
+/**
+ * Parameters:
+ *   base, size, alignment, spacial(huge_page), exe.
+ */
 ReservedSpace
 ReservedSpace::last_part(size_t partition_size, size_t alignment) {
   assert(partition_size <= size(), "partition failed");
@@ -828,11 +872,12 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, bool large, 
 /**
  * Semeru
  *  Constructor for reserving Semeru memory pool from OS.
- * 
+ *  
  * ReservedHeapSpace -> ReservedSpace
- *                        initialize()
+ *                        initialize_sermu()
  *                        initialize_memory_pool()
- * 
+ * 1) Reserve space from OS by mmap.
+ * 2) Register the whole memory range as RDMA buffer to CPU server.
  * 
  */   
 ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, char* heap_start_addr) : ReservedSpace() {
@@ -853,6 +898,7 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, char* heap_s
   if (base() != NULL) {
     MemTracker::record_virtual_memory_type((address)base(), mtJavaHeap);
   }
+  
 }
 
 

@@ -105,7 +105,7 @@ class ReservedSpace {
 };
 
 ReservedSpace
-ReservedSpace::first_part(size_t partition_size, bool split, bool realloc)
+ReservedSpace::first_part(size_t partition_size, bool split, bool realloc)  // default : assigned_size, split=false, realloc=true
 {
   return first_part(partition_size, alignment(), split, realloc);
 }

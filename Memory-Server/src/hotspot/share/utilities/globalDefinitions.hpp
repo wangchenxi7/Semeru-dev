@@ -110,6 +110,35 @@
 #define INTX_FORMAT_W(width)  "%" #width PRIdPTR
 #define UINTX_FORMAT_W(width) "%" #width PRIuPTR
 
+//
+// Semeru Macros
+//
+
+#define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
+#define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
+
+#define PAGE_SIZE		      ((size_t)4096)	// bytes
+#define REGION_SIZE_GB    ((size_t)8)   	// Habe to be 1GB at current ! or will cause inconsistence problems. 
+
+
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * 4 + RDMA_STRUCTURE_SPACE)    //for local memory management
+#define MAX_MR_NUM_GB     ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
+
+#define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
+
+
+#define SEMERU_START_ADDR   ((size_t)0x400000000000)
+
+// RDMA structure space
+#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *1)
+
+// 1) First part is for the Target Object queue, 128M
+#define TARGET_OBJ_OFFSET     (size_t)0
+#define TARGET_OBJ_SIZE_BYTE  (size_t)0x8000000   // 128M bytes
+
+
+
+
 //----------------------------------------------------------------------------------------------------
 // Constants
 

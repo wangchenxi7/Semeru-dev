@@ -170,7 +170,7 @@ class HeapRegionRemSet : public CHeapObj<mtGC> {
 	friend class HeapRegionRemSetIterator;
 
 private:
-	G1BlockOffsetTable* _bot;			// [?]
+	G1BlockOffsetTable* _bot;			// [?] point corresponding Region's BOT ?
 
 	// A set of code blobs (nmethods) whose code contains pointers into
 	// the region that owns this RSet.
@@ -178,7 +178,7 @@ private:
 
 	Mutex _m;
 
-	OtherRegionsTable _other_regions;   // [?] The structure to store the dirty_card information
+	OtherRegionsTable _other_regions;   // [x] The structure to store the dirty_card information
 
 	HeapRegion* _hr;							// Points to attached HeapRegion.
 

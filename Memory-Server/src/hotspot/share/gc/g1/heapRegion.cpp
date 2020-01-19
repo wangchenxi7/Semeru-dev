@@ -373,6 +373,13 @@ void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
   set_top(bottom());
 }
 
+// Semeru
+void HeapRegion::allocate_init_target_oop_queue(uint hrm_index){
+  _target_obj_queue = new TargetObjQueue();
+  _target_obj_queue->initialize(hrm_index);
+}
+
+
 void HeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {
   HeapRegionTracer::send_region_type_change(_hrm_index,
                                             get_trace_type(),

@@ -165,7 +165,7 @@ class os: AllStatic {
   //
   // Semeru
   //
-  static char* pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, size_t alignment);
+  static char* semeru_pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr, size_t alignment);
 
 
  public:
@@ -370,7 +370,7 @@ class os: AllStatic {
   //
 
   // file_desc : if != -1, the heap is file backed.
-  static char*  attempt_reserve_memory_pool_at(size_t bytes, char* addr, size_t alignment, int file_desc = -1 );
+  static char*  semeru_attempt_reserve_memory_at(size_t bytes, char* addr, size_t alignment, int file_desc = -1 );
 
 
 

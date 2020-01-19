@@ -31,6 +31,9 @@
 #include "utilities/ostream.hpp"
 #include "utilities/stack.hpp"
 
+
+
+
 // Simple TaskQueue stats that are collected by default in debug builds.
 
 #if !defined(TASKQUEUE_STATS) && defined(ASSERT)
@@ -108,7 +111,7 @@ protected:
   typedef NOT_LP64(uint16_t) LP64_ONLY(uint32_t) idx_t;
 
   // The first free element after the last one pushed (mod N).
-  volatile uint _bottom;  // [?] points to the free item ?? I thought _top points to the first free item. 
+  volatile uint _bottom;  // [x] points to the first free/available slot.
 
   enum { MOD_N_MASK = N - 1 };
 
@@ -152,7 +155,7 @@ protected:
     };
   };
 
-  volatile Age _age;
+  volatile Age _age;  // Used for work streal. _age._top points to the first inserted item.
 
   // These both operate mod N.
   static uint increment_index(uint ind) {
@@ -260,19 +263,23 @@ public:
 
 template <class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
 class GenericTaskQueue: public TaskQueueSuper<N, F> {
+  //template<class EE, MEMFLAGS FF, unsigned int NN >   // not work
+  //  friend class OverflowTargetObjQueue;      // To access its private field, _elems[]
+
+
 protected:
-  typedef typename TaskQueueSuper<N, F>::Age Age;       // [?] What's the Age used for ?
+  typedef typename TaskQueueSuper<N, F>::Age Age;       // [?] What's the Age used for ? Work steal related.
   typedef typename TaskQueueSuper<N, F>::idx_t idx_t;   // [?] purpose ?
 
-  using TaskQueueSuper<N, F>::_bottom;
-  using TaskQueueSuper<N, F>::_age;
+  using TaskQueueSuper<N, F>::_bottom;            // points to the first available slot.
+  using TaskQueueSuper<N, F>::_age;               // _age._top, points to the first inserted item. Usd by working steal.
   using TaskQueueSuper<N, F>::increment_index;
   using TaskQueueSuper<N, F>::decrement_index;
   using TaskQueueSuper<N, F>::dirty_size;         // [?] Definition of dirty ??
 
 public:
   using TaskQueueSuper<N, F>::max_elems;      // N-2, 2 slots are reserved for "complicated" reasons.
-  using TaskQueueSuper<N, F>::size;           // _top - _bottom ?
+  using TaskQueueSuper<N, F>::size;           // _bottom - _top
 
 #if  TASKQUEUE_STATS
   using TaskQueueSuper<N, F>::stats;
@@ -311,10 +318,13 @@ public:
   // be modified while iterating.
   template<typename Fn> void iterate(Fn fn);
 
+  // Promote to public
+  volatile E* _elems;       // [x] The real content, buffer, of the GenericTaskQueue. 
+  
 private:
   DEFINE_PAD_MINUS_SIZE(0, DEFAULT_CACHE_LINE_SIZE, 0);
   // Element array.
-  volatile E* _elems;       // The real content, buffer, of the GenericTaskQueue. 
+  //volatile E* _elems;       // [x] The real content, buffer, of the GenericTaskQueue. 
 
   DEFINE_PAD_MINUS_SIZE(1, DEFAULT_CACHE_LINE_SIZE, sizeof(E*));
   // Queue owner local variables. Not to be accessed by other threads.
@@ -350,12 +360,15 @@ GenericTaskQueue<E, F, N>::GenericTaskQueue() : _last_stolen_queue_id(InvalidQue
 // Note that size() is not hidden--it returns the number of elements in the
 // TaskQueue, and does not include the size of the overflow stack.  This
 // simplifies replacement of GenericTaskQueues with OverflowTaskQueues.
+//
+// [?] Each taskqueue has fixed size. e.g. 128K slots for the 64 bits app ?
+//
 template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
 class OverflowTaskQueue: public GenericTaskQueue<E, F, N>
 {
 public:
-  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size, N, limitation.
-  typedef GenericTaskQueue<E, F, N> taskqueue_t;
+  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size limitation.
+  typedef GenericTaskQueue<E, F, N> taskqueue_t;    // size is N.
 
   TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)
 
@@ -376,8 +389,58 @@ public:
   }
 
 private:
-  overflow_t _overflow_stack;
+  overflow_t _overflow_stack;     // The Stack<E,F>
 };
+
+
+/**
+ *  Target Object Queue, same as OverflowTaskQueue. But it's allocated at specific address.
+ *  This strcuture is transfered by RDMA.
+ *  
+ */
+template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
+class OverflowTargetObjQueue: public GenericTaskQueue<E, F, N>
+{
+public:
+  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size limitation.
+  typedef GenericTaskQueue<E, F, N> taskqueue_t;    // size is N.
+
+  // have a fixed base for the OverflowTargetObjQueue.
+  char* _base;
+
+  TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)
+
+  void initialize(size_t q_index);  // newly defined initialize() function for space allocation.
+
+  // Push task t onto the queue or onto the overflow stack.  Return true.
+  inline bool push(E t);
+  // Try to push task t onto the queue only. Returns true if successful, false otherwise.
+  inline bool try_push_to_taskqueue(E t);
+
+  // Attempt to pop from the overflow stack; return true if anything was popped.
+  inline bool pop_overflow(E& t);
+
+  inline overflow_t* overflow_stack() { return &_overflow_stack; }
+
+  inline bool taskqueue_empty() const { return taskqueue_t::is_empty(); }
+  inline bool overflow_empty()  const { return _overflow_stack.is_empty(); }
+  inline bool is_empty()        const {
+    return taskqueue_empty() && overflow_empty();
+  }
+
+private:
+  overflow_t _overflow_stack;     // The Stack<E,F>
+};
+
+
+
+
+
+
+
+
+
+
 
 class TaskQueueSetSuper {
 public:
@@ -397,7 +460,7 @@ public:
 
 private:
   uint _n;
-  T** _queues;
+  T** _queues;  // points to the GenericTaskQueue
 
   bool steal_best_of_2(uint queue_num, E& t);
 

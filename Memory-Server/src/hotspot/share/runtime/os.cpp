@@ -1708,13 +1708,13 @@ char* os::attempt_reserve_memory_at(size_t bytes, char* addr, int file_desc) {
  *    2) Normal virtual memory range
  * 
  */  
- char* os::attempt_reserve_memory_pool_at(size_t bytes, char* addr, size_t alignment, int file_desc ) {
+ char* os::semeru_attempt_reserve_memory_at(size_t bytes, char* addr, size_t alignment, int file_desc ) {
   char* result = NULL;
   if (file_desc != -1) {  
     // 1) Semeru never goes into this path.
 
     //debug
-    assert(false, "Can't reach here.");
+    guarantee(false, "Can't reach here.");
 
     result = pd_attempt_reserve_memory_at(bytes, addr, file_desc);
     if (result != NULL) {
@@ -1723,7 +1723,7 @@ char* os::attempt_reserve_memory_at(size_t bytes, char* addr, int file_desc) {
   } else {
     // 2) Normal path.
     //size_t alignment = 1073741824;
-    result = pd_attempt_reserve_memory_pool_at(bytes, addr, alignment);
+    result = semeru_pd_attempt_reserve_memory_at(bytes, addr, alignment);
     if (result != NULL) {
       MemTracker::record_virtual_memory_reserve((address)result, bytes, CALLER_PC);
     }

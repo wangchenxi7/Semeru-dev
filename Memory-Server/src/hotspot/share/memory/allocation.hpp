@@ -556,6 +556,35 @@ class ArrayAllocator : public AllStatic {
   static void free(E* addr, size_t length);
 };
 
+// Semeru support
+
+/**
+ *  Allocate data in fixed address.
+ *  Used for data structure transfered by RDMA.
+ */
+template <class E>
+class SemeruArrayAllocator : public AllStatic {
+ private:
+  static bool should_use_malloc(size_t length);
+
+  static E* allocate_malloc(size_t length, MEMFLAGS flags);
+  static E* allocate_mmap(size_t length, MEMFLAGS flags);
+  static E* allocate_mmap_at(size_t length, MEMFLAGS flags, char* requested_addr); 
+  //static E* commit_at(size_t length, MEMFLAGS flags, char* requested_addr);
+
+  static void free_malloc(E* addr, size_t length);
+  static void free_mmap(E* addr, size_t length);
+
+ public:
+  static E* allocate(size_t length, MEMFLAGS flags);
+  static E* allocate_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);    // specificed for target oop allocation.
+  static E* commit_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);
+  static E* reallocate(E* old_addr, size_t old_length, size_t new_length, MEMFLAGS flags);
+  static void free(E* addr, size_t length);
+};
+
+
+
 // Uses mmaped memory for all allocations. All allocations are initially
 // zero-filled. No pre-touching.
 template <class E>
@@ -567,6 +596,10 @@ class MmapArrayAllocator : public AllStatic {
   static E* allocate_or_null(size_t length, MEMFLAGS flags);
   static E* allocate(size_t length, MEMFLAGS flags);
   static void free(E* addr, size_t length);
+
+  // Semeru
+  static E* allocate_at(size_t length, MEMFLAGS flag, char* requested_addr);
+  static E* commit_at(size_t length, MEMFLAGS flags, char* requested_addr);
 };
 
 // Uses malloc:ed memory for all allocations.

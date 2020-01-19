@@ -75,7 +75,7 @@
 #include "utilities/vmError.hpp"
 
 // Semeru - headers
-#include "rdma_comm.hpp"
+//#include "rdma_comm.hpp"  // Move to memory/ directory.
 
 // put OS-includes here
 # include <sys/types.h>
@@ -3284,21 +3284,23 @@ static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed) {
  *  
  * 
  */
-pthread_t rdma_cma_thread; 
+//pthread_t rdma_cma_thread; 
 
-static char* anon_mmap_semeru_memory_pool(char* requested_addr, size_t bytes, bool fixed, size_t addr_alignment_hint) {
+static char* semeru_anon_mmap(char* requested_addr, size_t bytes, bool fixed, size_t addr_alignment_hint) {
 	char * addr;
 	int flags;
 
 	// We are allocated space for Java main heap,
 	// 1) align the start address to prevent re-allocation.
 	// 2) Fix the start address of memory pool. Controlled by CPU server.
-	if(requested_addr == NULL){
-		log_info(heap)("%s, Warning. It's not good to reach here. Set the start address ealier.",__func__);
+	// if(requested_addr == NULL){
+	// 	log_info(heap)("%s, Warning. It's not good to reach here. Set the start address ealier.",__func__);
 
-		requested_addr = (char*)0x7fefff000000;   // use a fixed start address. Make sure the range is empty.
-		fixed = true;
-	}
+	// 	requested_addr = (char*)0x7fefff000000;   // use a fixed start address. Make sure the range is empty.
+	// 	fixed = true;
+	// }
+	guarantee(requested_addr!=NULL, "Error: semeru_anon_mmap is used to allocate space transfered by RDMA. The start address has to be fixed. \n");
+
 
 	// Check start address and size alignment.
 	// Confirm this alignment before reaching here.
@@ -3316,25 +3318,29 @@ static char* anon_mmap_semeru_memory_pool(char* requested_addr, size_t bytes, bo
 	}
 
 	// Map reserved/uncommitted pages PROT_NONE so we fail early if we
-	// touch an uncommitted page. Otherwise, the read/write might
+	// touch an uncommitted page. (We have to commit the reserved pages before touching them.) 
+	// Otherwise, the read/write might
 	// succeed if we have enough swap space to back the physical page.
 	addr = (char*)::mmap(requested_addr, bytes, PROT_NONE, flags, -1, 0);
 
 
 	// 3) Register the virtual memory pool as RDMA buffer
 	// 4) Create a deamon thread to build RDMA connection and run as RDMA CM handler in background.
-	if(addr != MAP_FAILED){
-		// Confirming the reserved heap is at the start address we are expected.
-		assert(addr == requested_addr, "Allocated addr != requested_addr");
+	//
+	//		Move these to upper caller.
+	//
+	// if(addr != MAP_FAILED){
+	// 	// Confirming the reserved heap is at the start address we are expected.
+	// 	assert(addr == requested_addr, "Allocated addr != requested_addr");
 
-		struct rdma_main_thread_args *args = (struct rdma_main_thread_args *)malloc(sizeof(struct rdma_main_thread_args));
-		args->heap_start	=	addr;			// char*
-		args->heap_size		= bytes;    // size_t
-		if(pthread_create(&rdma_cma_thread, NULL, Build_rdma_to_cpu_server, (void*)args) != 0) {
-			tty->print("Create the daemon thread failed.");
-			return NULL;
-		}
-	}
+	// 	struct rdma_main_thread_args *args = (struct rdma_main_thread_args *)malloc(sizeof(struct rdma_main_thread_args));
+	// 	args->heap_start	=	addr;			// char*
+	// 	args->heap_size		= bytes;    // size_t
+	// 	if(pthread_create(&rdma_cma_thread, NULL, Build_rdma_to_cpu_server, (void*)args) != 0) {
+	// 		tty->print("Create the daemon thread failed.");
+	// 		return NULL;
+	// 	}
+	// }
 
 	return addr == MAP_FAILED ? NULL : addr;
 }
@@ -4137,7 +4143,7 @@ char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr) {
  * 		2) Get virtual address range at any available start address.
  *  
  */
-char* os::pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, size_t alignment) {
+char* os::semeru_pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr, size_t alignment) {
 	const int max_tries = 10;
 	char* base[max_tries];
 	size_t size[max_tries];
@@ -4157,7 +4163,7 @@ char* os::pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, 
 	// if kernel honors the hint then we can return immediately.
 	//char * addr = anon_mmap(requested_addr, bytes, false);
 	// size_t alignment_hint = 1073741824; 	// [?] Region size ? 1GB here.
-	char * addr = anon_mmap_semeru_memory_pool(requested_addr, bytes, requested_addr!=NULL,  alignment);
+	char * addr = semeru_anon_mmap(requested_addr, bytes, requested_addr!=NULL,  alignment);
 	if (addr == requested_addr) {
 		return requested_addr;
 	}
@@ -4203,7 +4209,6 @@ char* os::pd_attempt_reserve_memory_pool_at(size_t bytes, char* requested_addr, 
 	}
 
 	// Give back the unused reserved pieces.
-
 	for (int j = 0; j < i; ++j) {
 		if (base[j] != NULL) {
 			unmap_memory(base[j], size[j]);

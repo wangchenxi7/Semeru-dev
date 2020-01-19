@@ -35,7 +35,9 @@
 #include "gc/shared/spaceDecorator.hpp"
 #include "utilities/macros.hpp"
 
-// Smeru
+// Semeru
+#include "gc/shared/taskqueue.hpp"
+
 
 // The inlcude order is that : HeapRegionSet include HeapRegion.
 //                             SemeruHeapRegionManager.hpp include HeapRegionSet.
@@ -195,6 +197,22 @@ class G1ContiguousSpace: public CompactibleSpace {
   }
 };
 
+/**
+ * Semeru 
+ *  
+ *  CPU Server  - Producer 
+ *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
+ *     First, from thread stack variables. This is done during CPU server GC.
+ *     Second, Cross-Region references recoreded by the Post Write Barrier ?
+ *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
+ *  
+ *  Memory Server - Consumer 
+ *     Receive the TargetObjQueue and use them as the scavenge roots.
+ * 
+ */
+typedef OverflowTargetObjQueue<StarTask, mtGC>        TargetObjQueue;     // Override the typedef of OopTaskQueue
+typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
+
 
 /**
  * Tag: HeapRegion management handler.
@@ -203,6 +221,7 @@ class G1ContiguousSpace: public CompactibleSpace {
  */
 class HeapRegion: public G1ContiguousSpace {
   friend class VMStructs;
+  friend class SemeruHeapRegionManager; // Allocate & initialize its private field, target_oop_queue.
   // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
   template <typename SpaceType>
   friend void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp);
@@ -213,6 +232,15 @@ class HeapRegion: public G1ContiguousSpace {
   // issues.)
   // 
   HeapRegionRemSet* _rem_set;  //[x] Region Local RemSet
+
+  // Target object queue. Contains all the target objects of the cross-region references into current Region.
+  // This queue is built by the CPU sever GC.
+  // This queue is sent to Memory Server via the RDMA. 
+  // It should be allocated in fixed address : 0x300,000,000,000
+  //
+  // [x] Only allocate && initialize this queue in Semeru heap.
+  TargetObjQueue* _target_obj_queue;
+
 
   // Auxiliary functions for scan_and_forward support.
   // See comments for CompactibleSpace for more information.
@@ -329,6 +357,8 @@ class HeapRegion: public G1ContiguousSpace {
   // The default values for clear_space means that we will do the clearing if
   // there's clearing to be done ourselves. We also always mangle the space.
   virtual void initialize(MemRegion mr, bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
+
+  void allocate_init_target_oop_queue(uint hrm_index);
 
   static int    LogOfHRGrainBytes;
   static int    LogOfHRGrainWords;

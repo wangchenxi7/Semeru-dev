@@ -600,8 +600,9 @@ void CollectedHeap::initialize_reserved_region(HeapWord *start, HeapWord *end) {
 /**
  * Semeru
  * 
+ *  collectedHeap->_reserved_memory_pool records the space for normal data allocation.
+ *  
  */ 
-
 	void CollectedHeap::initialize_reserved_memory_pool(HeapWord *start, HeapWord *end) {
 	// It is important to do this in a way such that concurrent readers can't
 	// temporarily think something is in the heap.  (Seen this happen in asserts.)

@@ -49,7 +49,7 @@ inline GenericTaskQueueSet<T, F>::~GenericTaskQueueSet() {
 
 template<class E, MEMFLAGS F, unsigned int N>
 inline void GenericTaskQueue<E, F, N>::initialize() {
-  _elems = ArrayAllocator<E>::allocate(N, F);
+  _elems = ArrayAllocator<E>::allocate(N, F);           // Allocate the space for the queue.
 }
 
 template<class E, MEMFLAGS F, unsigned int N>
@@ -131,6 +131,68 @@ template <class E, MEMFLAGS F, unsigned int N>
 inline bool OverflowTaskQueue<E, F, N>::try_push_to_taskqueue(E t) {
   return taskqueue_t::push(t);
 }
+
+
+/**
+ * Semeru
+ *  
+ */
+
+// Allocate the array at specific address
+//
+//  Parameters:
+//    class E     : Cast the allocated memory to E*.
+//    MEMFLAGS F  : flag used to trace the memory usage. 
+//             N  : the element number. It's a fixed number. Use the default value, TASKQUEUE_SIZE.
+//
+//  [x] To access template superclass's field, have to use this
+//      https://stackoverflow.com/questions/4010281/accessing-protected-members-of-superclass-in-c-with-templates  
+template<class E, MEMFLAGS F, unsigned int N>
+inline void OverflowTargetObjQueue<E, F, N>::initialize( size_t q_index) {
+
+  assert(N == TASKQUEUE_SIZE, "Use the default queue number. \n");
+  //_base =  (char*)0x300000000000;   // 48 bits, 0x3--> as the RDMA meta structure sapce.
+  
+  _base = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET);
+  char* requested_addr = _base + N * q_index;
+  
+  assert(requested_addr + N <= (char*)(SEMERU_START_ADDR + TARGET_OBJ_SIZE_BYTE), "Not exceed the RDMA structure scope." );
+
+  this->_elems = SemeruArrayAllocator<E>::allocate_target_oop_q(N, F, requested_addr);           // Allocate the space for the queue.
+
+  #ifdef ASSERT
+    printf("%s, Allocate OverflowTargetObjQueue for HeapRegion[%lu] at 0x%lx, size 0x%lx \n", __func__,
+                                                            q_index, (size_t)requested_addr, (size_t)N);
+  #endif
+
+}
+
+template <class E, MEMFLAGS F, unsigned int N>
+bool OverflowTargetObjQueue<E, F, N>::pop_overflow(E& t)
+{
+  if (overflow_empty()) return false;
+  t = overflow_stack()->pop();
+  return true;
+}
+
+
+template <class E, MEMFLAGS F, unsigned int N>
+inline bool OverflowTargetObjQueue<E, F, N>::push(E t)
+{
+  if (!taskqueue_t::push(t)) {
+    overflow_stack()->push(t);
+    TASKQUEUE_STATS_ONLY(stats.record_overflow(overflow_stack()->size()));
+  }
+  return true;
+}
+
+template <class E, MEMFLAGS F, unsigned int N>
+inline bool OverflowTargetObjQueue<E, F, N>::try_push_to_taskqueue(E t) {
+  return taskqueue_t::push(t);
+}
+
+
+
 
 // pop_local_slow() is done by the owning thread and is trying to
 // get the last task in the queue.  It will compete with pop_global()

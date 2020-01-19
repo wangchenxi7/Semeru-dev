@@ -972,13 +972,16 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 
 	// Now create the space.
 	// ReservedHeapSpace total_rs(total_reserved, alignment, use_large_pages, AllocateHeapAt);
-	char* heap_start_addr = (char*)0x400000000000;		// Not set the memory pool start address yet.
+	char* heap_start_addr = (char*)SEMERU_START_ADDR;		// Not set the memory pool start address yet.
 	ReservedHeapSpace total_rs(total_reserved, alignment, heap_start_addr);			// [X] Get virtual space from OS.
 
 	// ==> Reserve Java heap from OS successfully 
 	if (total_rs.is_reserved()) {
 		assert((total_reserved == total_rs.size()) && ((uintptr_t)total_rs.base() % alignment == 0),
 					 "must be exactly of required size and alignment");
+
+	 	assert(total_rs.base() == heap_start_addr, "The start address must equal to the requested addr.\n");
+
 		// We are good.
 
 		// if (UseCompressedOops) {

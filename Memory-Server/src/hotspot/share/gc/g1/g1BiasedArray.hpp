@@ -204,7 +204,7 @@ public:
    * 
    */  
   void initialize(HeapWord* bottom, HeapWord* end, size_t mapping_granularity) {
-    G1BiasedMappedArrayBase::initialize(bottom, end, sizeof(T), mapping_granularity);
+    G1BiasedMappedArrayBase::initialize(bottom, end, sizeof(T), mapping_granularity);  // not insert items into _region[] array.
     this->clear();
   }
 };

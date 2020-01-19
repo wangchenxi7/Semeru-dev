@@ -1843,6 +1843,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	size_t init_byte_size = semeru_collector_policy()->initial_heap_byte_size();			//-X:SemeruMemPoolInitialSize
 	size_t max_byte_size 	= semeru_collector_policy()->heap_reserved_size_bytes();		//-X:SemeruMemPoolMaxSize
 	size_t heap_alignment = semeru_collector_policy()->heap_alignment();							//-X:SemeruMemPoolAlignment
+	// [x] Shrink the size in product mode. [x]
+	size_t reserved_for_rdma_data = RDMA_STRUCTURE_SPACE;	// Bytes, Reserved for structures transfered by RDMA.
 	log_info(heap)("%s, init_byte_size : 0x%llx, max_byte_size : 0x%llx, heap_alignment : 0x%llx \n",
 								__func__, (unsigned long long)init_byte_size, (unsigned long long)max_byte_size,(unsigned long long)heap_alignment);
 
@@ -1859,15 +1861,21 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// [x] Simplify the design. Always disable the compressed oops.
 	//		Assuming the Java heap for big data applications is bigger than 32GB.
 	//
-	ReservedSpace heap_rs = Universe::reserve_semeru_memory_pool(max_byte_size,
-																								 									heap_alignment);
+	// [x] Reserve some space, reserved_for_rdma_data, for the data transfered by the RDMA.
+	// 		 All the space, max_byte_size + reserved_for_rdma_data, will be registered as RDMA space.
+	ReservedSpace heap_rs = Universe::reserve_semeru_memory_pool(max_byte_size + reserved_for_rdma_data,
+																								 																			heap_alignment);
 
 	
 	#ifdef ASSERT
 		log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
 	#endif
 
-	initialize_reserved_memory_pool((HeapWord*)heap_rs.base(), (HeapWord*)(heap_rs.base() + heap_rs.size()));
+	// |----- RDMA data structure(reserved_for_rdma_data) ----------|---- normal Java heap(max_byte_size)-----------|
+	//	Here initialize the second part, max_byte_size, as collectedHeap.
+	//
+	initialize_reserved_memory_pool((HeapWord*)heap_rs.base()+reserved_for_rdma_data/HeapWordSize, 
+																										(HeapWord*)(heap_rs.base() + heap_rs.size()));
 
 	//debug - Code passed here.
 	//return JNI_OK;
@@ -1917,10 +1925,24 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 
- 	// Carve out the G1 part of the heap.
-	//  [?]  What's the connection between heap_rs and g1_rs ??
+ 	// Carve out the RDMA data structure part.
 	//
- 	ReservedSpace g1_rs = heap_rs.first_part(max_byte_size);   // Carve out a Reserved space from  the heap_rs ??
+	ReservedSpace rdma_rs = heap_rs.first_part(reserved_for_rdma_data);
+	#ifdef ASSERT
+		tty->print("%s, Reserve space for RDMA data structure, [0x%lx, 0x%lx) \n", __func__, 
+																																	(size_t)rdma_rs.base() , 
+																																	(size_t)(rdma_rs.base() + rdma_rs.size()) );
+	#endif
+
+	// Carve out the space after reserved_for_rdma_data as a the reserved G1 Java heap space.
+ 	ReservedSpace g1_rs = heap_rs.last_part(reserved_for_rdma_data);   
+	#ifdef ASSERT
+		tty->print("%s, Reserve G1 Java heap, [0x%lx, 0x%lx) \n", __func__, 
+																																	(size_t)g1_rs.base() , 
+																																	(size_t)(g1_rs.base() + g1_rs.size()) );
+	#endif
+
+
  	size_t page_size = actual_reserved_page_size(heap_rs);			// page size, actually used in current heap.
  	G1RegionToSpaceMapper* heap_storage =
  		G1RegionToSpaceMapper::create_heap_mapper(g1_rs,
