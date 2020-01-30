@@ -57,7 +57,7 @@
 
 // Semeru
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
-#include "gc/g1/SemeruHeapRegionManager.hpp"
+#include "gc/g1/SemeruHeapRegionManager.hpp"  // G1SemeruCollectedHeap --> SemeruHeapRegionManager, the invoke sequence.
 
 
 // A "G1SemeruCollectedHeap" is an implementation of a java memory pool in HotSpot for CPU server.
@@ -181,13 +181,18 @@ class G1SemeruCollectedHeap : public CollectedHeap {
 private:
 //   G1YoungRemSetSamplingThread* _young_gen_sampling_thread;
 
-  WorkGang* _workers;         // GC threads 
-  G1SemeruCollectorPolicy* _collector_policy;
-  G1CardTable* _card_table;   // de-duplicate the dirty cards.
+  // Semeru 
+  // Record the range for the whole Semeru memory pool
+  // |--- Reserved for RDMA data ---|---- normal heap ---- |
+  ReservedSpace*            _semeru_rs;
 
-  SoftRefPolicy      _soft_ref_policy;  // soft-reference ?
+  WorkGang*                 _workers;         // GC threads 
+  G1SemeruCollectorPolicy*  _collector_policy;
+  G1CardTable*              _card_table;   // de-duplicate the dirty cards.
 
-  static size_t _humongous_object_threshold_in_words;
+  SoftRefPolicy             _soft_ref_policy;  // soft-reference ?
+
+  static size_t             _humongous_object_threshold_in_words;
 
 //   // These sets keep track of old, archive and humongous regions respectively.
 //   HeapRegionSet _old_set;
@@ -327,6 +332,7 @@ private:
                                                          size_t size,
                                                          size_t translation_factor);
 
+
   void trace_heap(GCWhen::Type when, const GCTracer* tracer);
 
   // These are macros so that, if the assert fires, we get the correct
@@ -393,8 +399,8 @@ private:
 
   // The current policy object for the collector.
   // The Semeru Collected Heap is using G1Pollicy temporily
-  G1Policy* _g1_policy;
-  G1HeapSizingPolicy* _heap_sizing_policy;
+  G1Policy* _g1_policy;       // [?] What's this G1 policy used for ??
+  // G1HeapSizingPolicy* _heap_sizing_policy;    // [?] Does Semeru memory pool need this  sizing policy ?
 
   G1CollectionSet _collection_set;    // Collection Set for Semeru Memory server, dicided by CPU server.
 
@@ -546,7 +552,25 @@ private:
 //   // Merges the information gathered on a per-thread basis for all worker threads
 //   // during GC into global variables.
 //   void merge_per_thread_state_info(G1ParScanThreadStateSet* per_thread_states);
+
+
+  // Semeru - private functions
+  void set_semeru_reserved_space(ReservedSpace* semeru_rs)  { _semeru_rs = semeru_rs; }
+
  public:
+
+  // Semeru - public functions
+  ReservedSpace* semeru_reserved_space()  { return _semeru_rs;  }
+
+  // Semeru
+  // Reserve auxiliary memory at fixed start address.
+  // Curve out space from heap_rs directly, no need to request memory from OS.
+  static G1RegionToSpaceMapper* create_aux_memory_mapper_from_rs(const char* description,
+																																 size_t size,
+																																 size_t translation_factor,
+																																 size_t offset);
+
+
 //   G1YoungRemSetSamplingThread* sampling_thread() const { return _young_gen_sampling_thread; }
 
   WorkGang* workers() const { return _workers; }
@@ -945,7 +969,7 @@ private:
   G1SemeruSTWSubjectToDiscoveryClosure _is_subject_to_discovery_stw;
 
   // The (concurrent marking) reference processor...
-  ReferenceProcessor* _ref_processor_cm;
+  ReferenceProcessor* _ref_processor_cm;      // [?] What's this reference processor used for ??
 
   // Instance of the concurrent mark is_alive closure for embedding
   // into the Concurrent Marking reference processor as the

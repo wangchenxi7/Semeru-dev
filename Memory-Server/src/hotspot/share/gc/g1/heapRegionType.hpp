@@ -85,9 +85,9 @@ private:
     // - Open archive regions have no restrictions on the references of their objects.
     // Objects within these regions are allowed to have references to objects
     // contained in any other kind of regions.
-    ArchiveMask           = 32,
-    OpenArchiveTag        = ArchiveMask | PinnedMask,
-    ClosedArchiveTag      = ArchiveMask | PinnedMask + 1
+    ArchiveMask           = 32,                           // immutable. [?] In what case, a HeapRegion can be Archived ?
+    OpenArchiveTag        = ArchiveMask | PinnedMask,     // immutable. But can have reference to other regions.
+    ClosedArchiveTag      = ArchiveMask | PinnedMask + 1  // immutable. Can't have reference to other regions.
   } Tag;
 
   volatile Tag _tag;

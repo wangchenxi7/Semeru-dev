@@ -131,19 +131,28 @@ void init_memory_pool(char* heap_start, size_t heap_size, struct context* rdma_c
 	// Divide the heap into multiple Regions.
 	rdma_ctx->mem_pool->region_num = heap_size/ONE_GB/REGION_SIZE_GB;
 
+  // The fist part is used for RDMA meta data transfering.
+  // And it may not be 4GB alignment.
   rdma_ctx->mem_pool->region_list[0]  = heap_start;
+  #ifdef DEBUG_RDMA_SERVER
+    // the first Chunk.
+    printf("%s, Record memory Region[%d]( Meata DATA)  : 0x%llx \n", __func__, 0, 
+                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[0] );
+  #endif
+
 	for(i=1;i<rdma_ctx->mem_pool->region_num ;i++){
 		rdma_ctx->mem_pool->region_list[i]  = rdma_ctx->mem_pool->region_list[i-1] + (size_t)REGION_SIZE_GB*ONE_GB;  // Not exceed the int limitation.
 		rdma_ctx->mem_pool->cache_status[i] = -1;  // -1 means not bind  to CPU server.
 
     #ifdef DEBUG_RDMA_SERVER
-    printf("%s, Record memory Region[%d] : 0x%llx \n", __func__, i, (unsigned long long)rdma_ctx->mem_pool->region_list[i] );
+      printf("%s, Record memory Region[%d] (Object DATA) : 0x%llx \n", __func__, i, 
+                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[i] );
     #endif
 	}
 
 
 	#ifdef DEBUG_RDMA_SERVER
-	tty->print("Registered %llu GB (whole head) as RDMA Buffer \n", (unsigned long long)heap_size/ONE_GB);
+	  tty->print("Registered %llu GB (whole head) as RDMA Buffer \n", (unsigned long long)heap_size/ONE_GB);
 	#endif
 
 	// Register the whole Java heap as RDMA buffer.
@@ -432,7 +441,7 @@ void post_receives(struct context *rdma_ctx)
   wr.num_sge  = 1;					// [?] Why does the number of sge for each WR is always 1 ??
 
   sge.addr    = (uintptr_t)rdma_ctx->recv_msg;   // Put a recv_wr to wait for 2-sided RDMA message.
-  sge.length  = sizeof(struct message);
+  sge.length  = (uint32_t)sizeof(struct message);
   sge.lkey    = rdma_ctx->recv_mr->lkey;         // For message receive, use the lkey of receive RDMA MR. 
 
   TEST_NZ(ibv_post_recv(rdma_ctx->qp, &wr, &bad_wr)); // post a recv wait for WR.
@@ -664,7 +673,7 @@ void send_message(struct context * rdma_ctx){
   wr.send_flags = IBV_SEND_SIGNALED;
 
   sge.addr = (uintptr_t)rdma_ctx->send_msg;
-  sge.length = sizeof(struct message);
+  sge.length = (uint32_t)sizeof(struct message);
   tty->print("%s, message size = %lu\n", __func__, sizeof(struct message));
   sge.lkey = rdma_ctx->send_mr->lkey;
 

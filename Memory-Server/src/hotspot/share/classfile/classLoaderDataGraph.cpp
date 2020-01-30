@@ -47,6 +47,10 @@
 volatile size_t ClassLoaderDataGraph::_num_array_classes = 0;
 volatile size_t ClassLoaderDataGraph::_num_instance_classes = 0;
 
+/**
+ * Tag : purpose of the clear ?
+ *  
+ */
 void ClassLoaderDataGraph::clear_claimed_marks() {
   for (ClassLoaderData* cld = _head; cld != NULL; cld = cld->next()) {
     cld->clear_claim();

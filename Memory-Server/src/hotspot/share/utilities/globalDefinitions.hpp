@@ -118,11 +118,10 @@
 #define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
 
 #define PAGE_SIZE		      ((size_t)4096)	// bytes
-#define REGION_SIZE_GB    ((size_t)8)   	// Habe to be 1GB at current ! or will cause inconsistence problems. 
+#define REGION_SIZE_GB    ((size_t)4)   	// Habe to be 1GB at current ! or will cause inconsistence problems. 
+#define RDMA_DATA_REGION_NUM     8
 
 
-#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * 4 + RDMA_STRUCTURE_SPACE)    //for local memory management
-#define MAX_MR_NUM_GB     ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
 
 #define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
 
@@ -130,13 +129,25 @@
 #define SEMERU_START_ADDR   ((size_t)0x400000000000)
 
 // RDMA structure space
-#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *1)
+// [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
+#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *4)
 
 // 1) First part is for the Target Object queue, 128M
+
+// [0, 1GB), small meta data space
 #define TARGET_OBJ_OFFSET     (size_t)0
 #define TARGET_OBJ_SIZE_BYTE  (size_t)0x8000000   // 128M bytes
 
+// [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
+#define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // offset to semeru start addr, 1GB
+#define DEST_BITMAP_OFFSET       (size_t)0x80000000     // 2GB
 
+
+// properties for the whole Semeru heap.
+// [ RDMA meta data sapce] [RDMA data space]
+
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE)    //for local memory management
+#define MAX_MR_NUM_GB     ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
 
 
 //----------------------------------------------------------------------------------------------------

@@ -73,6 +73,10 @@ void ConcurrentGCThread::terminate() {
   }
 }
 
+
+/**
+ * The main entry of the concurrent marking component. 
+ */
 void ConcurrentGCThread::run() {
   initialize_in_thread();
   wait_for_universe_init();

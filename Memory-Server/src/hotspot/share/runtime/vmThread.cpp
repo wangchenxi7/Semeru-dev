@@ -456,6 +456,13 @@ bool VMThread::no_op_safepoint_needed(bool check_time) {
   return true;
 }
 
+/**
+ * Schedule a operation to run.
+ * The task scheduler can suspend the mutators before excute the operation. 
+ * 
+ * [?] What's the difference betwen VMThread::loop() and VMThrad::execute().
+ * 
+ */
 void VMThread::loop() {
   assert(_cur_vm_operation == NULL, "no current one should be executing");
 
@@ -623,7 +630,7 @@ void VMThread::loop() {
     //
     if (VMThread::no_op_safepoint_needed(true)) {
       HandleMark hm(VMThread::vm_thread());
-      SafepointSynchronize::begin();
+      SafepointSynchronize::begin();    // [?] begin a safe zone ? only one thread can run in this zone.
       SafepointSynchronize::end();
     }
   }

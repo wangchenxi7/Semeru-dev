@@ -28,6 +28,11 @@
 #include "gc/g1/heapRegion.hpp"
 #include "memory/virtualspace.hpp"
 
+
+/**
+ * [?] Allocate bitmap space from storage to cover the MemRegion, heap. 
+ * 
+ */
 void G1CMBitMap::initialize(MemRegion heap, G1RegionToSpaceMapper* storage) {
   MarkBitMap::initialize(heap, storage->reserved());
   storage->set_mapping_changed_listener(&_listener);

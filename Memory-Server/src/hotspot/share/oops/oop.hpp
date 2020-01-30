@@ -51,15 +51,16 @@ class CMSIsAliveClosure;
 class PSPromotionManager;
 class ParCompactionManager;
 
+// Points to an object header.
 class oopDesc {
   friend class VMStructs;
   friend class JVMCIVMStructs;
  private:
-  volatile markOop _mark;
+  volatile markOop _mark;     // first 8 bytes, 
   union _metadata {
     Klass*      _klass;
     narrowKlass _compressed_klass;
-  } _metadata;
+  } _metadata;                // second 8 bytes,
 
  public:
   inline markOop  mark()          const;

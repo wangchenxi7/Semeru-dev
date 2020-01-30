@@ -519,7 +519,7 @@ public:
   // between task-local queues and the global mark stack.
   bool mark_stack_push(G1TaskQueueEntry* arr) {
     if (!_global_mark_stack.par_push_chunk(arr)) {
-      set_has_overflown();
+      set_has_overflown();    // the global task_queue is also overflowed.
       return false;
     }
     return true;
@@ -669,7 +669,7 @@ private:
   G1ConcurrentMark*           _cm;
   G1CMBitMap*                 _next_mark_bitmap;
   // the task queue of this task
-  G1CMTaskQueue*              _task_queue;      // The StarTask queue for CM ?
+  G1CMTaskQueue*              _task_queue;      // The StarTask queue for grey objects makred during CM ?
 
   G1RegionMarkStatsCache      _mark_stats_cache;
   // Number of calls to this task
@@ -691,7 +691,7 @@ private:
   HeapWord*                   _region_limit;
 
   // Number of words this task has scanned
-  size_t                      _words_scanned;
+  size_t                      _words_scanned;   // [?] purpose of this counting ?
   // When _words_scanned reaches this limit, the regular clock is
   // called. Notice that this might be decreased under certain
   // circumstances (i.e. when we believe that we did an expensive

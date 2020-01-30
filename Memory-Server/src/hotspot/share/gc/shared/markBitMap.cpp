@@ -39,6 +39,15 @@ size_t MarkBitMap::mark_distance() {
   return MinObjAlignmentInBytes * BitsPerByte;   // 8 bytes alignment * 8 bits per byte.
 }
 
+/**
+ * Allocate bitmap space from storage to cover the heap.
+ *  
+ * storage : the MemRegion stored the bitmap, 
+ * heap    : the MemRegion to be covered by this bitmap.
+ * 
+ * the size of the bitmap is specified by storage.start() + _covered region size >> _shifter.
+ * 
+ */
 void MarkBitMap::initialize(MemRegion heap, MemRegion storage) {
   _covered = heap;
 

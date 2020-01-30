@@ -1576,6 +1576,7 @@ void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
 
 G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_policy) :
  	CollectedHeap(true),
+	_semeru_rs(NULL),
 	_workers(NULL),
 	_collector_policy(collector_policy),
 	_card_table(NULL),
@@ -1591,7 +1592,7 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
  	_survivor(),
 	_gc_timer_stw(new (ResourceObj::C_HEAP, mtGC) STWGCTimer()),
 	_g1_policy(G1Policy::create_policy(collector_policy, _gc_timer_stw)),
-	_heap_sizing_policy(NULL),
+	//_heap_sizing_policy(NULL),
 	_collection_set(this, _g1_policy),
 	_g1_rem_set(NULL),
 	_ref_processor_stw(NULL),
@@ -1753,8 +1754,8 @@ static size_t actual_reserved_page_size(ReservedSpace rs) {
  * 		Third, calculate the mapping  for Region and page for BOT. 
  * 					 1 GB / 512 bytes = 2M cards
  * 					 1 byte per card, 2M bytes 
- * 					 For 4K page, it needs 256 pages.
- * 					 Finally, for this structure, allocate  256 pages per Region. 
+ * 					 For 4K page, it needs 512 pages.
+ * 					 Finally, for this structure, allocate  512 pages per Region. 
  */
 G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const char* description,
 																																 size_t size,
@@ -1780,6 +1781,57 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const cha
 
 	return result;
 }
+
+
+/**
+ * Semeru - Reserve auxiliary space at fixed start address. 
+ * 
+ * [x] The specified memory range may already be reserved at very first.
+ * 		 No need to request memory from OS agian.
+ * 
+ * [x] Reserve space for the whole heap, commit space region by region.
+ * 
+ */
+G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper_from_rs(const char* description,
+																																 size_t size,
+																																 size_t translation_factor,
+																																 size_t offset) {
+	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
+	G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();  // This is a static function, we have to build the instance explicitly.
+
+	// Allocate a new reserved space, preferring to use large pages.
+	ReservedSpace rs(semeru_h->semeru_reserved_space()->base()+ offset,
+									size, 
+									preferred_page_size, false, false);					// [?] Build a ReservedSpace based already mmap() range.
+	assert(rs.is_reserved(), "Build ReservedSpace on already mmap() space failed.");
+		
+	size_t page_size = actual_reserved_page_size(rs);
+	G1RegionToSpaceMapper* result  =
+		G1RegionToSpaceMapper::create_mapper(rs,
+																				 size,
+																				 page_size,
+																				 HeapRegion::SemeruGrainBytes,
+																				 translation_factor,
+																				 mtGC);
+
+	os::trace_page_sizes_for_requested_size(description,
+																					size,
+																					preferred_page_size,
+																					page_size,
+																					rs.base(),
+																					rs.size());
+
+	#ifdef ASSERT
+		tty->print("%s, create reserve space [0x%lx, 0x%lx) for %s \n", __func__, (unsigned long)rs.base(),
+																																							(unsigned long)(rs.base() + rs.size()),
+																																							description);
+	#endif
+
+	return result;
+}
+
+
+
 
 // jint G1SemeruCollectedHeap::initialize_concurrent_refinement() {
 // 	jint ecode = JNI_OK;
@@ -1866,6 +1918,9 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	ReservedSpace heap_rs = Universe::reserve_semeru_memory_pool(max_byte_size + reserved_for_rdma_data,
 																								 																			heap_alignment);
 
+	// Record the whole semer resered space
+	set_semeru_reserved_space(&heap_rs);
+
 	
 	#ifdef ASSERT
 		log_info(heap)("%s, Request memory from OS at specific address passed. \n", __func__);
@@ -1925,8 +1980,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 
- 	// Carve out the RDMA data structure part.
-	//
+ 	// Carve out the reserved space for target object queue.
+	//  [0, TARGET_OBJ_SIZE_BYTE] [alive_bitmap] [dest_bitmap] [reserved] | [Java Heap]
 	ReservedSpace rdma_rs = heap_rs.first_part(reserved_for_rdma_data);
 	#ifdef ASSERT
 		tty->print("%s, Reserve space for RDMA data structure, [0x%lx, 0x%lx) \n", __func__, 
@@ -1991,21 +2046,11 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// [?] Do we need the pre_bitmap/next_bitmap ? 
 	//		 Seems not.
 	//     Semeru needs alive_bitmap and dest_bitmap
-	size_t bitmap_size = G1CMBitMap::compute_size(g1_rs.size());		// size for each bitmap, represent the whole heap.
-	G1RegionToSpaceMapper* prev_bitmap_storage =
-		create_aux_memory_mapper("Prev Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
-	G1RegionToSpaceMapper* next_bitmap_storage =
-		create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
-
-	// Allocate our alive_bitmap and dest_bitmap.
-	// 
-	// Warning : Both the alive_bitmap and dest_bitmap are Network structure.
-	// Semeru transfers these data between CPU server and Memory Servers.
-	//
-	G1RegionToSpaceMapper* alive_bitmap_storage =
-		create_aux_memory_mapper("Alive Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
-	G1RegionToSpaceMapper* dest_bitmap_storage =
-		create_aux_memory_mapper("Destination Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+	// size_t bitmap_size = G1CMBitMap::compute_size(g1_rs.size()/ HeapWordSize);		// size for each bitmap, represent the whole heap.
+	// G1RegionToSpaceMapper* prev_bitmap_storage =
+	// 	create_aux_memory_mapper("Prev Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
+	// G1RegionToSpaceMapper* next_bitmap_storage =
+	// 	create_aux_memory_mapper("Next Bitmap", bitmap_size, G1CMBitMap::heap_map_factor());
 
 
 	//
@@ -2014,8 +2059,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	_hrm = SemeruHeapRegionManager::create_manager(this, semeru_collector_policy());
 
 	// [?] For Semeru heap, does it need these bitmap ?
-	_hrm->initialize(heap_storage, prev_bitmap_storage, next_bitmap_storage, bot_storage, cardtable_storage, card_counts_storage);
-	
+	_hrm->initialize(heap_storage, bot_storage, cardtable_storage, card_counts_storage);
+
 	
 // 	//
 // 	// [x] RememberSet related structures
@@ -2081,7 +2126,9 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	// Create the G1ConcurrentMark data structure and thread.
 	// (Must do this late, so that "max_regions" is defined.)
-	_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
+	//_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
+	
+	_cm = new G1SemeruConcurrentMark(this, NULL, NULL);   // G1 GC related data structure
 	if (_cm == NULL || !_cm->completed_initialization()) {
 		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
 		return JNI_ENOMEM;

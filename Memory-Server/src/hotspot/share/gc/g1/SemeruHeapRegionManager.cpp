@@ -70,13 +70,27 @@ public:
 /**
  * Assign intial values to each field.
  * 	
- * [?] _available_map(mtGC)  ?? Multiple thread GC ?
+ */
+// SemeruHeapRegionManager::SemeruHeapRegionManager() :
+// 	_bot_mapper(NULL),
+// 	_cardtable_mapper(NULL),
+// 	_card_counts_mapper(NULL),
+// 	_available_map(mtGC),
+// 	_num_committed(0),
+// 	_allocated_heapregions_length(0),
+// 	_regions(), _heap_mapper(NULL),
+// 	_prev_bitmap_mapper(NULL),
+// 	_next_bitmap_mapper(NULL),
+// 	_free_list("Free list", new SemeruMasterFreeRegionListChecker())
+// { }
+
+
+/**
+ * Semeru
  * 
- * [?] _regions()  ??
+ * [x] Why does the initialization sequence matter ?
+ * 	=> The fields initialization order must match their declaration order.
  * 
- * [?] _prev_bitmap_mapper ?
- * 		 _next_bitmap_mapper ?
- *  
  */
 SemeruHeapRegionManager::SemeruHeapRegionManager() :
 	_bot_mapper(NULL),
@@ -85,11 +99,11 @@ SemeruHeapRegionManager::SemeruHeapRegionManager() :
 	_available_map(mtGC),
 	_num_committed(0),
 	_allocated_heapregions_length(0),
-	_regions(), _heap_mapper(NULL),
-	_prev_bitmap_mapper(NULL),
-	_next_bitmap_mapper(NULL),
-	_free_list("Free list", new SemeruMasterFreeRegionListChecker())
+	_regions(),
+	_free_list("Free list", new SemeruMasterFreeRegionListChecker()),
+	_heap_mapper(NULL)
 { }
+
 
 
 /**
@@ -110,18 +124,46 @@ SemeruHeapRegionManager* SemeruHeapRegionManager::create_manager(G1SemeruCollect
 
 
 
+// void SemeruHeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
+// 															 G1RegionToSpaceMapper* prev_bitmap,
+// 															 G1RegionToSpaceMapper* next_bitmap,
+// 															 G1RegionToSpaceMapper* alive_bitmap,  // mapper for Semeru
+// 															 G1RegionToSpaceMapper* dest_bitmap,
+// 															 G1RegionToSpaceMapper* bot,
+// 															 G1RegionToSpaceMapper* cardtable,
+// 															 G1RegionToSpaceMapper* card_counts) {
+// 	_allocated_heapregions_length = 0;
+
+// 	_heap_mapper = heap_storage;				// Java heap's Region->Page mapping  
+
+// 	_prev_bitmap_mapper = prev_bitmap;
+// 	_next_bitmap_mapper = next_bitmap;
+
+// 	// semeru
+// 	_alive_bitmap_mapper	= alive_bitmap;
+// 	_dest_bitmap_mapper		=	dest_bitmap;
+
+// 	_bot_mapper = bot;									// Region -> G1BlockOffsetTable ->Page mapping 
+// 	_cardtable_mapper = cardtable;
+
+// 	_card_counts_mapper = card_counts;
+
+// 	// Both _regions[] and _availale_map cover the whole reserved Java heap.
+// 	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
+// 	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
+
+// 	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
+// }
+
+
+
 void SemeruHeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
-															 G1RegionToSpaceMapper* prev_bitmap,
-															 G1RegionToSpaceMapper* next_bitmap,
 															 G1RegionToSpaceMapper* bot,
 															 G1RegionToSpaceMapper* cardtable,
 															 G1RegionToSpaceMapper* card_counts) {
 	_allocated_heapregions_length = 0;
 
 	_heap_mapper = heap_storage;				// Java heap's Region->Page mapping  
-
-	_prev_bitmap_mapper = prev_bitmap;
-	_next_bitmap_mapper = next_bitmap;
 
 	_bot_mapper = bot;									// Region -> G1BlockOffsetTable ->Page mapping 
 	_cardtable_mapper = cardtable;
@@ -134,6 +176,9 @@ void SemeruHeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 
 	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
 }
+
+
+
 
 bool SemeruHeapRegionManager::is_available(uint region) const {
 	return _available_map.at(region);
@@ -172,8 +217,8 @@ void SemeruHeapRegionManager::commit_regions(uint index, size_t num_regions, Wor
 	_heap_mapper->commit_regions(index, num_regions, pretouch_gang);		// Do initializaion on the corresponding pages of the Region.
 
 	// Also commit auxiliary data
-	_prev_bitmap_mapper->commit_regions(index, num_regions, pretouch_gang);
-	_next_bitmap_mapper->commit_regions(index, num_regions, pretouch_gang);
+	//_prev_bitmap_mapper->commit_regions(index, num_regions, pretouch_gang);
+	//_next_bitmap_mapper->commit_regions(index, num_regions, pretouch_gang);
 
 	_bot_mapper->commit_regions(index, num_regions, pretouch_gang);			// Commit this Region's related BlockOffsetTable.
 	_cardtable_mapper->commit_regions(index, num_regions, pretouch_gang);
@@ -202,8 +247,8 @@ void SemeruHeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 	_heap_mapper->uncommit_regions(start, num_regions);
 
 	// Also uncommit auxiliary data
-	_prev_bitmap_mapper->uncommit_regions(start, num_regions);
-	_next_bitmap_mapper->uncommit_regions(start, num_regions);
+	//_prev_bitmap_mapper->uncommit_regions(start, num_regions);
+	//_next_bitmap_mapper->uncommit_regions(start, num_regions);
 
 	_bot_mapper->uncommit_regions(start, num_regions);
 	_cardtable_mapper->uncommit_regions(start, num_regions);
@@ -244,7 +289,7 @@ void SemeruHeapRegionManager::make_regions_available(uint start, uint num_region
 		HeapWord* bottom = G1SemeruCollectedHeap::heap()->bottom_addr_for_region(i);	// start addr for the Region[i]
 		MemRegion mr(bottom, bottom + HeapRegion::SemeruGrainWords);									// MR.
 
-		hr->initialize(mr);																// 2) why do the initialization again ?
+		hr->initialize(mr, (size_t)i);		// 2) initialzie more fileds for each HeapRegion.
 
 		// RDMA : Allocate the HeapRegion->_target_obj_q here.
 		hr->allocate_init_target_oop_queue(hr->hrm_index()); 
@@ -257,23 +302,44 @@ void SemeruHeapRegionManager::make_regions_available(uint start, uint num_region
 
 
 
+
+
+// MemoryUsage SemeruHeapRegionManager::get_auxiliary_data_memory_usage() const {
+// 	size_t used_sz =
+// 		_prev_bitmap_mapper->committed_size() +
+// 		_next_bitmap_mapper->committed_size() +
+// 		_bot_mapper->committed_size() +
+// 		_cardtable_mapper->committed_size() +
+// 		_card_counts_mapper->committed_size();
+
+// 	size_t committed_sz =
+// 		_prev_bitmap_mapper->reserved_size() +
+// 		_next_bitmap_mapper->reserved_size() +
+// 		_bot_mapper->reserved_size() +
+// 		_cardtable_mapper->reserved_size() +
+// 		_card_counts_mapper->reserved_size();
+
+// 	return MemoryUsage(0, used_sz, committed_sz, committed_sz);
+// }
+
+
 MemoryUsage SemeruHeapRegionManager::get_auxiliary_data_memory_usage() const {
 	size_t used_sz =
-		_prev_bitmap_mapper->committed_size() +
-		_next_bitmap_mapper->committed_size() +
 		_bot_mapper->committed_size() +
 		_cardtable_mapper->committed_size() +
 		_card_counts_mapper->committed_size();
 
 	size_t committed_sz =
-		_prev_bitmap_mapper->reserved_size() +
-		_next_bitmap_mapper->reserved_size() +
 		_bot_mapper->reserved_size() +
 		_cardtable_mapper->reserved_size() +
 		_card_counts_mapper->reserved_size();
 
 	return MemoryUsage(0, used_sz, committed_sz, committed_sz);
 }
+
+
+
+
 
 /**
  * Tag : Expand from Region index 0, at num_regions.

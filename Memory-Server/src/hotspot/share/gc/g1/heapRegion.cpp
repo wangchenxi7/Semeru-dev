@@ -47,6 +47,11 @@
 #include "runtime/orderAccess.hpp"
 #include "utilities/growableArray.hpp"
 
+
+// Semeru
+#include "gc/g1/g1SemeruCollectedHeap.hpp"
+
+
 int    HeapRegion::LogOfHRGrainBytes = 0;
 int    HeapRegion::LogOfHRGrainWords = 0;
 size_t HeapRegion::GrainBytes        = 0;
@@ -345,11 +350,15 @@ HeapRegion::HeapRegion(uint hrm_index,
                        MemRegion mr) :
     G1ContiguousSpace(bot),
     _rem_set(NULL),
+    _target_obj_queue(NULL),
+    _alive_bitmap(),  // Semeru, invoke the constructor
+    _dest_bitmap(),
     _hrm_index(hrm_index),
     _type(),
     _humongous_start_region(NULL),
     _evacuation_failed(false),
     _next(NULL), _prev(NULL),
+    _mem_server_cset_next(NULL),  // Semeru memory server
 #ifdef ASSERT
     _containing_set(NULL),
 #endif
@@ -364,6 +373,7 @@ HeapRegion::HeapRegion(uint hrm_index,
   initialize(mr);
 }
 
+
 void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
   assert(_rem_set->is_empty(), "Remembered set must be empty");
 
@@ -372,6 +382,80 @@ void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
   hr_clear(false /*par*/, false /*clear_space*/);
   set_top(bottom());
 }
+
+
+/**
+ * Initialize HeapRegion with the alive_bitmap and dest_bitmap.
+ *  
+ * Parameters
+ *    alive_bitmap_storage : the storage mapping between Region and Meta space.
+ * 
+ */
+void HeapRegion::initialize(MemRegion mr, 
+                            size_t region_index,
+                            bool clear_space, 
+                            bool mangle_space) {
+  assert(_rem_set->is_empty(), "Remembered set must be empty");
+
+  G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
+
+  // Assign the commit alive/dest_bitmap size to the HeapRegion->_alive/_dest_bitmap
+  G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
+	G1RegionToSpaceMapper* cur_region_dest_bitmap		= create_dest_bitmap_storage(region_index);
+  
+  _alive_bitmap.initialize(mr,cur_region_alive_bitmap );
+  _dest_bitmap.initialize(mr, cur_region_dest_bitmap);
+
+  hr_clear(false /*par*/, false /*clear_space*/);
+  set_top(bottom());
+}
+
+
+
+/**
+ * Semeru - Reserver and Commit bitmap storage for alive/dest bitmaps. 
+ * 
+ *  [?] They don't reserve new memory space from OS, here we reserve space from reserved Semeru heap.
+ * 			=> The start address for both alive/dest bitmap are already fixed.
+ */
+G1RegionToSpaceMapper* HeapRegion::create_alive_bitmap_storage(size_t region_idnex){
+	
+	size_t per_region_bitmap_size = G1CMBitMap::compute_size(HeapRegion::SemeruGrainBytes);// for alive_bitmap, count by bytes.
+  G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();
+	//ReservedSpace* semeru_rs =	semeru_h->semeru_reserved_space();
+
+	// Create and reserve the bitmap
+	G1RegionToSpaceMapper* alive_bitmap_storage =
+			semeru_h->create_aux_memory_mapper_from_rs("Alive Bitmap", per_region_bitmap_size, 
+                                                                G1CMBitMap::heap_map_factor(), 
+																						                    ALIVE_BITMAP_OFFSET + per_region_bitmap_size*region_idnex );
+
+	// Commit the bitmap immediately
+	alive_bitmap_storage->commit_regions(0, 1, semeru_h->workers());  // There is only 1 regions
+
+	return alive_bitmap_storage;
+}
+
+
+G1RegionToSpaceMapper* HeapRegion::create_dest_bitmap_storage(size_t region_idnex){
+	
+	size_t per_region_bitmap_size = G1CMBitMap::compute_size(HeapRegion::SemeruGrainBytes); // for dest_bitmap, count by bytes.
+  G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();
+	//ReservedSpace* semeru_rs =	semeru_h->semeru_reserved_space();
+
+	// Create and reserve the bitmap from already reserved Semeru Heap.
+	G1RegionToSpaceMapper* dest_bitmap_storage =
+			semeru_h->create_aux_memory_mapper_from_rs("Destination Bitmap", per_region_bitmap_size, 
+                                                                    G1CMBitMap::heap_map_factor(), 
+																							                      DEST_BITMAP_OFFSET + per_region_bitmap_size*region_idnex );
+
+	// Commit the bitmap immediately
+	dest_bitmap_storage->commit_regions(0, 1, semeru_h->workers());  // There is only 1 regions
+
+	return dest_bitmap_storage;
+}
+
+
 
 // Semeru
 void HeapRegion::allocate_init_target_oop_queue(uint hrm_index){
@@ -439,6 +523,14 @@ void HeapRegion::strong_code_roots_do(CodeBlobClosure* blk) const {
   HeapRegionRemSet* hrrs = rem_set();
   hrrs->strong_code_roots_do(blk);
 }
+
+
+//
+// Semeru Section
+//
+
+
+
 
 class VerifyStrongCodeRootOopClosure: public OopClosure {
   const HeapRegion* _hr;

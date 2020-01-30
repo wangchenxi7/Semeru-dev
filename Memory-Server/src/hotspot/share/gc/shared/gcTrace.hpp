@@ -111,6 +111,11 @@ class G1YoungGCInfo {
 
 #endif // INCLUDE_G1GC
 
+
+/**
+ * Tag: Used to record some GC logs
+ *  
+ */
 class GCTracer : public ResourceObj {
  protected:
   SharedGCInfo _shared_gc_info;

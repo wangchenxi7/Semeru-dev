@@ -42,9 +42,10 @@
 // Semeru
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
+#include "gc/g1/g1ParScanThreadState.hpp"
 
 // inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
-//   return !_g1h->is_obj_ill(obj);
+//   return !_semeru_h->is_obj_ill(obj);
 // }
 
 // Semeru
@@ -61,8 +62,8 @@ inline bool G1SemeruCMIsAliveClosure::do_object_b(oop obj) {
 //   if (obj == NULL) {
 //     return false;
 //   }
-//   assert(_g1h->is_in_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
-//   return _g1h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
+//   assert(_semeru_h->is_in_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
+//   return _semeru_h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
 // }
 
 
@@ -81,7 +82,7 @@ inline bool G1SemeruCMSubjectToDiscoveryClosure::do_object_b(oop obj) {
 
 
 inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, oop const obj) {
-  HeapRegion* const hr = _g1h->heap_region_containing(obj);
+  HeapRegion* const hr = _semeru_h->heap_region_containing(obj);
   return mark_in_next_bitmap(worker_id, hr, obj);
 }
 
@@ -114,6 +115,9 @@ inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, He
   return success;
 }
 
+
+
+
 #ifndef PRODUCT
 template<typename Fn>
 inline void G1SemeruCMMarkStack::iterate(Fn fn) const {
@@ -137,25 +141,103 @@ inline void G1SemeruCMMarkStack::iterate(Fn fn) const {
 }
 #endif
 
+
+
+inline void G1SemeruConcurrentMark::mark_in_prev_bitmap(oop p) {
+  assert(!_prev_mark_bitmap->is_marked((HeapWord*) p), "sanity");
+ _prev_mark_bitmap->mark((HeapWord*) p);
+}
+
+bool G1SemeruConcurrentMark::is_marked_in_prev_bitmap(oop p) const {
+  assert(p != NULL && oopDesc::is_oop(p), "expected an oop");
+  return _prev_mark_bitmap->is_marked((HeapWord*)p);
+}
+
+bool G1SemeruConcurrentMark::is_marked_in_next_bitmap(oop p) const {
+  assert(p != NULL && oopDesc::is_oop(p), "expected an oop");
+  return _next_mark_bitmap->is_marked((HeapWord*)p);
+}
+
+inline bool G1SemeruConcurrentMark::do_yield_check() {
+  if (SuspendibleThreadSet::should_yield()) {
+    SuspendibleThreadSet::yield();
+    return true;
+  } else {
+    return false;
+  }
+}
+
+
+
+inline HeapWord* G1SemeruConcurrentMark::top_at_rebuild_start(uint region) const {
+  assert(region < _semeru_h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
+  return _top_at_rebuild_starts[region];
+}
+
+
+/**
+ * Tag : update the _top_at_rebuild_starts to top.
+ * 
+ * [x] When to do this update ? 
+ *  According to lock, only invoked in pre-rebuild. Update all the Old Region's _top_before_rebuild_starts. 
+ *  
+ * [?] RemSet Rebuild is a concurrent procedure, the top may be changed after the scan for this region ?
+ * 
+ */
+inline void G1SemeruConcurrentMark::update_top_at_rebuild_start(HeapRegion* r) {
+  uint const region = r->hrm_index();
+  assert(region < _semeru_h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
+  assert(_top_at_rebuild_starts[region] == NULL,
+         "TARS for region %u has already been set to " PTR_FORMAT " should be NULL",
+         region, p2i(_top_at_rebuild_starts[region]));
+  G1RemSetTrackingPolicy* tracker = _semeru_h->g1_policy()->remset_tracker();
+  if (tracker->needs_scan_for_rebuild(r)) {   // except for Young, Free and Closed-Achrive HeapRegions.
+    _top_at_rebuild_starts[region] = r->top();
+  } else {
+    // Leave TARS at NULL.
+  }
+}
+
+
+inline void G1SemeruConcurrentMark::add_to_liveness(uint worker_id, oop const obj, size_t size) {
+  task(worker_id)->update_liveness(obj, size);
+}
+
+
+
+
+
+
+
+
+
 // It scans an object and visits its children.
-inline void G1SemeruCMTask::scan_task_entry(G1SemeruTaskQueueEntry task_entry) { process_grey_task_entry<true>(task_entry); }
+// 1) pop items from the G1SemeruCMTask->_semeru_task_queue one by one
+// 2) Apply G1SemeruCMOopClosure to scan each object's field .
+// 3) Mark the reached object alive and Enqueue newly marked objects into  G1SemeruCMTask->_semeru_task_queue.
+inline void G1SemeruCMTask::scan_task_entry(G1SemeruTaskQueueEntry task_entry) { 
+  process_grey_task_entry<true>(task_entry); 
+}
+
 
 inline void G1SemeruCMTask::push(G1SemeruTaskQueueEntry task_entry) {
-  assert(task_entry.is_array_slice() || _g1h->is_in_g1_reserved(task_entry.obj()), "invariant");
-  assert(task_entry.is_array_slice() || !_g1h->is_on_master_free_list(
-              _g1h->heap_region_containing(task_entry.obj())), "invariant");
-  assert(task_entry.is_array_slice() || !_g1h->is_obj_ill(task_entry.obj()), "invariant");  // FIXME!!!
+  assert(task_entry.is_array_slice() || _semeru_h->is_in_g1_reserved(task_entry.obj()), "invariant");
+  assert(task_entry.is_array_slice() || !_semeru_h->is_on_master_free_list(
+              _semeru_h->heap_region_containing(task_entry.obj())), "invariant");
+  assert(task_entry.is_array_slice() || !_semeru_h->is_obj_ill(task_entry.obj()), "invariant");  // FIXME!!!
   assert(task_entry.is_array_slice() || _next_mark_bitmap->is_marked((HeapWord*)task_entry.obj()), "invariant");
 
-  if (!_task_queue->push(task_entry)) {
+  if (!_semeru_task_queue->push(task_entry)) {
     // The local task queue looks full. We need to push some entries
     // to the global stack.
+    // If the inserted task_entry exceed the G1SemeruCMTask->_semeru_task_queue,
+    // transfer some data into G1SemeruConcurrentMark->_semeru_task_queue
     move_entries_to_global_stack();
 
     // this should succeed since, even if we overflow the global
     // stack, we should have definitely removed some entries from the
     // local queue. So, there must be space on it.
-    bool success = _task_queue->push(task_entry);
+    bool success = _semeru_task_queue->push(task_entry);
     assert(success, "invariant");
   }
 }
@@ -190,6 +272,35 @@ inline bool G1SemeruCMTask::is_below_finger(oop obj, HeapWord* global_finger) co
   return objAddr < global_finger;
 }
 
+// template<bool scan>
+// inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_entry) {
+//   assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
+//   assert(task_entry.is_array_slice() || _next_mark_bitmap->is_marked((HeapWord*)task_entry.obj()),
+//          "Any stolen object should be a slice or marked");
+
+//   if (scan) {
+//     if (task_entry.is_array_slice()) {    // alrady sliced
+//       _words_scanned += _objArray_processor.process_slice(task_entry.slice());
+//     } else {
+//       oop obj = task_entry.obj();
+//       if (G1CMObjArrayProcessor::should_be_sliced(obj)) {   // an entire object array, should be sliced
+//         _words_scanned += _objArray_processor.process_obj(obj);
+//       } else {
+//         _words_scanned += obj->oop_iterate_size(_cm_oop_closure);;  // a normal object instance, scan its fields.
+//       }
+//     }
+//   }
+  
+//   // For semeru memory server, we don't need to count such a scavenge limitations ??
+//    check_limits();
+// }
+
+
+/**
+ * Use G1SemeruCMOopClosure to handle each fields.
+ *  Like a BFS order.  
+ * 
+ */
 template<bool scan>
 inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_entry) {
   assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
@@ -197,61 +308,42 @@ inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_
          "Any stolen object should be a slice or marked");
 
   if (scan) {
-    if (task_entry.is_array_slice()) {
-      _words_scanned += _objArray_processor.process_slice(task_entry.slice());
+    if (task_entry.is_array_slice()) {    // alrady sliced
+     // _words_scanned += _objArray_processor.process_slice(task_entry.slice());
+
+      //debug
+      assert(false, "%s, object array slice tracing  Not finished yet \n", __func__);
+
     } else {
       oop obj = task_entry.obj();
-      if (G1CMObjArrayProcessor::should_be_sliced(obj)) {
-        _words_scanned += _objArray_processor.process_obj(obj);
+      if (G1CMObjArrayProcessor::should_be_sliced(obj)) {   // an entire object array, should be sliced
+       // _words_scanned += _objArray_processor.process_obj(obj);
+
+        //debug
+        assert(false, "%s, object array tracing  Not finished yet \n", __func__);
+        
+
       } else {
-        _words_scanned += obj->oop_iterate_size(_cm_oop_closure);;
+        _words_scanned += obj->oop_iterate_size(_semeru_cm_oop_closure);  // a normal object instance, scan its fields.
       }
     }
-  }
-  check_limits();
+  } // end of scan.
+  
+  // For semeru memory server, we don't need to count such a scavenge limitations ??
+  // check_limits();
 }
 
+
 inline size_t G1SemeruCMTask::scan_objArray(objArrayOop obj, MemRegion mr) {
-  obj->oop_iterate(_cm_oop_closure, mr);
+  obj->oop_iterate(_semeru_cm_oop_closure, mr);
   return mr.word_size();
 }
 
-inline HeapWord* G1SemeruConcurrentMark::top_at_rebuild_start(uint region) const {
-  assert(region < _g1h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
-  return _top_at_rebuild_starts[region];
-}
-
-
-/**
- * Tag : update the _top_at_rebuild_starts to top.
- * 
- * [x] When to do this update ? 
- *  According to lock, only invoked in pre-rebuild. Update all the Old Region's _top_before_rebuild_starts. 
- *  
- * [?] RemSet Rebuild is a concurrent procedure, the top may be changed after the scan for this region ?
- * 
- */
-inline void G1SemeruConcurrentMark::update_top_at_rebuild_start(HeapRegion* r) {
-  uint const region = r->hrm_index();
-  assert(region < _g1h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
-  assert(_top_at_rebuild_starts[region] == NULL,
-         "TARS for region %u has already been set to " PTR_FORMAT " should be NULL",
-         region, p2i(_top_at_rebuild_starts[region]));
-  G1RemSetTrackingPolicy* tracker = _g1h->g1_policy()->remset_tracker();
-  if (tracker->needs_scan_for_rebuild(r)) {   // except for Young, Free and Closed-Achrive HeapRegions.
-    _top_at_rebuild_starts[region] = r->top();
-  } else {
-    // Leave TARS at NULL.
-  }
-}
 
 inline void G1SemeruCMTask::update_liveness(oop const obj, const size_t obj_size) {
-  _mark_stats_cache.add_live_words(_g1h->addr_to_region((HeapWord*)obj), obj_size);
+  _mark_stats_cache.add_live_words(_semeru_h->addr_to_region((HeapWord*)obj), obj_size);
 }
 
-inline void G1SemeruConcurrentMark::add_to_liveness(uint worker_id, oop const obj, size_t size) {
-  task(worker_id)->update_liveness(obj, size);
-}
 
 inline void G1SemeruCMTask::abort_marking_if_regular_check_fail() {
   if (!regular_clock_call()) {
@@ -272,81 +364,235 @@ inline void G1SemeruCMTask::abort_marking_if_regular_check_fail() {
  *    => newly allocated objects ?
  * 
  */
-inline bool G1SemeruCMTask::make_reference_grey(oop obj) {
-  if (!_cm->mark_in_next_bitmap(_worker_id, obj)) {
+// inline bool G1SemeruCMTask::make_reference_grey(oop obj) {
+//   if (!_cm->mark_in_next_bitmap(_worker_id, obj)) {
+//     return false;
+//   }
+
+//   // No OrderAccess:store_load() is needed. It is implicit in the
+//   // CAS done in G1CMBitMap::parMark() call in the routine above.
+//   HeapWord* global_finger = _cm->finger();
+
+//   // We only need to push a newly grey object on the mark
+//   // stack if it is in a section of memory the mark bitmap
+//   // scan has already examined.  Mark bitmap scanning
+//   // maintains progress "fingers" for determining that.
+//   //
+//   // Notice that the global finger might be moving forward
+//   // concurrently. This is not a problem. In the worst case, we
+//   // mark the object while it is above the global finger and, by
+//   // the time we read the global finger, it has moved forward
+//   // past this object. In this case, the object will probably
+//   // be visited when a task is scanning the region and will also
+//   // be pushed on the stack. So, some duplicate work, but no
+//   // correctness problems.
+//   if (is_below_finger(obj, global_finger)) {
+//     G1SemeruTaskQueueEntry entry = G1SemeruTaskQueueEntry::from_oop(obj);
+//     if (obj->is_typeArray()) {
+//       // Immediately process arrays of primitive types, rather
+//       // than pushing on the mark stack.  This keeps us from
+//       // adding humongous objects to the mark stack that might
+//       // be reclaimed before the entry is processed - see
+//       // selection of candidates for eager reclaim of humongous
+//       // objects.  The cost of the additional type test is
+//       // mitigated by avoiding a trip through the mark stack,
+//       // by only doing a bookkeeping update and avoiding the
+//       // actual scan of the object - a typeArray contains no
+//       // references, and the metadata is built-in.
+//       process_grey_task_entry<false>(entry);
+//     } else {
+//       push(entry);
+//     }
+//   }
+//   return true;
+// }
+
+
+
+
+/**
+ * Semeru Memory Server - Mark the objet alive in alive_bitmap && push it into scan task_queue.
+ * 
+ * [?] What's the worker_id used for ? 
+ * 
+ * [?] If the target object isn't in current scanning Region, pointed by G1SemeruCMTask->_curr_region, skip it.
+ * 
+ */
+inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const obj) {
+  assert(_curr_region != NULL, "just checking");
+  assert(_curr_region->is_in_reserved(obj), "Attempting to mark object at " PTR_FORMAT " that is not contained in the given region %u", 
+                                                                                                  p2i(obj), _curr_region->hrm_index());
+
+  // if ture, skip the marking for current oop.
+  // also, this make sure the object is belone current Region's top.
+  if (_curr_region->obj_allocated_since_next_marking(obj)) {
+    return false;
+  }
+
+  // Some callers may have stale objects to mark above nTAMS after humongous reclaim.
+  // Can't assert that this is a valid object at this point, since it might be in the process of being copied by another thread.
+  assert(!_curr_region->is_continues_humongous(), "Should not try to mark object " PTR_FORMAT " in Humongous continues region %u above nTAMS " PTR_FORMAT, 
+                                                                                    p2i(obj), _curr_region->hrm_index(), p2i(_curr_region->next_top_at_mark_start()));
+
+  HeapWord* const obj_addr = (HeapWord*)obj;
+
+  assert(_curr_region->alive_bitmap() == alive_bitmap(), "%s, Not marking at the corrent alive_bitmap \n", __func__);
+  bool success = _alive_bitmap->par_mark(obj_addr);   // [?] Mark obj alive in current
+
+  // Calculate the alive objects information. 
+  // [?] Can we invoke freind class's function like  this ?
+  if (success) {
+    _semeru_cm->add_to_liveness(worker_id, obj, obj->size());
+  }
+
+  return success;
+}
+
+
+
+
+
+
+
+/**
+ * Semeru Memory Server - Concurrently mark an object alive in HeapRegion->alive_bitmap
+ *  
+ *  [?] There may be multiple Semeru CM Threads marking the alive objects here ?
+ *    => We need to confirm the MT safe.
+ *       For a bitmap, this can be easily handled.
+ * 
+ * [?] Do we need the global_finger ??
+ *    => Both CM and Remark use this function, so the marking can exceed the TAMS ?  
+ *    => All the marking phases for a Region is incremental. We will not restart the CM from scratch ? 
+ *        For G1 GC, prev_bitmap/next_bitmap are used for 2 different CM.
+ * 
+ */
+inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
+  
+  // At this time, each Region has its own alive_bitmap. Not like the global _next_bitmap which covers the whole heap.
+  if( !mark_in_alive_bitmap(_worker_id, obj) ) {  // Mark object alive in alive_bitmap
     return false;
   }
 
   // No OrderAccess:store_load() is needed. It is implicit in the
   // CAS done in G1CMBitMap::parMark() call in the routine above.
-  HeapWord* global_finger = _cm->finger();
+  //HeapWord* global_finger = _cm->finger();
 
-  // We only need to push a newly grey object on the mark
-  // stack if it is in a section of memory the mark bitmap
-  // scan has already examined.  Mark bitmap scanning
-  // maintains progress "fingers" for determining that.
-  //
-  // Notice that the global finger might be moving forward
-  // concurrently. This is not a problem. In the worst case, we
-  // mark the object while it is above the global finger and, by
-  // the time we read the global finger, it has moved forward
-  // past this object. In this case, the object will probably
-  // be visited when a task is scanning the region and will also
-  // be pushed on the stack. So, some duplicate work, but no
-  // correctness problems.
-  if (is_below_finger(obj, global_finger)) {
-    G1SemeruTaskQueueEntry entry = G1SemeruTaskQueueEntry::from_oop(obj);
-    if (obj->is_typeArray()) {
+  // why do we need to wrap the obj as an TaskQueueEntry ??
+  // unify the object array slice and object reference?
+  G1SemeruTaskQueueEntry entry = G1SemeruTaskQueueEntry::from_oop(obj);  
+  if (obj->is_typeArray()) {
       // Immediately process arrays of primitive types, rather
       // than pushing on the mark stack.  This keeps us from
       // adding humongous objects to the mark stack that might
-      // be reclaimed before the entry is processed - see
+      // be reclaimed before the entry is processed - see         // [?] The humonguous objects are earger to be recliamed ??
       // selection of candidates for eager reclaim of humongous
       // objects.  The cost of the additional type test is
       // mitigated by avoiding a trip through the mark stack,
       // by only doing a bookkeeping update and avoiding the
       // actual scan of the object - a typeArray contains no
       // references, and the metadata is built-in.
-      process_grey_task_entry<false>(entry);
-    } else {
-      push(entry);
-    }
+    process_grey_task_entry<false>(entry);  // [?] scan = false, only check the limit.
+  } else {
+    push(entry);    // Enqueue the object to scan its fields.
   }
+
   return true;
 }
 
+
+
+
+
+
+
+
+// template <class T>
+// inline bool G1SemeruCMTask::deal_with_reference(T* p) {
+//   increment_refs_reached();
+//   oop const obj = RawAccess<MO_VOLATILE>::oop_load(p);
+//   if (obj == NULL) {
+//     return false;
+//   }
+//   return make_reference_grey(obj);
+// }
+
+/**
+ * Semeru Memory Server - Concurrent Marking 
+ * 
+ * [?] Mark the objects alive in corresponding Region's alive_bitmap. 
+ * 
+ */
 template <class T>
 inline bool G1SemeruCMTask::deal_with_reference(T* p) {
-  increment_refs_reached();
-  oop const obj = RawAccess<MO_VOLATILE>::oop_load(p);
+  // increment_refs_reached();  // [?] Purpose for this counting ? count the incoming cross-region reference.
+
+  oop const obj = RawAccess<MO_VOLATILE>::oop_load(p);   // [?] how to confirm this is a valid oop, not a evacuated Region ?
   if (obj == NULL) {
     return false;
   }
-  return make_reference_grey(obj);
-}
-
-inline void G1SemeruConcurrentMark::mark_in_prev_bitmap(oop p) {
-  assert(!_prev_mark_bitmap->is_marked((HeapWord*) p), "sanity");
- _prev_mark_bitmap->mark((HeapWord*) p);
-}
-
-bool G1SemeruConcurrentMark::is_marked_in_prev_bitmap(oop p) const {
-  assert(p != NULL && oopDesc::is_oop(p), "expected an oop");
-  return _prev_mark_bitmap->is_marked((HeapWord*)p);
-}
-
-bool G1SemeruConcurrentMark::is_marked_in_next_bitmap(oop p) const {
-  assert(p != NULL && oopDesc::is_oop(p), "expected an oop");
-  return _next_mark_bitmap->is_marked((HeapWord*)p);
-}
-
-inline bool G1SemeruConcurrentMark::do_yield_check() {
-  if (SuspendibleThreadSet::should_yield()) {
-    SuspendibleThreadSet::yield();
-    return true;
-  } else {
+  
+  // Check if this object is in current Region, if not, skip it.
+  // Assume 1) Write Barrier has captured all the cross-region reference caused by mutator
+  // 2) GC can update the cross-region referenced caused by alive object evacuation.
+  if(_curr_region->is_in_reserved(obj) == false ){
     return false;
   }
+
+  //return make_reference_grey(obj);
+  // Mark the object alive and push it into the task_queue to scan its field.
+  return make_reference_alive(obj);
 }
+
+
+
+
+//
+// Target object queue related
+//
+
+inline void G1SemeruCMTask::trim_target_object_queue(TargetObjQueue* target_obj_queue) {
+	StarTask ref;
+	do {
+		// Fully drain the queue.
+		trim_target_object_queue_to_threshold(target_obj_queue ,0);
+	} while (!target_obj_queue->is_empty());
+}
+
+
+inline void G1SemeruCMTask::trim_target_object_queue_to_threshold(TargetObjQueue* target_obj_queue, uint threshold) {
+	StarTask ref;
+	// Drain the overflow stack first, so other threads can potentially steal.
+	while (target_obj_queue->pop_overflow(ref)) {
+		if (!target_obj_queue->try_push_to_taskqueue(ref)) {
+			dispatch_reference(ref);
+		}
+	}
+
+	while (target_obj_queue->pop_local(ref, threshold)) {  // threshold = 64
+		dispatch_reference(ref);
+	}
+}
+
+
+inline void G1SemeruCMTask::dispatch_reference(StarTask ref) {
+	
+  //debug
+  // [?] Write Semeru's own verify_task function.
+  //assert(verify_task(ref), "sanity");
+
+	if (ref.is_narrow()) {
+		//deal_with_reference((narrowOop*)ref);
+
+    assert(false, "%s, Not support narrow oop ye \n",__func__);
+
+	} else {
+		deal_with_reference((oop*)ref);
+	}
+}
+
+
+
+
 
 #endif // SHARE_VM_GC_G1_SEMERU_G1CONCURRENTMARK_INLINE_HPP

@@ -142,6 +142,10 @@ void CollectedHeap::print_on_error(outputStream* st) const {
 	BarrierSet::barrier_set()->print_on(st);
 }
 
+/**
+ * Tag : What's the purpose of trace_heap ?? 
+ *  
+ */
 void CollectedHeap::trace_heap(GCWhen::Type when, const GCTracer* gc_tracer) {
 	const GCHeapSummary& heap_summary = create_heap_summary();
 	gc_tracer->report_gc_heap_summary(when, heap_summary);

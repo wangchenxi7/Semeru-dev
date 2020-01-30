@@ -92,6 +92,7 @@ class SemeruHeapRegionManager: public CHeapObj<mtGC> {
   G1RegionToSpaceMapper* _cardtable_mapper;
   G1RegionToSpaceMapper* _card_counts_mapper;
 
+
   // Each bit in this bitmap indicates that the corresponding region is available
   // for allocation.
   CHeapBitMap _available_map;         // For the whole Reserved space.
@@ -126,12 +127,14 @@ class SemeruHeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1SemeruHeapRegionTable _regions;                 // <region_index, heapRegion*>. Records the committed Regions.
-  G1RegionToSpaceMapper* _heap_mapper;        
-  G1RegionToSpaceMapper* _prev_bitmap_mapper; //[?] Does the pre_bitmap have anything to do with the HeapRegion ?
-  G1RegionToSpaceMapper* _next_bitmap_mapper;
+  G1SemeruHeapRegionTable _regions;           // <region_index, heapRegion*>. Records the committed Regions.
   FreeRegionList _free_list;                  // The un-committed free Regions.
+  
+  G1RegionToSpaceMapper* _heap_mapper;   
 
+  // We don't need these bitmap any more.
+  // G1RegionToSpaceMapper* _prev_bitmap_mapper;
+  // G1RegionToSpaceMapper* _next_bitmap_mapper;
 
 
   void make_regions_available(uint index, uint num_regions = 1, WorkGang* pretouch_gang = NULL);
@@ -146,16 +149,25 @@ public:
   // Empty constructor, we'll initialize it with the initialize() method.
   SemeruHeapRegionManager();
 
+  // virtual void initialize(G1RegionToSpaceMapper* heap_storage,
+  //                         G1RegionToSpaceMapper* prev_bitmap,
+  //                         G1RegionToSpaceMapper* next_bitmap,
+  //                         G1RegionToSpaceMapper* alive_bitmap,
+  //                         G1RegionToSpaceMapper* dest_bitmap,
+  //                         G1RegionToSpaceMapper* bot,
+  //                         G1RegionToSpaceMapper* cardtable,
+  //                         G1RegionToSpaceMapper* card_counts);
+
+  virtual void initialize(G1RegionToSpaceMapper* heap_storage,
+                          G1RegionToSpaceMapper* bot,
+                          G1RegionToSpaceMapper* cardtable,
+                          G1RegionToSpaceMapper* card_counts);
+
+
   // Semeru
   static SemeruHeapRegionManager* create_manager(G1SemeruCollectedHeap* heap, G1SemeruCollectorPolicy* policy);
 
 
-  virtual void initialize(G1RegionToSpaceMapper* heap_storage,
-                          G1RegionToSpaceMapper* prev_bitmap,
-                          G1RegionToSpaceMapper* next_bitmap,
-                          G1RegionToSpaceMapper* bot,
-                          G1RegionToSpaceMapper* cardtable,
-                          G1RegionToSpaceMapper* card_counts);
 
   // Prepare heap regions before and after full collection.
   // Nothing to be done in this class.

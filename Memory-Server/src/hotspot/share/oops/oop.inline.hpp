@@ -437,11 +437,13 @@ void oopDesc::oop_iterate(OopClosureType* cl, MemRegion mr) {
 
 /**
  * Tag : abstract of oop fields iterate with return the oop size
+ * 	
+ * [?] Klass information share between CPU server and Memory server.	
  * 
  */
 template <typename OopClosureType>
 int oopDesc::oop_iterate_size(OopClosureType* cl) {
-	Klass* k = klass();
+	Klass* k = klass();			// Let the Memory Server have toally the same klass pool with CPU server.
 	int size = size_given_klass(k);
 	OopIteratorClosureDispatch::oop_oop_iterate(cl, this, k);
 	return size;

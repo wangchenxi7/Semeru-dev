@@ -101,6 +101,11 @@ G1Policy* G1Policy::create_policy(G1CollectorPolicy* policy, STWGCTimer* gc_time
  * Semeru
  *  
  * Constructors for Semeru Collected Policy and Heap.
+ * 
+ * Structure
+ *    G1Policy ?
+ *      G1SemeruCollectorPolicy -> CollectorPolicy
+ * 
  */
 
 G1Policy::G1Policy(G1SemeruCollectorPolicy* policy, STWGCTimer* gc_timer) :

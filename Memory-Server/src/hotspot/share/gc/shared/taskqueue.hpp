@@ -702,4 +702,21 @@ typedef GenericTaskQueueSet<OopStarTaskQueue, mtGC> OopStarTaskQueueSet;
 typedef OverflowTaskQueue<size_t, mtGC>             RegionTaskQueue;
 typedef GenericTaskQueueSet<RegionTaskQueue, mtGC>  RegionTaskQueueSet;
 
+/**
+ * Semeru 
+ *  
+ *  CPU Server  - Producer 
+ *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
+ *     First, from thread stack variables. This is done during CPU server GC.
+ *     Second, Cross-Region references recoreded by the Post Write Barrier ?
+ *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
+ *  
+ *  Memory Server - Consumer 
+ *     Receive the TargetObjQueue and use them as the scavenge roots.
+ * 
+ */
+ typedef OverflowTargetObjQueue<StarTask, mtGC>        TargetObjQueue;     // Override the typedef of OopTaskQueue
+ typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
+
+
 #endif // SHARE_VM_GC_SHARED_TASKQUEUE_HPP

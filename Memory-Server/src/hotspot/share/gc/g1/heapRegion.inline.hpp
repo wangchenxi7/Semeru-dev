@@ -279,6 +279,18 @@ inline bool HeapRegion::in_collection_set() const {
 	return G1CollectedHeap::heap()->is_in_cset(this);
 }
 
+// Test if this object is in current Region.
+// 1) The value of oop is the start address of the object, count in HeapWords.
+// 2) The object can't span 2 HeapRegion in Semeru.
+// 3) Check if the HeapRegion->_bottom and obj are in same HeapRegion.
+// inline bool HeapRegion::is_in_heapregion(oop obj){
+//   return (((uintptr_t)this->bottom() ^ cast_from_oop<uintptr_t>(obj)  ) >> LogOfHRGrainWords) == 0;
+// }
+
+// Use the function heapRegion->is_in_reserved(void* oop)
+
+
+
 template <class Closure, bool is_gc_active>
 bool HeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
 																							Closure* cl,

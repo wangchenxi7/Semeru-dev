@@ -1168,13 +1168,15 @@ public:
 /**
  * Tag : Remark the alive objects in Old Region between the end of last CM and Cleanup phase.
  * 
+ * [?] How to stop the mutators for the Remark phase ?
+ * 
  * [?] What's the root for the Remark phase ?
  * 		new stack frames && new dirty cards ?   
  * 		Only care about the cross-region reference into Tracked Regions ?
  * 
  */
 void G1ConcurrentMark::remark() {
-	assert_at_safepoint_on_vm_thread();
+	assert_at_safepoint_on_vm_thread(); //[?] check if the mutators are alrady paused ?
 
 	// If a full collection has happened, we should not continue. However we might
 	// have ended up here as the Remark VM operation has been scheduled already.

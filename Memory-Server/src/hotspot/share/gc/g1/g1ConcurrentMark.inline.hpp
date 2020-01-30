@@ -187,6 +187,16 @@ inline bool G1CMTask::is_below_finger(oop obj, HeapWord* global_finger) const {
   return objAddr < global_finger;
 }
 
+
+/**
+ * Tag :  What's the meaning of grey object?
+ *  It's only marked alive, but not scanning its fields now ?   
+ *  The problem is how to confirm which object is grey, which is alrady scanned.  
+ * 
+ * [x] For a grey object, when mark it as alive, it should be pushed into a queue, 
+ *        Here is : G1CMTask->_task_queue.
+ *      All the objects in this queue, should be poped up and processed. 
+ */
 template<bool scan>
 inline void G1CMTask::process_grey_task_entry(G1TaskQueueEntry task_entry) {
   assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
@@ -201,7 +211,7 @@ inline void G1CMTask::process_grey_task_entry(G1TaskQueueEntry task_entry) {
       if (G1CMObjArrayProcessor::should_be_sliced(obj)) {
         _words_scanned += _objArray_processor.process_obj(obj);
       } else {
-        _words_scanned += obj->oop_iterate_size(_cm_oop_closure);;
+        _words_scanned += obj->oop_iterate_size(_cm_oop_closure);;   // After scan this object's field, change to xx from grey??
       }
     }
   }

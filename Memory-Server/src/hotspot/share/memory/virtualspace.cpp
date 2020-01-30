@@ -59,9 +59,9 @@ ReservedSpace::ReservedSpace(size_t size, size_t preferred_page_size) : _fd_for_
     alignment = os::vm_allocation_granularity();
   }
 
-  // [?] for the ReservedSpace, requested_addr is NULL,  executable is NULL ?
-  //      This reserved heap needs to be committed before being used ?
-  //
+  // [x] for the ReservedSpace, requested_addr is NULL,  executable is NULL.
+  //      This reserved heap needs to be committed before being used.
+  //      The commit operation will re-mmap the requested range with proper properties.
   initialize(size, alignment, large_pages, NULL, false);
 }
 
@@ -77,6 +77,8 @@ ReservedSpace::ReservedSpace(size_t size, size_t alignment,
   initialize(size, alignment, large, NULL, executable);
 }
 
+// For this constructor, it curves a range of memory from already reserved space.
+// No need to request it from OS.
 ReservedSpace::ReservedSpace(char* base, size_t size, size_t alignment,
                              bool special, bool executable) : _fd_for_heap(-1) {
   assert((size % os::vm_allocation_granularity()) == 0,

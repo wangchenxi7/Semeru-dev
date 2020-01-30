@@ -223,17 +223,25 @@ public:
 	void do_cld(ClassLoaderData* cld);
 };
 
-// Closure for iterating over object fields during concurrent marking
+
+/** 
+ * Closure for iterating over object fields during concurrent marking
+ * 
+ * [?] Bitmap closure and OopClosure are sperated ?
+ * 	=> First, but the HeapRegion->next_bitmap into range and scan it by bitmap_closure.
+ * 		 Then, for each grey obejcts, scan it with G1CMOopClosure. 
+ *  
+ */
 class G1CMOopClosure : public MetadataVisitingOopIterateClosure {
 	G1CollectedHeap*   _g1h;
 	G1CMTask*          _task;
 
 	// Semeru support
-	G1SemeruCollectedHeap*	_g1_semeru_h;
+	G1SemeruCollectedHeap*		_g1_semeru_h;
 	G1SemeruCMTask*						_semeru_task;
 
 public:
-	G1CMOopClosure(G1CollectedHeap* g1h,G1CMTask* task);
+	G1CMOopClosure(G1CollectedHeap* g1h,G1CMTask* task);  // [?] Where is the implementation of the constructor ?
 
 	// Semeru support
 	G1CMOopClosure(G1SemeruCollectedHeap* g1h,G1SemeruCMTask* task);
@@ -296,5 +304,46 @@ public:
 
 	virtual ReferenceIterationMode reference_iteration_mode() { return DO_FIELDS; }
 };
+
+
+/**
+ * Semeru Closures
+ *  
+ */
+
+/**
+ * Semeru Memory Server
+ * 
+ * Operations
+ * 	1) Mark object alive in HeapRegion->alive_bitmap
+ * 	2) At the same time, enqueue the object into G1SemeruCMTask->_semeru_task_queue
+ * 
+ * Warning : this oop closure isn't converged. It only pushes the current object into local task_queue.
+ * 
+ */
+class G1SemeruCMOopClosure : public MetadataVisitingOopIterateClosure {
+	//G1CollectedHeap*   _g1h;
+	//G1CMTask*          _task;
+
+	// Semeru support
+	G1SemeruCollectedHeap*		_semeru_h;
+	G1SemeruCMTask*						_semeru_task;
+
+public:
+	//G1CMOopClosure(G1CollectedHeap* g1h, G1CMTask* task);
+
+	// Semeru support
+	G1SemeruCMOopClosure(G1SemeruCollectedHeap* g1h, G1SemeruCMTask* task);
+
+	template <class T> void do_oop_work(T* p);
+	virtual void do_oop(      oop* p) { do_oop_work(p); }
+	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+};
+
+
+
+
+
+
 
 #endif // SHARE_VM_GC_G1_G1OOPCLOSURES_HPP

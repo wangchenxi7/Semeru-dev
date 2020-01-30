@@ -75,6 +75,7 @@ protected:
 
 public:
 
+  // [?] the constructor doesn't set the content of bitmap and its coverage.
   G1CMBitMap() : MarkBitMap(), _listener() { _listener.set_bitmap(this); }
 
   // Initializes the underlying BitMap to cover the given area.

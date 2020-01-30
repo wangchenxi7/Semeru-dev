@@ -37,6 +37,7 @@
 
 // Semeru
 #include "gc/shared/taskqueue.hpp"
+#include "gc/g1/g1ConcurrentMarkBitMap.hpp"
 
 
 // The inlcude order is that : HeapRegionSet include HeapRegion.
@@ -72,6 +73,10 @@ class HeapRegionRemSetIterator;
 class HeapRegion;
 class HeapRegionSetBase;
 class nmethod;
+
+// Semeru
+class G1SemeruCollectedHeap;
+
 
 #define HR_FORMAT "%u:(%s)[" PTR_FORMAT "," PTR_FORMAT "," PTR_FORMAT "]"
 #define HR_FORMAT_PARAMS(_hr_) \
@@ -209,9 +214,11 @@ class G1ContiguousSpace: public CompactibleSpace {
  *  Memory Server - Consumer 
  *     Receive the TargetObjQueue and use them as the scavenge roots.
  * 
+ *  Moved the definition to taskqueue.hpp.
+ *  Because these structures are used by multiple components.
  */
-typedef OverflowTargetObjQueue<StarTask, mtGC>        TargetObjQueue;     // Override the typedef of OopTaskQueue
-typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
+ //typedef OverflowTargetObjQueue<StarTask, mtGC>        TargetObjQueue;     // Override the typedef of OopTaskQueue
+ // typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
 
 
 /**
@@ -241,6 +248,20 @@ class HeapRegion: public G1ContiguousSpace {
   // [x] Only allocate && initialize this queue in Semeru heap.
   TargetObjQueue* _target_obj_queue;
 
+  // Two bitmaps per Region.
+  //
+
+  //  1)Every HeapRegion should has its own _alive_bitmap.
+  //  Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
+  //  CPU server only caches the necessary bitmap to save CPU local memory size.
+  //  So it's better to cut the bitmap into slices, one slice per HeapRegion.
+  //  2) They are referenced by pointers stored in G1SemeruCMTask. Because they are used during Semeru CM.
+  // 
+  G1CMBitMap             _alive_bitmap;   // pointed by G1SemeruCMTask->_alive_bitmap.
+
+  //  The corresponding destination bitmap.
+  G1CMBitMap             _dest_bitmap;    
+  
 
   // Auxiliary functions for scan_and_forward support.
   // See comments for CompactibleSpace for more information.
@@ -280,6 +301,10 @@ class HeapRegion: public G1ContiguousSpace {
   // Fields used by the HeapRegionSetBase class and subclasses.
   HeapRegion* _next;
   HeapRegion* _prev;
+
+  // Semeru Pointer
+  HeapRegion* _mem_server_cset_next;
+
 #ifdef ASSERT
   HeapRegionSetBase* _containing_set;
 #endif // ASSERT
@@ -347,6 +372,8 @@ class HeapRegion: public G1ContiguousSpace {
   // Returns the block size of the given (dead, potentially having its class unloaded) object
   // starting at p extending to at most the prev TAMS using the given mark bitmap.
   inline size_t block_size_using_bitmap(const HeapWord* p, const G1CMBitMap* const prev_bitmap) const;
+
+
  public:
   HeapRegion(uint hrm_index,
              G1BlockOffsetTable* bot,
@@ -357,6 +384,13 @@ class HeapRegion: public G1ContiguousSpace {
   // The default values for clear_space means that we will do the clearing if
   // there's clearing to be done ourselves. We also always mangle the space.
   virtual void initialize(MemRegion mr, bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
+
+  // Initialize HeapRegion with alive/dest bitmap information.
+  virtual void initialize(MemRegion mr, 
+                            size_t region_index,
+                            bool clear_space = false, 
+                            bool mangle_space = SpaceDecorator::Mangle);
+
 
   void allocate_init_target_oop_queue(uint hrm_index);
 
@@ -377,6 +411,13 @@ class HeapRegion: public G1ContiguousSpace {
   static size_t SemeruGrainWords;      
   static size_t SemeruCardsPerRegion;  
 
+  // get current Region's alive/dest bitmap
+  G1CMBitMap* alive_bitmap()  { return &_alive_bitmap;  }
+  G1CMBitMap* dest_bitmap()   { return &_dest_bitmap;   }
+
+  // allocate space for the alive/dest bitmap.
+  G1RegionToSpaceMapper* create_alive_bitmap_storage(size_t region_idnex);
+  G1RegionToSpaceMapper* create_dest_bitmap_storage(size_t region_idnex);
 
 
   static size_t align_up_to_region_byte_size(size_t sz) {
@@ -533,7 +574,15 @@ class HeapRegion: public G1ContiguousSpace {
     return _rem_set;
   }
 
+  TargetObjQueue* target_obj_queue() const {
+    return _target_obj_queue;
+  }
+
+  // Change this code to  check if a Region is in Memory Server CSet.
+  //
   inline bool in_collection_set() const;
+
+
 
   // Methods used by the HeapRegionSetBase class and subclasses.
 
@@ -541,9 +590,13 @@ class HeapRegion: public G1ContiguousSpace {
   // linked lists.
   HeapRegion* next()              { return _next; }
   HeapRegion* prev()              { return _prev; }
+  HeapRegion* mem_server_cset_next()  { return _mem_server_cset_next; }
+
 
   void set_next(HeapRegion* next) { _next = next; }
   void set_prev(HeapRegion* prev) { _prev = prev; }
+  void set_mem_server_cset_next(HeapRegion* next)  { _mem_server_cset_next = next; }
+
 
   // Every region added to a set is tagged with a reference to that
   // set. This is used for doing consistency checking to make sure that
@@ -743,6 +796,16 @@ class HeapRegion: public G1ContiguousSpace {
   // Applies blk->do_code_blob() to each of the entries in
   // the strong code roots list for this region
   void strong_code_roots_do(CodeBlobClosure* blk) const;
+
+
+  //
+  // The Semeru section
+  //
+
+
+
+
+
 
   // Verify that the entries on the strong code root list for this
   // region are live and include at least one pointer into this region.

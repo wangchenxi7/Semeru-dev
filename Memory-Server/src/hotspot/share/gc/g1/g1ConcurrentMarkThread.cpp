@@ -56,6 +56,13 @@
 STATIC_ASSERT(ConcurrentGCPhaseManager::UNCONSTRAINED_PHASE <
               ConcurrentGCPhaseManager::IDLE_PHASE);
 
+/**
+ * Tag : Purpose of each Phase
+ * 
+ * CLEAR_CLAIMED_MARKS : Clean the marked bit on prev/next_bitmap?
+ * 
+ * 
+ */
 #define EXPAND_CONCURRENT_PHASES(expander)                                 \
   expander(ANY, = ConcurrentGCPhaseManager::UNCONSTRAINED_PHASE, NULL)     \
   expander(IDLE, = ConcurrentGCPhaseManager::IDLE_PHASE, NULL)             \
@@ -103,15 +110,16 @@ G1ConcurrentMarkThread::G1ConcurrentMarkThread(G1SemeruConcurrentMark* cm) :
   _vtime_start(0.0),
   _vtime_accum(0.0),
   _vtime_mark_accum(0.0),
-  //_cm(cm),                        // [?] Need to fix this.
+  _cm(NULL),                // no need to initialize the orginal G1ConcurrentMark.
+  _semeru_cm(cm),           // use semeru marker
   _state(Idle),
   _phase_manager_stack() {
 
-  set_name("G1 Main Marker");
+  set_name("Semeru Marker");
   create_and_start();
 
   // debug
-  printf("ERROR in %s, Please fix me.\n", __func__);
+  //printf("ERROR in %s, Please fix me.\n", __func__);
 }
 
 
@@ -240,6 +248,37 @@ public:
     _manager.set_phase(phase, force);
   }
 };
+
+
+//
+// Create a Phase manager for 
+//
+class G1SemeruConcPhaseManager : public StackObj {
+  G1SemeruConcurrentMark*   _semeru_cm;
+  ConcurrentGCPhaseManager  _manager;    // reuse the origianl phase manager
+
+public:
+  G1SemeruConcPhaseManager(int phase, G1ConcurrentMarkThread* thread) :
+    _semeru_cm(thread->semeru_cm()),
+    _manager(phase, thread->phase_manager_stack())
+  { }
+
+  ~G1SemeruConcPhaseManager() {
+    // Deactivate the manager if marking aborted, to avoid blocking on
+    // phase exit when the phase has been requested.
+    if (_semeru_cm->has_aborted()) {
+      _manager.deactivate();
+    }
+  }
+
+  void set_phase(int phase, bool force) {
+    _manager.set_phase(phase, force);
+  }
+};
+
+
+
+
 
 // Combine phase management and timing into one convenient utility.
 class G1ConcPhase : public StackObj {
@@ -438,6 +477,276 @@ void G1ConcurrentMarkThread::run_service() {
   }
   _cm->root_regions()->cancel_scan();
 }
+
+
+/**
+ * Semeru Memory Server
+ *  
+ *  Run the Semeru concurrent marking. 
+ *  [?] Which thread is executing this service ?
+ *  
+ *  [?] This service keeps running in background ?
+ * 
+ *  [?] Is this a deamon thread, running in the background ??
+ *        => So it needs to check if new Regions are assigned to it.
+ *    
+ */
+void G1ConcurrentMarkThread::run_semeru_service() {
+  _vtime_start = os::elapsedVTime();
+
+  G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
+  G1Policy* g1_policy = semeru_heap->g1_policy();
+
+  //
+  //  [?] Check if we have received any assigned Regions. 
+  //      Collection Set for the Memory Server. It's only used to record Region Index.
+  //      The concurrent scavenge is applied to each Region one by one.
+  //      
+  // debug
+  //size_t region_index_to_scan = 0; // e.g. Scan the HeapRegion[0].
+
+  // Semeru phase manager
+  G1SemeruConcPhaseManager cpmanager(G1ConcurrentPhase::IDLE, this);      // [?] rewrite the phase manager for semeru
+
+  while (!should_terminate()) {
+    // wait until started is set.
+    sleep_before_next_cycle();
+    if (should_terminate()) {
+      break;
+    }
+
+    cpmanager.set_phase(G1ConcurrentPhase::CONCURRENT_CYCLE, false /* force */);
+
+    GCIdMark gc_id_mark;
+
+    // the _cm field isn't NULL. g1ConcurrentMarkThread->_cm is initialized and used by g1CollectedHeap.
+    // But never use the _cm field in current semeru service.
+    //
+    // [?] What operations have been done before GC ??
+    //
+    _semeru_cm->concurrent_cycle_start();     // tag logs 
+
+    GCTraceConcTime(Info, gc) tt("Concurrent Cycle");
+    {
+      ResourceMark rm;
+      HandleMark   hm;
+      double cycle_start = os::elapsedVTime();
+
+      {
+        //
+        // [?] What's this for ?
+        //     
+        // [?] What's the conenction with ClassLoader ?
+        // [?] For Semeru, does it need to process the CLD for semeru memory pool ?? 
+        // 
+        G1ConcPhase p(G1ConcurrentPhase::CLEAR_CLAIMED_MARKS, this);
+        ClassLoaderDataGraph::clear_claimed_marks();
+      }
+
+      //
+      // 1) Resolve the received Memory Collection Set from CPU server
+      //
+      //  The CSet is transferred from CPU Server,
+      //  G1SemeruConcurrentMark->_finger points to the start of the memory server CSet.
+      //  the scanning sequence is controlled by G1SemeruCMTask->_curr_region.
+
+      // pop up a Region from the Memory server CSet.
+      //size_t region_index_to_scan = 0;
+
+      // The memory server should know if the assigned HeapRegions are under its management. 
+      //HeapRegion* regions_index_to_scan  = semeru_heap->hrm()->at(region_index_to_scan);
+
+
+      // [?] Send the index of memory server CSet here.
+      //     a set of Region index ?
+      //     Let G1SemeruCMTask to check the Region Index Set during concurrent GC phase.
+      //     Here only  triggers the CM GC phase.
+  
+      //
+      // Abandon this phase.
+      //
+      // We have to ensure that we finish scanning the root regions
+      // before the next GC takes place. To ensure this we have to
+      // make sure that we do not join the STS until the root regions
+      // have been scanned. If we did then it's possible that a
+      // subsequent GC could block us from joining the STS and proceed
+      // without the root regions have been scanned which would be a
+      // correctness issue.
+
+      // {
+      //   G1ConcPhase p(G1ConcurrentPhase::SCAN_ROOT_REGIONS, this);
+      //   _semeru_cm->scan_root_regions();
+      // }
+
+      // It would be nice to use the G1ConcPhase class here but
+      // the "end" logging is inside the loop and not at the end of
+      // a scope. Also, the timer doesn't support nesting.
+      // Mimicking the same log output instead.
+      {
+
+
+      //
+      // 2) Trace the fresh evicted Regions.
+      //
+  
+
+
+        G1ConcPhaseManager mark_manager(G1ConcurrentPhase::CONCURRENT_MARK, this);
+        jlong mark_start = os::elapsed_counter();
+        const char* cm_title = lookup_concurrent_phase_title(G1ConcurrentPhase::CONCURRENT_MARK);
+        log_info(gc, marking)("%s (%.3fs)",
+                              cm_title,
+                              TimeHelper::counter_to_seconds(mark_start));
+
+        for (uint iter = 1; !_semeru_cm->has_aborted(); ++iter) {
+      //     // Concurrent marking.
+      //     //
+      //     // [?] Difference with Mark from Root Regions ?
+      //     //      Marking from roots, mark from thread variables ??
+      //     {
+      //       G1ConcPhase p(G1ConcurrentPhase::MARK_FROM_ROOTS, this);
+      //       _semeru_cm->mark_from_roots();    // The main content of Concurrent Marking 
+      //     }
+
+          // Change the name to CM ?
+          // We reuse the name,MARK_FROM_ROOTS, temporarily 
+          {
+            G1ConcPhase p(G1ConcurrentPhase::MARK_FROM_ROOTS, this);
+            _semeru_cm->semeru_concurrent_marking();    // The main content of Concurrent Marking 
+          }
+
+          // Do we need to check the aborted so frequently ?
+          if (_semeru_cm->has_aborted()) {
+            break;
+          }
+
+          // [?] What's the purpose of pre-cleaning ? do we need it ?
+      //     if (G1UseReferencePrecleaning) {
+      //       G1ConcPhase p(G1ConcurrentPhase::PRECLEAN, this);
+      //       _semeru_cm->preclean();
+      //     }
+
+      //     // Provide a control point before remark.
+      //     {
+      //       G1ConcPhaseManager p(G1ConcurrentPhase::BEFORE_REMARK, this);
+      //     }
+      //     if (_semeru_cm->has_aborted()) {
+      //       break;
+      //     }
+
+      //     // Delay remark pause for MMU.
+      //     double mark_end_time = os::elapsedVTime();
+      //     jlong mark_end = os::elapsed_counter();
+      //     _vtime_mark_accum += (mark_end_time - cycle_start);
+      //     delay_to_keep_mmu(g1_policy, true /* remark */);
+      //     if (_semeru_cm->has_aborted()) {
+      //       break;
+      //     }
+
+
+
+      //
+      // 3) If the Regions are already traces, do the Remark in STW.
+      //
+      //    [?] Because the Remark is STW, so here  have to build a STW operation ?
+      //        For the concurrent operation, e.g. Semeru CM GC phase, just implement it as a function
+      //        and invoke it in current function ?
+
+
+
+      //     // Pause Remark.
+      //     // [?] How to pause the mutators ??
+      //     log_info(gc, marking)("%s (%.3fs, %.3fs) %.3fms",
+      //                           cm_title,
+      //                           TimeHelper::counter_to_seconds(mark_start),
+      //                           TimeHelper::counter_to_seconds(mark_end),
+      //                           TimeHelper::counter_to_millis(mark_end - mark_start));
+      //     mark_manager.set_phase(G1ConcurrentPhase::REMARK, false);   // [?] purpose of this action ?
+      //     CMRemark cl(_semeru_cm);
+      //     VM_G1Concurrent op(&cl, "Pause Remark");
+      //     VMThread::execute(&op);     // Suspend the 
+      //     if (_semeru_cm->has_aborted()) {
+      //       break;
+      //     } else if (!_semeru_cm->restart_for_overflow()) {
+      //       break;              // Exit loop if no restart requested.
+      //     } else {
+      //       // Loop to restart for overflow.
+      //       mark_manager.set_phase(G1ConcurrentPhase::CONCURRENT_MARK, false);
+      //       log_info(gc, marking)("%s Restart for Mark Stack Overflow (iteration #%u)",
+      //                             cm_title, iter);
+      //     }
+
+        } // The for loop of concurrent marking.
+      
+      } // the concurrent operation phases ? 
+
+
+
+      //
+      // 4) After finish the incremental Remarking, compact the Region.
+      //
+
+      // Abandon the remember set rebuild process.
+      // if (!_semeru_cm->has_aborted()) {
+      //   G1ConcPhase p(G1ConcurrentPhase::REBUILD_REMEMBERED_SETS, this);
+      //   _semeru_cm->rebuild_rem_set_concurrently();
+      // }
+
+      double end_time = os::elapsedVTime();
+      // Update the total virtual time before doing this, since it will try
+      // to measure it to get the vtime for this marking.
+      _vtime_accum = (end_time - _vtime_start);
+
+      //
+      // [?] What's the reason for this *mmu* related things.
+      //
+      // if (!_semeru_cm->has_aborted()) {
+      //   delay_to_keep_mmu(g1_policy, false /* cleanup */);
+      // }
+
+
+      // CLeanup phase, Change THIS to STW compaction ?
+      // if (!_semeru_cm->has_aborted()) {
+      //   CMCleanup cl_cl(_semeru_cm);
+      //   VM_G1Concurrent op(&cl_cl, "Pause Cleanup");
+      //   VMThread::execute(&op);
+      // }
+
+      // We now want to allow clearing of the marking bitmap to be
+      // suspended by a collection pause.
+      // We may have aborted just before the remark. Do not bother clearing the
+      // bitmap then, as it has been done during mark abort.
+      // if (!_semeru_cm->has_aborted()) {
+      //   G1ConcPhase p(G1ConcurrentPhase::CLEANUP_FOR_NEXT_MARK, this);
+      //   _semeru_cm->cleanup_for_next_mark();
+      // }
+
+    }  // End of all the concurrent marking phases
+
+
+    // Update the number of full collections that have been
+    // completed. This will also notify the FullGCCount_lock in case a
+    // Java thread is waiting for a full GC to happen (e.g., it
+    // called System.gc() with +ExplicitGCInvokesConcurrent).
+    {
+      SuspendibleThreadSetJoiner sts_join;
+     // semeru_heap->increment_old_marking_cycles_completed(true /* concurrent */);
+
+      _semeru_cm->concurrent_cycle_end();
+    }
+
+    cpmanager.set_phase(G1ConcurrentPhase::IDLE, _semeru_cm->has_aborted() /* force */);
+  } // End of the while loop
+
+  _semeru_cm->root_regions()->cancel_scan();
+
+
+}
+
+
+
+
+
 
 void G1ConcurrentMarkThread::stop_service() {
   MutexLockerEx ml(CGC_lock, Mutex::_no_safepoint_check_flag);

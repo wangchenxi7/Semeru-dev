@@ -58,7 +58,7 @@ class BitMap {
   } RangeSizeHint;
 
  private:
-  bm_word_t* _map;     // First word in bitmap
+  bm_word_t* _map;     // First word in bitmap, start address of the bitmap.
   idx_t      _size;    // Size of bitmap (in bits)
 
   // Helper for get_next_{zero,one}_bit variants.

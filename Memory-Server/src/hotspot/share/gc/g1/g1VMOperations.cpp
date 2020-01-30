@@ -242,15 +242,15 @@ void VM_G1CollectForAllocation::doit_epilogue() {
 }
 
 /**
- * Tag : 
+ * Tag : Execute a concurrent operation.
  * 
  * [?] which phase of the Concurrent Marking ??
- * a. Root Region scan
- * b. Concurrent Mark
- * c. Remark
- * d. Clean up
+ * a. Root Region scan	// CM
+ * b. Concurrent Mark		// CM   
+ * c. Remark   	// STW
+ * d. Clean up	// STW
  * 
- * 
+ * [?] for a concurrent operation, no need to acquire the lock ?
  * 
  */
 void VM_G1Concurrent::doit() {
@@ -264,11 +264,22 @@ void VM_G1Concurrent::doit() {
 	_cl->do_void();
 }
 
+/**
+ *  Acquire Heap_lock for next VM Operation.
+ * 
+ *  [?] For a concurrent operation, also need to acquire the Heap_lock ?
+ * 	=> Concurrent heap also has STW operation. e.g. Remark and Cleanup.
+ * 
+ */
 bool VM_G1Concurrent::doit_prologue() {
 	Heap_lock->lock();
 	return true;
 }
 
+/**
+ * Concurrent Operation is done, release the Heap_lock and notify all the pending threads.
+ * 
+ */
 void VM_G1Concurrent::doit_epilogue() {
 	if (Universe::has_reference_pending_list()) {
 		Heap_lock->notify_all();

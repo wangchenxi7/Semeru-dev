@@ -46,8 +46,9 @@ class ReservedSpace {
   bool   _executable;       // [?] For Reserved space, this is always false ?
 
   // ReservedSpace
-  ReservedSpace(char* base, size_t size, size_t alignment, bool special,
-                bool executable);
+  // a private constructor , change it to public, we need it for RDMA meta data space.
+  // ReservedSpace(char* base, size_t size, size_t alignment, bool special,
+  //               bool executable);
  protected:
   void initialize(size_t size, size_t alignment, bool large,
                   char* requested_address,
@@ -72,6 +73,9 @@ class ReservedSpace {
   ReservedSpace(size_t size, size_t alignment, bool large,
                 char* requested_address = NULL);
   ReservedSpace(size_t size, size_t alignment, bool large, bool executable);
+
+  ReservedSpace(char* base, size_t size, size_t alignment, bool special,
+                bool executable);
 
   // Accessors
   char*  base()            const { return _base;      }

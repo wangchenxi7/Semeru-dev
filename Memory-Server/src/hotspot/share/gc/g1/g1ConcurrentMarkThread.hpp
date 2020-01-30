@@ -41,13 +41,15 @@ class G1SemeruConcurrentMark;
  * 
  * Tag 
  * 
- * [?] How many concurrent threads is running ?
+ * [x] How many concurrent threads is running ?
+ *  => controlled by the option -XX:ConcGCThreads=n
  * 
  * [?] How many concurrent threads for each region ?
  * 
  * 
  * [?] G1ConcurrentMarkThread -> ConcurrentGCThread 
- *  => There are several kinds of concurrent gc tasks ??
+ *  => This thread is only designed for concurrent marking ?
+ *     Can the Semeru use it for compaction at the same time?
  * 
  * 
  * 
@@ -60,6 +62,9 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   double _vtime_mark_accum;
 
   G1ConcurrentMark* _cm;
+
+  // Semeru memory server marking & compaction ?
+  G1SemeruConcurrentMark* _semeru_cm;   // only initialize this for semeru memory pool.
 
   enum State {
     Idle,
@@ -80,6 +85,10 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   void run_service();
   void stop_service();
 
+  // semeru
+  void run_semeru_service();
+  void stop_semeru_service();
+
  public:
   // Constructor
   G1ConcurrentMarkThread(G1ConcurrentMark* cm);
@@ -93,6 +102,9 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   double vtime_mark_accum();
 
   G1ConcurrentMark* cm()   { return _cm; }
+
+  // Semeru
+  G1SemeruConcurrentMark* semeru_cm()   { return _semeru_cm; }
 
   void set_idle()          { assert(_state != Started, "must not be starting a new cycle"); _state = Idle; }
   bool idle()              { return _state == Idle; }

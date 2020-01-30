@@ -75,7 +75,7 @@
 // bool G1CMBitMapClosure::do_addr(HeapWord* const addr) {
 
 
-	// assert(addr < _cm->finger(), "invariant");
+	// assert(addr < _semeru_cm->finger(), "invariant");
 	// assert(addr >= _task->finger(), "invariant");
 
 	// // We move that task's local finger along.
@@ -369,35 +369,37 @@ bool G1SemeruCMRootRegions::wait_until_scan_finished() {
 // phase based on the number of GC workers being used in a STW
 // phase.
 static uint scale_concurrent_worker_threads(uint num_gc_workers) {
-	return MAX2((num_gc_workers + 2) / 4, 1U);
+	return MAX2((num_gc_workers + 2) / 4, 1U);		// Calculate the Concurrent Threads number according to the Parallel Threads number.
 }
+
+
 
 G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 																	 G1RegionToSpaceMapper* prev_bitmap_storage,
 																	 G1RegionToSpaceMapper* next_bitmap_storage) :
 	// _cm_thread set inside the constructor
-	_g1h(g1h),
+	_semeru_h(g1h),
 	_completed_initialization(false),
 
-	_mark_bitmap_1(),
+	_mark_bitmap_1(),			// initialized according to prev_bitmap_storage, it covers the whole heap.
 	_mark_bitmap_2(),
 	_prev_mark_bitmap(&_mark_bitmap_1),
 	_next_mark_bitmap(&_mark_bitmap_2),
 
-	_heap(_g1h->reserved_region()),
+	_heap(_semeru_h->reserved_region()),
 
-	_root_regions(_g1h->max_regions()),
+	_root_regions(_semeru_h->max_regions()),
 
 	_global_mark_stack(),
 
 	// _finger set in set_non_marking_state
 
 	_worker_id_offset(DirtyCardQueueSet::num_par_ids() + G1ConcRefinementThreads),
-	_max_num_tasks(ParallelGCThreads),
+	_max_num_tasks(ParallelGCThreads),				//[?] _max_num_tasks is decided by  the parameter ParallelGCThreads ??
 	// _num_active_tasks set in set_non_marking_state()
 	// _tasks set inside the constructor
 
-	_task_queues(new G1SemeruCMTaskQueueSet((int) _max_num_tasks)),
+	_task_queues(new G1SemeruCMTaskQueueSet((int) _max_num_tasks)),		// parallel threads or CM threads ?
 	_terminator((int) _max_num_tasks, _task_queues),
 
 	_first_overflow_barrier_sync(),
@@ -425,21 +427,25 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 	_num_concurrent_workers(0),
 	_max_concurrent_workers(0),
 
-	_region_mark_stats(NEW_C_HEAP_ARRAY(G1RegionMarkStats, _g1h->max_regions(), mtGC)),
-	_top_at_rebuild_starts(NEW_C_HEAP_ARRAY(HeapWord*, _g1h->max_regions(), mtGC))
+	_region_mark_stats(NEW_C_HEAP_ARRAY(G1RegionMarkStats, _semeru_h->max_regions(), mtGC)),
+	_top_at_rebuild_starts(NEW_C_HEAP_ARRAY(HeapWord*, _semeru_h->max_regions(), mtGC))
 {
-	_mark_bitmap_1.initialize(g1h->reserved_region(), prev_bitmap_storage);
-	_mark_bitmap_2.initialize(g1h->reserved_region(), next_bitmap_storage);
+
+	// [?] use the commit region to initialize bitmap.
+	//_mark_bitmap_1.initialize(g1h->reserved_region(), prev_bitmap_storage);		// Allocate space to cover the whole g1 heap
+	//_mark_bitmap_2.initialize(g1h->reserved_region(), next_bitmap_storage);
 
 	// Create & start ConcurrentMark thread.
-	_cm_thread = new G1ConcurrentMarkThread(this);
+	_cm_thread = new G1ConcurrentMarkThread(this);  //[?] Only created a single, specific concurrent mark thread ? not use the CT pool?
 	if (_cm_thread->osthread() == NULL) {
 		vm_shutdown_during_initialization("Could not create ConcurrentMarkThread");
 	}
 
 	assert(CGC_lock != NULL, "CGC_lock must be initialized");
 
-	if (FLAG_IS_DEFAULT(ConcGCThreads) || ConcGCThreads == 0) {
+	// [x] if NOT set the parameter ConcGCThreads, calculated it by ParallelGCThreads
+	//
+	if (FLAG_IS_DEFAULT(ConcGCThreads) || ConcGCThreads == 0) {   
 		// Calculate the number of concurrent worker threads by scaling
 		// the number of parallel GC threads.
 		uint marking_thread_num = scale_concurrent_worker_threads(ParallelGCThreads);
@@ -462,7 +468,7 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 	_concurrent_workers = new WorkGang("G1 Conc", _max_concurrent_workers, false, true);
 	_concurrent_workers->initialize_workers();
 
-	if (FLAG_IS_DEFAULT(MarkStackSize)) {
+	if (FLAG_IS_DEFAULT(MarkStackSize)) {		// [?] Who sets the MarkStackSize ??
 		size_t mark_stack_size =
 			MIN2(MarkStackSizeMax,
 					MAX2(MarkStackSize, (size_t) (_max_concurrent_workers * TASKQUEUE_SIZE)));
@@ -500,7 +506,10 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 		vm_exit_during_initialization("Failed to allocate initial concurrent mark overflow mark stack.");
 	}
 
-	_tasks = NEW_C_HEAP_ARRAY(G1SemeruCMTask*, _max_num_tasks, mtGC);
+	// Why not use the ConcGCThreads ??
+	// Does the _tasks[] also include the ParallelThread ?
+	// 
+	_tasks = NEW_C_HEAP_ARRAY(G1SemeruCMTask*, _max_num_tasks, mtGC);			
 	_accum_task_vtime = NEW_C_HEAP_ARRAY(double, _max_num_tasks, mtGC);
 
 	// so that the assertion in MarkingTaskQueue::task_queue doesn't fail
@@ -511,7 +520,7 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 		task_queue->initialize();
 		_task_queues->register_queue(i, task_queue);
 
-		_tasks[i] = new G1SemeruCMTask(i, this, task_queue, _region_mark_stats, _g1h->max_regions());
+		_tasks[i] = new G1SemeruCMTask(i, this, task_queue, _region_mark_stats, _semeru_h->max_regions());
 
 		_accum_task_vtime[i] = 0.0;
 	}
@@ -532,7 +541,7 @@ void G1SemeruConcurrentMark::reset() {
 		_tasks[i]->reset(_next_mark_bitmap);
 	}
 
-	uint max_regions = _g1h->max_regions();
+	uint max_regions = _semeru_h->max_regions();
 	for (uint i = 0; i < max_regions; i++) {
 		_top_at_rebuild_starts[i] = NULL;
 		_region_mark_stats[i].clear();
@@ -551,7 +560,7 @@ void G1SemeruConcurrentMark::clear_statistics(HeapRegion* r) {
 	uint const region_idx = r->hrm_index();
 	if (r->is_humongous()) {
 		assert(r->is_starts_humongous(), "Got humongous continues region here");
-		uint const size_in_regions = (uint)_g1h->humongous_obj_size_in_regions(oop(r->humongous_start_region()->bottom())->size());
+		uint const size_in_regions = (uint)_semeru_h->humongous_obj_size_in_regions(oop(r->humongous_start_region()->bottom())->size());
 		for (uint j = region_idx; j < (region_idx + size_in_regions); j++) {
 			clear_statistics_in_region(j);
 		}
@@ -573,7 +582,7 @@ void G1SemeruConcurrentMark::humongous_object_eagerly_reclaimed(HeapRegion* r) {
 	clear_mark_if_set(_prev_mark_bitmap, r->bottom());
 	clear_mark_if_set(_next_mark_bitmap, r->bottom());
 
-	if (!_g1h->collector_state()->mark_or_rebuild_in_progress()) {
+	if (!_semeru_h->collector_state()->mark_or_rebuild_in_progress()) {
 		return;
 	}
 
@@ -588,7 +597,7 @@ void G1SemeruConcurrentMark::reset_marking_for_restart() {
 	if (has_overflown()) {
 		_global_mark_stack.expand();
 
-		uint max_regions = _g1h->max_regions();
+		uint max_regions = _semeru_h->max_regions();
 		for (uint i = 0; i < max_regions; i++) {
 			_region_mark_stats[i].clear_during_overflow();
 		}
@@ -614,10 +623,15 @@ void G1SemeruConcurrentMark::set_concurrency(uint active_tasks) {
 	_second_overflow_barrier_sync.set_n_workers((int) active_tasks);
 }
 
+
+/**
+ * [?] Set a flag to identify if this is a Concurrent Phase ?
+ *  
+ */
 void G1SemeruConcurrentMark::set_concurrency_and_phase(uint active_tasks, bool concurrent) {
 	set_concurrency(active_tasks);
 
-	_concurrent = concurrent;
+	_concurrent = concurrent;		// g1SemeruConcurrentMark->_concurrent specify which phase we are : CM or Remark.
 
 	if (!concurrent) {
 		// At this point we should be in a STW phase, and completed marking.
@@ -651,9 +665,9 @@ private:
 	class G1ClearBitmapHRClosure : public HeapRegionClosure {
 	private:
 		G1CMBitMap* _bitmap;
-		G1SemeruConcurrentMark* _cm;
+		G1SemeruConcurrentMark* _semeru_cm;
 	public:
-		G1ClearBitmapHRClosure(G1CMBitMap* bitmap, G1SemeruConcurrentMark* cm) : HeapRegionClosure(), _bitmap(bitmap), _cm(cm) {
+		G1ClearBitmapHRClosure(G1CMBitMap* bitmap, G1SemeruConcurrentMark* cm) : HeapRegionClosure(), _bitmap(bitmap), _semeru_cm(cm) {
 		}
 
 		virtual bool do_heap_region(HeapRegion* r) {
@@ -669,15 +683,15 @@ private:
 				cur += chunk_size_in_words;
 
 				// Abort iteration if after yielding the marking has been aborted.
-				if (_cm != NULL && _cm->do_yield_check() && _cm->has_aborted()) {
+				if (_semeru_cm != NULL && _semeru_cm->do_yield_check() && _semeru_cm->has_aborted()) {
 					return true;
 				}
 				// Repeat the asserts from before the start of the closure. We will do them
 				// as asserts here to minimize their overhead on the product. However, we
 				// will have them as guarantees at the beginning / end of the bitmap
 				// clearing to get some checking in the product.
-				assert(_cm == NULL || _cm->cm_thread()->during_cycle(), "invariant");
-				assert(_cm == NULL || !G1SemeruCollectedHeap::heap()->collector_state()->mark_or_rebuild_in_progress(), "invariant");
+				assert(_semeru_cm == NULL || _semeru_cm->cm_thread()->during_cycle(), "invariant");
+				assert(_semeru_cm == NULL || !G1SemeruCollectedHeap::heap()->collector_state()->mark_or_rebuild_in_progress(), "invariant");
 			}
 			assert(cur == end, "Must have completed iteration over the bitmap for region %u.", r->hrm_index());
 
@@ -710,7 +724,7 @@ public:
 void G1SemeruConcurrentMark::clear_bitmap(G1CMBitMap* bitmap, WorkGang* workers, bool may_yield) {
 	assert(may_yield || SafepointSynchronize::is_at_safepoint(), "Non-yielding bitmap clear only allowed at safepoint.");
 
-	size_t const num_bytes_to_clear = (HeapRegion::GrainBytes * _g1h->num_regions()) / G1CMBitMap::heap_map_factor();
+	size_t const num_bytes_to_clear = (HeapRegion::GrainBytes * _semeru_h->num_regions()) / G1CMBitMap::heap_map_factor();
 	size_t const num_chunks = align_up(num_bytes_to_clear, G1ClearBitMapTask::chunk_size()) / G1ClearBitMapTask::chunk_size();
 
 	uint const num_workers = (uint)MIN2(num_chunks, (size_t)workers->active_workers());
@@ -731,13 +745,13 @@ void G1SemeruConcurrentMark::cleanup_for_next_mark() {
 	// marking bitmap and getting it ready for the next cycle. During
 	// this time no other cycle can start. So, let's make sure that this
 	// is the case.
-	guarantee(!_g1h->collector_state()->mark_or_rebuild_in_progress(), "invariant");
+	guarantee(!_semeru_h->collector_state()->mark_or_rebuild_in_progress(), "invariant");
 
 	clear_bitmap(_next_mark_bitmap, _concurrent_workers, true);
 
 	// Repeat the asserts from above.
 	guarantee(cm_thread()->during_cycle(), "invariant");
-	guarantee(!_g1h->collector_state()->mark_or_rebuild_in_progress(), "invariant");
+	guarantee(!_semeru_h->collector_state()->mark_or_rebuild_in_progress(), "invariant");
 }
 
 void G1SemeruConcurrentMark::clear_prev_bitmap(WorkGang* workers) {
@@ -764,7 +778,7 @@ void G1SemeruConcurrentMark::pre_initial_mark() {
 
 	// For each region note start of marking.
 	NoteStartOfMarkHRClosure startcl;
-	_g1h->heap_region_iterate(&startcl);
+	_semeru_h->heap_region_iterate(&startcl);
 
 	_root_regions.reset();
 }
@@ -772,7 +786,7 @@ void G1SemeruConcurrentMark::pre_initial_mark() {
 
 void G1SemeruConcurrentMark::post_initial_mark() {
 	// Start Concurrent Marking weak-reference discovery.
-	ReferenceProcessor* rp = _g1h->ref_processor_cm();
+	ReferenceProcessor* rp = _semeru_h->ref_processor_cm();
 	// enable ("weak") refs discovery
 	rp->enable_discovery();
 	rp->setup_policy(false); // snapshot the soft ref policy to be used in this cycle
@@ -836,46 +850,70 @@ void G1SemeruConcurrentMark::enter_second_sync_barrier(uint worker_id) {
 	// at this point everything should be re-initialized and ready to go
 }
 
+
+/**
+ * Semeru Memory Server - the CM, Remark task.
+ * 
+ * [?] This task can be excuted in both Concurrent and STW mode.
+ * 
+ * [?] Only concurrent tasks can execute this task.
+ * 
+ */
 class G1SemeruCMConcurrentMarkingTask : public AbstractGangTask {
-	G1SemeruConcurrentMark*     _cm;
+	G1SemeruConcurrentMark*     _semeru_cm;
 
 public:
 	void work(uint worker_id) {
 		assert(Thread::current()->is_ConcurrentGC_thread(), "Not a concurrent GC thread");
-		ResourceMark rm;
+		ResourceMark rm;			// [?] What's this resource used for ?
 
 		double start_vtime = os::elapsedVTime();
 
 		{
-			SuspendibleThreadSetJoiner sts_join;
+			SuspendibleThreadSetJoiner sts_join;		// [?] Design the Semeru marking thread's suspendible thread ?
 
-			assert(worker_id < _cm->active_tasks(), "invariant");
+			assert(worker_id < _semeru_cm->active_tasks(), "invariant");
 
-			G1SemeruCMTask* task = _cm->task(worker_id);
-			task->record_start_time();
-			if (!_cm->has_aborted()) {
+			G1SemeruCMTask* task = _semeru_cm->task(worker_id);		// get the CM task
+			task->record_start_time();			// [?] profiling ??
+			if (!_semeru_cm->has_aborted()) {		// [?] aborted ? suspendible control ?
 				do {
-					task->do_marking_step(G1ConcMarkStepDurationMillis,
-																true  /* do_termination */,
-																false /* is_serial*/);
+					// task->do_marking_step(G1ConcMarkStepDurationMillis,
+					// 											true  /* do_termination */,
+					// 											false /* is_serial*/);					// [x] Both C Marking and STW Compaction use this function.
 
-					_cm->do_yield_check();
-				} while (!_cm->has_aborted() && task->has_aborted());
+
+					task->do_semeru_marking_step(G1ConcMarkStepDurationMillis,
+																true  /* do_termination */,
+																false /* is_serial*/);					// [x] Both C Marking and STW Compaction use this function.
+
+
+					_semeru_cm->do_yield_check();		// yield for what ?
+
+				} while (!_semeru_cm->has_aborted() && task->has_aborted());
 			}
+
 			task->record_end_time();
-			guarantee(!task->has_aborted() || _cm->has_aborted(), "invariant");
+			guarantee(!task->has_aborted() || _semeru_cm->has_aborted(), "invariant");
 		}
 
 		double end_vtime = os::elapsedVTime();
-		_cm->update_accum_task_vtime(worker_id, end_vtime - start_vtime);
+		_semeru_cm->update_accum_task_vtime(worker_id, end_vtime - start_vtime);
 	}
 
-	G1SemeruCMConcurrentMarkingTask(G1SemeruConcurrentMark* cm) :
-			AbstractGangTask("Concurrent Mark"), _cm(cm) { }
+	G1SemeruCMConcurrentMarkingTask(G1SemeruConcurrentMark* semeru_cm) :
+			AbstractGangTask("Concurrent Mark"), _semeru_cm(semeru_cm) { }
 
 	~G1SemeruCMConcurrentMarkingTask() { }
 };
 
+/**
+ * Semeru Memory Server
+ *
+ * 	Reserve seperate concurrent threads for Semeru heap ? 
+ * 	Not share them with the original old space.	
+ * 
+ */
 uint G1SemeruConcurrentMark::calc_active_marking_workers() {
 	uint result = 0;
 	if (!UseDynamicNumberOfGCThreads ||
@@ -909,7 +947,7 @@ uint G1SemeruConcurrentMark::calc_active_marking_workers() {
 void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
 	assert(hr->is_old() || (hr->is_survivor() && hr->next_top_at_mark_start() == hr->bottom()),
 				 "Root regions must be old or survivor but region %u is %s", hr->hrm_index(), hr->get_type_str());
-	G1RootRegionScanClosure cl(_g1h, this, worker_id);
+	G1RootRegionScanClosure cl(_semeru_h, this, worker_id);
 
 	const uintx interval = PrefetchScanIntervalInBytes;
 	HeapWord* curr = hr->next_top_at_mark_start();	// ??
@@ -930,24 +968,78 @@ void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
  * 
  */
 class G1SemeruCMRootRegionScanTask : public AbstractGangTask {
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruConcurrentMark* _semeru_cm;
 public:
 	G1SemeruCMRootRegionScanTask(G1SemeruConcurrentMark* cm) :
-		AbstractGangTask("G1 Root Region Scan"), _cm(cm) { }
+		AbstractGangTask("G1 Root Region Scan"), _semeru_cm(cm) { }
 
 	void work(uint worker_id) {
 		assert(Thread::current()->is_ConcurrentGC_thread(),
 					 "this should only be done by a conc GC thread");
 
-		G1SemeruCMRootRegions* root_regions = _cm->root_regions();
+		G1SemeruCMRootRegions* root_regions = _semeru_cm->root_regions();
 		HeapRegion* hr = root_regions->claim_next();
 		while (hr != NULL) {
-			_cm->scan_root_region(hr, worker_id);
+			_semeru_cm->scan_root_region(hr, worker_id);
 			hr = root_regions->claim_next();
 		}
 	}
 };
 
+
+
+/**
+ * Semeru Memory Server --	Scan a single Region. 
+ * 		Concurrent scavenge,
+ * 		Start from a HeapRegion's Target Object Queue.
+ * 		Mark the alive objects in the HeapRegion's alive_bitmap.
+ * 
+ * 	[?] How to assign the HeapRegion to the Semeru CM Task ?
+ * 
+ */
+void G1SemeruConcurrentMark::semeru_concurrent_mark_a_region( HeapRegion* region_to_scan) {
+	_restart_for_overflow = false;		// freshly scan, not Remark
+
+	_num_concurrent_workers = calc_active_marking_workers();
+
+	uint active_workers = MAX2(1U, _num_concurrent_workers);
+
+	// Setting active workers is not guaranteed since fewer
+	// worker threads may currently exist and more may not be
+	// available.
+	active_workers = _concurrent_workers->update_active_workers(active_workers);
+	log_info(gc, task)("Using %u workers of %u for marking", active_workers, _concurrent_workers->total_workers());
+
+	// Parallel task terminator is set in "set_concurrency_and_phase()"
+	set_concurrency_and_phase(active_workers, true /* concurrent */);
+
+	G1SemeruCMConcurrentMarkingTask marking_task(this);
+	_concurrent_workers->run_task(&marking_task);
+	print_stats();
+}
+
+
+/**
+ * Semeru Memory Server - Compact a Region.
+ * 		Do the compaction in STW.
+ * 		
+ * 	
+ */
+void G1SemeruConcurrentMark::semeru_stw_compact_a_region( HeapRegion* region_to_compact) {
+
+	//debug
+	tty->print("%s, Not implement yet. \n", __func__);
+
+
+
+}
+
+
+
+/**
+ * Semeru scans from each Region's target object queue as Root.
+ * There is no Root Region Scan Phase.
+ */
 void G1SemeruConcurrentMark::scan_root_regions() {
 	// scan_in_progress() will have been set to true only if there was
 	// at least one root region to scan. So, if it's false, we
@@ -979,13 +1071,13 @@ void G1SemeruConcurrentMark::concurrent_cycle_start() {
 
 	_gc_tracer_cm->report_gc_start(GCCause::_no_gc /* first parameter is not used */, _gc_timer_cm->gc_start());
 
-	_g1h->trace_heap_before_gc(_gc_tracer_cm);
+	_semeru_h->trace_heap_before_gc(_gc_tracer_cm);  // [?] What does this mean ??
 }
 
 void G1SemeruConcurrentMark::concurrent_cycle_end() {
-	_g1h->collector_state()->set_clearing_next_bitmap(false);
+	_semeru_h->collector_state()->set_clearing_next_bitmap(false);
 
-	_g1h->trace_heap_after_gc(_gc_tracer_cm);
+	_semeru_h->trace_heap_after_gc(_gc_tracer_cm);
 
 	if (has_aborted()) {
 		log_info(gc, marking)("Concurrent Mark Abort");
@@ -1018,8 +1110,41 @@ void G1SemeruConcurrentMark::mark_from_roots() {
 	print_stats();
 }
 
+/**
+ * Semeru memory server - Concurent Marking phase
+ * 
+ * 		The first marking pass for a fresh Region evicted in memory server.
+ * 
+ */ 
+void G1SemeruConcurrentMark::semeru_concurrent_marking() {
+
+	//debug
+	tty->print("%s, this is the main concurrent marking phase for Semeru memory server. NOT mark_from_too. \n", __func__);
+
+	_restart_for_overflow = false;
+
+	_num_concurrent_workers = calc_active_marking_workers();
+
+	uint active_workers = MAX2(1U, _num_concurrent_workers);
+
+	// Setting active workers is not guaranteed since fewer
+	// worker threads may currently exist and more may not be
+	// available.
+	active_workers = _concurrent_workers->update_active_workers(active_workers);
+	log_info(gc, task)("Using %u workers of %u for CM marking", active_workers, _concurrent_workers->total_workers());
+
+	// Parallel task terminator is set in "set_concurrency_and_phase()"
+	set_concurrency_and_phase(active_workers, true /* concurrent */);
+
+	G1SemeruCMConcurrentMarkingTask marking_task(this);
+	_concurrent_workers->run_task(&marking_task);
+	print_stats();
+}
+
+
+
 void G1SemeruConcurrentMark::verify_during_pause(G1HeapVerifier::G1VerifyType type, VerifyOption vo, const char* caller) {
-	G1HeapVerifier* verifier = _g1h->verifier();
+	G1HeapVerifier* verifier = _semeru_h->verifier();
 
 	 verifier->verify_region_sets_optional();
 
@@ -1037,16 +1162,16 @@ void G1SemeruConcurrentMark::verify_during_pause(G1HeapVerifier::G1VerifyType ty
 }
 
 class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
-	G1SemeruCollectedHeap* _g1h;
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruCollectedHeap* _semeru_h;
+	G1SemeruConcurrentMark* _semeru_cm;
 	SemeruHeapRegionClaimer _hrclaimer;
 	uint volatile _total_selected_for_rebuild;
 
 	G1SemeruPrintRegionLivenessInfoClosure _cl;
 
 	class G1SemeruUpdateRemSetTrackingBeforeRebuild : public HeapRegionClosure {
-		G1SemeruCollectedHeap* _g1h;
-		G1SemeruConcurrentMark* _cm;
+		G1SemeruCollectedHeap* _semeru_h;
+		G1SemeruConcurrentMark* _semeru_cm;
 
 		G1SemeruPrintRegionLivenessInfoClosure* _cl;
 
@@ -1063,14 +1188,14 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 		 * Update all Old Region's top_at_rebuild_start.
 		 */
 		void update_remset_before_rebuild(HeapRegion* hr) {
-			G1RemSetTrackingPolicy* tracking_policy = _g1h->g1_policy()->remset_tracker();
+			G1RemSetTrackingPolicy* tracking_policy = _semeru_h->g1_policy()->remset_tracker();
 
 			bool selected_for_rebuild;
 			if (hr->is_humongous()) {
-				bool const is_live = _cm->liveness(hr->humongous_start_region()->hrm_index()) > 0;
+				bool const is_live = _semeru_cm->liveness(hr->humongous_start_region()->hrm_index()) > 0;
 				selected_for_rebuild = tracking_policy->update_humongous_before_rebuild(hr, is_live);
 			} else {
-				size_t const live_bytes = _cm->liveness(hr->hrm_index());
+				size_t const live_bytes = _semeru_cm->liveness(hr->hrm_index());
 				selected_for_rebuild = tracking_policy->update_before_rebuild(hr, live_bytes);
 			}
 			if (selected_for_rebuild) {
@@ -1078,7 +1203,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 			}
 
 			// Even not select this Region to rebuild its RemSet, update its _top_at_rebuild_start.
-			_cm->update_top_at_rebuild_start(hr);			
+			_semeru_cm->update_top_at_rebuild_start(hr);			
 		}
 
 		// Distribute the given words across the humongous object starting with hr and
@@ -1095,7 +1220,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 						 obj_size_in_words, marked_words);
 
 			for (uint i = region_idx; i < (region_idx + num_regions_in_humongous); i++) {
-				HeapRegion* const r = _g1h->region_at(i);
+				HeapRegion* const r = _semeru_h->region_at(i);
 				size_t const words_to_add = MIN2(HeapRegion::GrainWords, marked_words);
 
 				log_trace(gc, marking)("Adding " SIZE_FORMAT " words to humongous region %u (%s)",
@@ -1110,7 +1235,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 
 		void update_marked_bytes(HeapRegion* hr) {
 			uint const region_idx = hr->hrm_index();
-			size_t const marked_words = _cm->liveness(region_idx);
+			size_t const marked_words = _semeru_cm->liveness(region_idx);
 			// The marking attributes the object's size completely to the humongous starts
 			// region. We need to distribute this value across the entire set of regions a
 			// humongous object spans.
@@ -1135,7 +1260,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 
 	public:
 		G1SemeruUpdateRemSetTrackingBeforeRebuild(G1SemeruCollectedHeap* g1h, G1SemeruConcurrentMark* cm, G1SemeruPrintRegionLivenessInfoClosure* cl) :
-			_g1h(g1h), _cm(cm), _cl(cl), _num_regions_selected_for_rebuild(0) { }
+			_semeru_h(g1h), _semeru_cm(cm), _cl(cl), _num_regions_selected_for_rebuild(0) { }
 
 		virtual bool do_heap_region(HeapRegion* r) {
 			update_remset_before_rebuild(r);
@@ -1150,11 +1275,11 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 public:
 	G1SemeruUpdateRemSetTrackingBeforeRebuildTask(G1SemeruCollectedHeap* g1h, G1SemeruConcurrentMark* cm, uint num_workers) :
 		AbstractGangTask("G1 Update RemSet Tracking Before Rebuild"),
-		_g1h(g1h), _cm(cm), _hrclaimer(num_workers), _total_selected_for_rebuild(0), _cl("Post-Marking") { }
+		_semeru_h(g1h), _semeru_cm(cm), _hrclaimer(num_workers), _total_selected_for_rebuild(0), _cl("Post-Marking") { }
 
 	virtual void work(uint worker_id) {
-		G1SemeruUpdateRemSetTrackingBeforeRebuild update_cl(_g1h, _cm, &_cl);
-		_g1h->heap_region_par_iterate_from_worker_offset(&update_cl, &_hrclaimer, worker_id);
+		G1SemeruUpdateRemSetTrackingBeforeRebuild update_cl(_semeru_h, _semeru_cm, &_cl);
+		_semeru_h->heap_region_par_iterate_from_worker_offset(&update_cl, &_hrclaimer, worker_id);
 		Atomic::add(update_cl.num_selected_for_rebuild(), &_total_selected_for_rebuild);
 	}
 
@@ -1165,12 +1290,12 @@ public:
 };
 
 class G1SemeruUpdateRemSetTrackingAfterRebuild : public HeapRegionClosure {
-	G1SemeruCollectedHeap* _g1h;
+	G1SemeruCollectedHeap* _semeru_h;
 public:
-	G1SemeruUpdateRemSetTrackingAfterRebuild(G1SemeruCollectedHeap* g1h) : _g1h(g1h) { }
+	G1SemeruUpdateRemSetTrackingAfterRebuild(G1SemeruCollectedHeap* g1h) : _semeru_h(g1h) { }
 
 	virtual bool do_heap_region(HeapRegion* r) {
-		_g1h->g1_policy()->remset_tracker()->update_after_rebuild(r);
+		_semeru_h->g1_policy()->remset_tracker()->update_after_rebuild(r);
 		return false;
 	}
 };
@@ -1194,7 +1319,7 @@ void G1SemeruConcurrentMark::remark() {
 		return;
 	}
 
-	G1Policy* g1p = _g1h->g1_policy();
+	G1Policy* g1p = _semeru_h->g1_policy();
 	g1p->record_concurrent_mark_remark_start();
 
 	double start = os::elapsedTime();
@@ -1230,16 +1355,16 @@ void G1SemeruConcurrentMark::remark() {
 		{
 			GCTraceTime(Debug, gc, phases) debug("Update Remembered Set Tracking Before Rebuild", _gc_timer_cm);
 
-			uint const workers_by_capacity = (_g1h->num_regions() + G1SemeruUpdateRemSetTrackingBeforeRebuildTask::RegionsPerThread - 1) /
+			uint const workers_by_capacity = (_semeru_h->num_regions() + G1SemeruUpdateRemSetTrackingBeforeRebuildTask::RegionsPerThread - 1) /
 																			 G1SemeruUpdateRemSetTrackingBeforeRebuildTask::RegionsPerThread;
-			uint const num_workers = MIN2(_g1h->workers()->active_workers(), workers_by_capacity);
+			uint const num_workers = MIN2(_semeru_h->workers()->active_workers(), workers_by_capacity);
 
-			G1SemeruUpdateRemSetTrackingBeforeRebuildTask cl(_g1h, this, num_workers);
-			log_debug(gc,ergo)("Running %s using %u workers for %u regions in heap", cl.name(), num_workers, _g1h->num_regions());
-			_g1h->workers()->run_task(&cl, num_workers);
+			G1SemeruUpdateRemSetTrackingBeforeRebuildTask cl(_semeru_h, this, num_workers);
+			log_debug(gc,ergo)("Running %s using %u workers for %u regions in heap", cl.name(), num_workers, _semeru_h->num_regions());
+			_semeru_h->workers()->run_task(&cl, num_workers);
 
 			log_debug(gc, remset, tracking)("Remembered Set Tracking update regions total %u, selected %u",
-																			_g1h->num_regions(), cl.total_selected_for_rebuild());
+																			_semeru_h->num_regions(), cl.total_selected_for_rebuild());
 		}
 		{
 			GCTraceTime(Debug, gc, phases) debug("Reclaim Empty Regions", _gc_timer_cm);
@@ -1252,7 +1377,7 @@ void G1SemeruConcurrentMark::remark() {
 			ClassLoaderDataGraph::purge();
 		}
 
-		_g1h->resize_heap_if_necessary();
+		_semeru_h->resize_heap_if_necessary();
 
 		compute_new_sizes();
 
@@ -1289,7 +1414,7 @@ void G1SemeruConcurrentMark::remark() {
 class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 	// Per-region work during the Cleanup pause.
 	class G1ReclaimEmptyRegionsClosure : public HeapRegionClosure {
-		G1SemeruCollectedHeap* _g1h;
+		G1SemeruCollectedHeap* _semeru_h;
 		size_t _freed_bytes;
 		FreeRegionList* _local_cleanup_list;
 		uint _old_regions_removed;
@@ -1298,7 +1423,7 @@ class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 	public:
 		G1ReclaimEmptyRegionsClosure(G1SemeruCollectedHeap* g1h,
 																 FreeRegionList* local_cleanup_list) :
-			_g1h(g1h),
+			_semeru_h(g1h),
 			_freed_bytes(0),
 			_local_cleanup_list(local_cleanup_list),
 			_old_regions_removed(0),
@@ -1314,13 +1439,13 @@ class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 				hr->set_containing_set(NULL);
 				if (hr->is_humongous()) {
 					_humongous_regions_removed++;
-					_g1h->free_humongous_region(hr, _local_cleanup_list);
+					_semeru_h->free_humongous_region(hr, _local_cleanup_list);
 				} else {
 					_old_regions_removed++;
-					_g1h->free_region(hr, _local_cleanup_list, false /* skip_remset */, false /* skip_hcc */, true /* locked */);
+					_semeru_h->free_region(hr, _local_cleanup_list, false /* skip_remset */, false /* skip_hcc */, true /* locked */);
 				}
 				hr->clear_cardtable();
-				_g1h->concurrent_mark()->clear_statistics_in_region(hr->hrm_index());
+				_semeru_h->concurrent_mark()->clear_statistics_in_region(hr->hrm_index());
 				log_trace(gc)("Reclaimed empty region %u (%s) bot " PTR_FORMAT, hr->hrm_index(), hr->get_short_type_str(), p2i(hr->bottom()));
 			}
 
@@ -1328,29 +1453,29 @@ class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 		}
 	};
 
-	G1SemeruCollectedHeap* _g1h;
+	G1SemeruCollectedHeap* _semeru_h;
 	FreeRegionList* _cleanup_list;
 	SemeruHeapRegionClaimer _hrclaimer;
 
 public:
 	G1SemeruReclaimEmptyRegionsTask(G1SemeruCollectedHeap* g1h, FreeRegionList* cleanup_list, uint n_workers) :
 		AbstractGangTask("G1 Cleanup"),
-		_g1h(g1h),
+		_semeru_h(g1h),
 		_cleanup_list(cleanup_list),
 		_hrclaimer(n_workers) {
 	}
 
 	void work(uint worker_id) {
 		FreeRegionList local_cleanup_list("Local Cleanup List");
-		G1ReclaimEmptyRegionsClosure cl(_g1h, &local_cleanup_list);
-		_g1h->heap_region_par_iterate_from_worker_offset(&cl, &_hrclaimer, worker_id);
+		G1ReclaimEmptyRegionsClosure cl(_semeru_h, &local_cleanup_list);
+		_semeru_h->heap_region_par_iterate_from_worker_offset(&cl, &_hrclaimer, worker_id);
 		assert(cl.is_complete(), "Shouldn't have aborted!");
 
 		// Now update the old/humongous region sets
-		_g1h->remove_from_old_sets(cl.old_regions_removed(), cl.humongous_regions_removed());
+		_semeru_h->remove_from_old_sets(cl.old_regions_removed(), cl.humongous_regions_removed());
 		{
 			MutexLockerEx x(ParGCRareEvent_lock, Mutex::_no_safepoint_check_flag);
-			_g1h->decrement_summary_bytes(cl.freed_bytes());
+			_semeru_h->decrement_summary_bytes(cl.freed_bytes());
 
 			_cleanup_list->add_ordered(&local_cleanup_list);
 			assert(local_cleanup_list.is_empty(), "post-condition");
@@ -1359,16 +1484,16 @@ public:
 };
 
 void G1SemeruConcurrentMark::reclaim_empty_regions() {
-	WorkGang* workers = _g1h->workers();
+	WorkGang* workers = _semeru_h->workers();
 	FreeRegionList empty_regions_list("Empty Regions After Mark List");
 
-	G1SemeruReclaimEmptyRegionsTask cl(_g1h, &empty_regions_list, workers->active_workers());
+	G1SemeruReclaimEmptyRegionsTask cl(_semeru_h, &empty_regions_list, workers->active_workers());
 	workers->run_task(&cl);
 
 	if (!empty_regions_list.is_empty()) {
 		log_debug(gc)("Reclaimed %u empty regions", empty_regions_list.length());
 		// Now print the empty regions list.
-		G1HRPrinter* hrp = _g1h->hr_printer();
+		G1HRPrinter* hrp = _semeru_h->hr_printer();
 		if (hrp->is_active()) {
 			FreeRegionListIterator iter(&empty_regions_list);
 			while (iter.more_available()) {
@@ -1377,7 +1502,7 @@ void G1SemeruConcurrentMark::reclaim_empty_regions() {
 			}
 		}
 		// And actually make them available.
-		_g1h->prepend_to_freelist(&empty_regions_list);
+		_semeru_h->prepend_to_freelist(&empty_regions_list);
 	}
 }
 
@@ -1390,7 +1515,7 @@ void G1SemeruConcurrentMark::compute_new_sizes() {
 
 	// We reclaimed old regions so we should calculate the sizes to make
 	// sure we update the old gen/space data.
-	_g1h->g1mm()->update_sizes();
+	_semeru_h->g1mm()->update_sizes();
 }
 
 void G1SemeruConcurrentMark::cleanup() {
@@ -1401,7 +1526,7 @@ void G1SemeruConcurrentMark::cleanup() {
 		return;
 	}
 
-	G1Policy* g1p = _g1h->g1_policy();
+	G1Policy* g1p = _semeru_h->g1_policy();
 	g1p->record_concurrent_mark_cleanup_start();
 
 	double start = os::elapsedTime();
@@ -1410,20 +1535,20 @@ void G1SemeruConcurrentMark::cleanup() {
 
 	{
 		GCTraceTime(Debug, gc, phases) debug("Update Remembered Set Tracking After Rebuild", _gc_timer_cm);
-		G1SemeruUpdateRemSetTrackingAfterRebuild cl(_g1h);
-		_g1h->heap_region_iterate(&cl);
+		G1SemeruUpdateRemSetTrackingAfterRebuild cl(_semeru_h);
+		_semeru_h->heap_region_iterate(&cl);
 	}
 
 	if (log_is_enabled(Trace, gc, liveness)) {
 		G1SemeruPrintRegionLivenessInfoClosure cl("Post-Cleanup");
-		_g1h->heap_region_iterate(&cl);
+		_semeru_h->heap_region_iterate(&cl);
 	}
 
 	verify_during_pause(G1HeapVerifier::G1VerifyCleanup, VerifyOption_G1UsePrevMarking, "Cleanup after");
 
 	// We need to make this be a "collection" so any collection pause that
 	// races with it goes around and waits for Cleanup to finish.
-	_g1h->increment_total_collections();
+	_semeru_h->increment_total_collections();
 
 	// Local statistics
 	double recent_cleanup_time = (os::elapsedTime() - start);
@@ -1432,7 +1557,7 @@ void G1SemeruConcurrentMark::cleanup() {
 
 	{
 		GCTraceTime(Debug, gc, phases) debug("Finalize Concurrent Mark Cleanup", _gc_timer_cm);
-		_g1h->g1_policy()->record_concurrent_mark_cleanup_end();
+		_semeru_h->g1_policy()->record_concurrent_mark_cleanup_end();
 	}
 }
 
@@ -1449,14 +1574,14 @@ void G1SemeruConcurrentMark::cleanup() {
 // operating on the global stack.
 
 class G1SemeruCMKeepAliveAndDrainClosure : public OopClosure {
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruConcurrentMark* _semeru_cm;
 	G1SemeruCMTask*         _task;
 	uint              _ref_counter_limit;
 	uint              _ref_counter;
 	bool              _is_serial;
 public:
 	G1SemeruCMKeepAliveAndDrainClosure(G1SemeruConcurrentMark* cm, G1SemeruCMTask* task, bool is_serial) :
-		_cm(cm), _task(task), _ref_counter_limit(G1RefProcDrainInterval),
+		_semeru_cm(cm), _task(task), _ref_counter_limit(G1RefProcDrainInterval),
 		_ref_counter(_ref_counter_limit), _is_serial(is_serial) {
 		assert(!_is_serial || _task->worker_id() == 0, "only task 0 for serial code");
 	}
@@ -1465,7 +1590,7 @@ public:
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 
 	template <class T> void do_oop_work(T* p) {
-		if (_cm->has_overflown()) {
+		if (_semeru_cm->has_overflown()) {
 			return;
 		}
 		if (!_task->deal_with_reference(p)) {
@@ -1497,7 +1622,7 @@ public:
 				_task->do_marking_step(mark_step_duration_ms,
 															 false      /* do_termination */,
 															 _is_serial);
-			} while (_task->has_aborted() && !_cm->has_overflown());
+			} while (_task->has_aborted() && !_semeru_cm->has_overflown());
 			_ref_counter = _ref_counter_limit;
 		}
 	}
@@ -1509,14 +1634,16 @@ public:
 // do_marking_step routine, with an unbelievably large timeout value,
 // to drain the marking data structures of the remaining entries
 // added by the 'keep alive' oop closure above.
-
+//
+//	[?] What's this closure used for ??
+//
 class G1SemeruCMDrainMarkingStackClosure : public VoidClosure {
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruConcurrentMark* _semeru_cm;
 	G1SemeruCMTask*         _task;
 	bool              _is_serial;
  public:
 	G1SemeruCMDrainMarkingStackClosure(G1SemeruConcurrentMark* cm, G1SemeruCMTask* task, bool is_serial) :
-		_cm(cm), _task(task), _is_serial(is_serial) {
+		_semeru_cm(cm), _task(task), _is_serial(is_serial) {
 		assert(!_is_serial || _task->worker_id() == 0, "only task 0 for serial code");
 	}
 
@@ -1542,7 +1669,9 @@ class G1SemeruCMDrainMarkingStackClosure : public VoidClosure {
 			_task->do_marking_step(1000000000.0 /* something very large */,
 														 true         /* do_termination */,
 														 _is_serial);
-		} while (_task->has_aborted() && !_cm->has_overflown());
+
+
+		} while (_task->has_aborted() && !_semeru_cm->has_overflown());
 	}
 };
 
@@ -1551,8 +1680,8 @@ class G1SemeruCMDrainMarkingStackClosure : public VoidClosure {
 
 class G1SemeruCMRefProcTaskExecutor : public AbstractRefProcTaskExecutor {
 private:
-	G1SemeruCollectedHeap*  _g1h;
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruCollectedHeap*  _semeru_h;
+	G1SemeruConcurrentMark* _semeru_cm;
 	WorkGang*         _workers;
 	uint              _active_workers;
 
@@ -1561,7 +1690,7 @@ public:
 													G1SemeruConcurrentMark* cm,
 													WorkGang* workers,
 													uint n_workers) :
-		_g1h(g1h), _cm(cm),
+		_semeru_h(g1h), _semeru_cm(cm),
 		_workers(workers), _active_workers(n_workers) { }
 
 	virtual void execute(ProcessTask& task, uint ergo_workers);
@@ -1570,16 +1699,16 @@ public:
 class G1SemeruCMRefProcTaskProxy : public AbstractGangTask {
 	typedef AbstractRefProcTaskExecutor::ProcessTask ProcessTask;
 	ProcessTask&      _proc_task;
-	G1SemeruCollectedHeap*  _g1h;
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruCollectedHeap*  _semeru_h;
+	G1SemeruConcurrentMark* _semeru_cm;
 
 public:
 	G1SemeruCMRefProcTaskProxy(ProcessTask& proc_task,
 											 G1SemeruCollectedHeap* g1h,
 											 G1SemeruConcurrentMark* cm) :
 		AbstractGangTask("Process reference objects in parallel"),
-		_proc_task(proc_task), _g1h(g1h), _cm(cm) {
-		ReferenceProcessor* rp = _g1h->ref_processor_cm();
+		_proc_task(proc_task), _semeru_h(g1h), _semeru_cm(cm) {
+		ReferenceProcessor* rp = _semeru_h->ref_processor_cm();
 		assert(rp->processing_is_mt(), "shouldn't be here otherwise");
 	}
 
@@ -1590,10 +1719,10 @@ public:
 		
 		// ResourceMark rm;
 		// HandleMark hm;
-		// G1SemeruCMTask* task = _cm->task(worker_id);
-		// G1SemeruCMIsAliveClosure g1_is_alive(_g1h);
-		// G1SemeruCMKeepAliveAndDrainClosure g1_par_keep_alive(_cm, task, false /* is_serial */);
-		// G1SemeruCMDrainMarkingStackClosure g1_par_drain(_cm, task, false /* is_serial */);
+		// G1SemeruCMTask* task = _semeru_cm->task(worker_id);
+		// G1SemeruCMIsAliveClosure g1_is_alive(_semeru_h);
+		// G1SemeruCMKeepAliveAndDrainClosure g1_par_keep_alive(_semeru_cm, task, false /* is_serial */);
+		// G1SemeruCMDrainMarkingStackClosure g1_par_drain(_semeru_cm, task, false /* is_serial */);
 
 		//_proc_task.work(worker_id, g1_is_alive, g1_par_keep_alive, g1_par_drain);
 	}
@@ -1601,18 +1730,18 @@ public:
 
 void G1SemeruCMRefProcTaskExecutor::execute(ProcessTask& proc_task, uint ergo_workers) {
 	assert(_workers != NULL, "Need parallel worker threads.");
-	assert(_g1h->ref_processor_cm()->processing_is_mt(), "processing is not MT");
+	assert(_semeru_h->ref_processor_cm()->processing_is_mt(), "processing is not MT");
 	assert(_workers->active_workers() >= ergo_workers,
 				 "Ergonomically chosen workers(%u) should be less than or equal to active workers(%u)",
 				 ergo_workers, _workers->active_workers());
 
-	G1SemeruCMRefProcTaskProxy proc_task_proxy(proc_task, _g1h, _cm);
+	G1SemeruCMRefProcTaskProxy proc_task_proxy(proc_task, _semeru_h, _semeru_cm);
 
 	// We need to reset the concurrency level before each
 	// proxy task execution, so that the termination protocol
 	// and overflow handling in G1SemeruCMTask::do_marking_step() knows
 	// how many workers to wait for.
-	_cm->set_concurrency(ergo_workers);
+	_semeru_cm->set_concurrency(ergo_workers);
 	_workers->run_task(&proc_task_proxy, ergo_workers);
 }
 
@@ -1621,14 +1750,14 @@ void G1SemeruConcurrentMark::weak_refs_work(bool clear_all_soft_refs) {
 	HandleMark   hm;
 
 	// Is alive closure.
-	G1SemeruCMIsAliveClosure g1_is_alive(_g1h);
+	G1SemeruCMIsAliveClosure g1_is_alive(_semeru_h);
 
 	// Inner scope to exclude the cleaning of the string table
 	// from the displayed time.
 	{
 		GCTraceTime(Debug, gc, phases) debug("Reference Processing", _gc_timer_cm);
 
-		ReferenceProcessor* rp = _g1h->ref_processor_cm();
+		ReferenceProcessor* rp = _semeru_h->ref_processor_cm();
 
 		// See the comment in G1SemeruCollectedHeap::ref_processing_init()
 		// about how reference processing currently works in G1.
@@ -1659,12 +1788,12 @@ void G1SemeruConcurrentMark::weak_refs_work(bool clear_all_soft_refs) {
 		// otherwise we use the work gang from the G1SemeruCollectedHeap and
 		// we utilize all the worker threads we can.
 		bool processing_is_mt = rp->processing_is_mt();
-		uint active_workers = (processing_is_mt ? _g1h->workers()->active_workers() : 1U);
+		uint active_workers = (processing_is_mt ? _semeru_h->workers()->active_workers() : 1U);
 		active_workers = MAX2(MIN2(active_workers, _max_num_tasks), 1U);
 
 		// Parallel processing task executor.
-		G1SemeruCMRefProcTaskExecutor par_task_executor(_g1h, this,
-																							_g1h->workers(), active_workers);
+		G1SemeruCMRefProcTaskExecutor par_task_executor(_semeru_h, this,
+																							_semeru_h->workers(), active_workers);
 		AbstractRefProcTaskExecutor* executor = (processing_is_mt ? &par_task_executor : NULL);
 
 		// Set the concurrency level. The phase was already set prior to
@@ -1715,35 +1844,35 @@ void G1SemeruConcurrentMark::weak_refs_work(bool clear_all_soft_refs) {
 
 	{
 		GCTraceTime(Debug, gc, phases) debug("Weak Processing", _gc_timer_cm);
-		WeakProcessor::weak_oops_do(_g1h->workers(), &g1_is_alive, &do_nothing_cl, 1);
+		WeakProcessor::weak_oops_do(_semeru_h->workers(), &g1_is_alive, &do_nothing_cl, 1);
 	}
 
 	// Unload Klasses, String, Code Cache, etc.
 	if (ClassUnloadingWithConcurrentMark) {
 		GCTraceTime(Debug, gc, phases) debug("Class Unloading", _gc_timer_cm);
 		bool purged_classes = SystemDictionary::do_unloading(_gc_timer_cm);
-		_g1h->complete_cleaning(&g1_is_alive, purged_classes);
+		_semeru_h->complete_cleaning(&g1_is_alive, purged_classes);
 	} else {
 		GCTraceTime(Debug, gc, phases) debug("Cleanup", _gc_timer_cm);
 		// No need to clean string table as it is treated as strong roots when
 		// class unloading is disabled.
-		_g1h->partial_cleaning(&g1_is_alive, false, G1StringDedup::is_enabled());
+		_semeru_h->partial_cleaning(&g1_is_alive, false, G1StringDedup::is_enabled());
 	}
 }
 
 class G1PrecleanYieldClosure : public YieldClosure {
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruConcurrentMark* _semeru_cm;
 
 public:
-	G1PrecleanYieldClosure(G1SemeruConcurrentMark* cm) : _cm(cm) { }
+	G1PrecleanYieldClosure(G1SemeruConcurrentMark* cm) : _semeru_cm(cm) { }
 
 	virtual bool should_return() {
-		return _cm->has_aborted();
+		return _semeru_cm->has_aborted();
 	}
 
 	virtual bool should_return_fine_grain() {
-		_cm->do_yield_check();
-		return _cm->has_aborted();
+		_semeru_cm->do_yield_check();
+		return _semeru_cm->has_aborted();
 	}
 };
 
@@ -1759,7 +1888,7 @@ void G1SemeruConcurrentMark::preclean() {
 
 	G1PrecleanYieldClosure yield_cl(this);
 
-	ReferenceProcessor* rp = _g1h->ref_processor_cm();
+	ReferenceProcessor* rp = _semeru_h->ref_processor_cm();
 	// Precleaning is single threaded. Temporarily disable MT discovery.
 	ReferenceProcessorMTDiscoveryMutator rp_mut_discovery(rp, false);
 	rp->preclean_discovered_references(rp->is_alive_non_header(),
@@ -1772,14 +1901,14 @@ void G1SemeruConcurrentMark::preclean() {
 // When sampling object counts, we already swapped the mark bitmaps, so we need to use
 // the prev bitmap determining liveness.
 class G1SemeruObjectCountIsAliveClosure: public BoolObjectClosure {
-	G1SemeruCollectedHeap* _g1h;
+	G1SemeruCollectedHeap* _semeru_h;
 public:
-	G1SemeruObjectCountIsAliveClosure(G1SemeruCollectedHeap* g1h) : _g1h(g1h) { }
+	G1SemeruObjectCountIsAliveClosure(G1SemeruCollectedHeap* g1h) : _semeru_h(g1h) { }
 
 	bool do_object_b(oop obj) {
 		HeapWord* addr = (HeapWord*)obj;
 		return addr != NULL &&
-					 (!_g1h->is_in_g1_reserved(addr) || !_g1h->is_obj_dead(obj));
+					 (!_semeru_h->is_in_g1_reserved(addr) || !_semeru_h->is_obj_dead(obj));
 	}
 };
 
@@ -1787,10 +1916,10 @@ void G1SemeruConcurrentMark::report_object_count(bool mark_completed) {
 	// Depending on the completion of the marking liveness needs to be determined
 	// using either the next or prev bitmap.
 	if (mark_completed) {
-		G1SemeruObjectCountIsAliveClosure is_alive(_g1h);
+		G1SemeruObjectCountIsAliveClosure is_alive(_semeru_h);
 		_gc_tracer_cm->report_object_count_after_gc(&is_alive);
 	} else {
-		G1SemeruCMIsAliveClosure is_alive(_g1h);
+		G1SemeruCMIsAliveClosure is_alive(_semeru_h);
 		_gc_tracer_cm->report_object_count_after_gc(&is_alive);
 	}
 }
@@ -1800,7 +1929,7 @@ void G1SemeruConcurrentMark::swap_mark_bitmaps() {
 	G1CMBitMap* temp = _prev_mark_bitmap;
 	_prev_mark_bitmap = _next_mark_bitmap;
 	_next_mark_bitmap = temp;
-	_g1h->collector_state()->set_clearing_next_bitmap(true);
+	_semeru_h->collector_state()->set_clearing_next_bitmap(true);
 }
 
 /** 
@@ -1811,7 +1940,7 @@ void G1SemeruConcurrentMark::swap_mark_bitmaps() {
 class G1CMSATBBufferClosure : public SATBBufferClosure {
 private:
 	G1SemeruCMTask* _task;
-	G1SemeruCollectedHeap* _g1h;
+	G1SemeruCollectedHeap* _semeru_h;
 
 	// This is very similar to G1SemeruCMTask::deal_with_reference, but with
 	// more relaxed requirements for the argument, so this must be more
@@ -1819,12 +1948,12 @@ private:
 	void do_entry(void* entry) const {
 		_task->increment_refs_reached();
 		oop const obj = static_cast<oop>(entry);
-		_task->make_reference_grey(obj);
+		_task->make_reference_alive(obj);
 	}
 
 public:
 	G1CMSATBBufferClosure(G1SemeruCMTask* task, G1SemeruCollectedHeap* g1h)
-		: _task(task), _g1h(g1h) { }
+		: _task(task), _semeru_h(g1h) { }
 
 	virtual void do_buffer(void** buffer, size_t size) {
 		for (size_t i = 0; i < size; ++i) {
@@ -1835,15 +1964,15 @@ public:
 
 class G1SemeruRemarkThreadsClosure : public ThreadClosure {
 	G1CMSATBBufferClosure _cm_satb_cl;
-	G1CMOopClosure _cm_cl;
+	G1SemeruCMOopClosure _semeru_cm_cl;
 	MarkingCodeBlobClosure _code_cl;
 	int _thread_parity;
 
  public:
 	G1SemeruRemarkThreadsClosure(G1SemeruCollectedHeap* g1h, G1SemeruCMTask* task) :
 		_cm_satb_cl(task, g1h),
-		_cm_cl(g1h, task),
-		_code_cl(&_cm_cl, !CodeBlobToOopClosure::FixRelocations),
+		_semeru_cm_cl(g1h, task),
+		_code_cl(&_semeru_cm_cl, !CodeBlobToOopClosure::FixRelocations),
 		_thread_parity(Threads::thread_claim_parity()) {}
 
 	void do_thread(Thread* thread) {
@@ -1888,10 +2017,10 @@ class G1SemeruRemarkThreadsClosure : public ThreadClosure {
  * 
  */
 class G1SemeruCMRemarkTask : public AbstractGangTask {
-	G1SemeruConcurrentMark* _cm;
+	G1SemeruConcurrentMark* _semeru_cm;
 public:
 	void work(uint worker_id) {
-		G1SemeruCMTask* task = _cm->task(worker_id);
+		G1SemeruCMTask* task = _semeru_cm->task(worker_id);
 		task->record_start_time();
 		{
 			ResourceMark rm;
@@ -1906,15 +2035,15 @@ public:
 			task->do_marking_step(1000000000.0 /* something very large */,
 														true         /* do_termination       */,
 														false        /* is_serial            */);
-		} while (task->has_aborted() && !_cm->has_overflown());
+		} while (task->has_aborted() && !_semeru_cm->has_overflown());
 		// If we overflow, then we do not want to restart. We instead
 		// want to abort remark and do concurrent marking again.
 		task->record_end_time();
 	}
 
 	G1SemeruCMRemarkTask(G1SemeruConcurrentMark* cm, uint active_workers) :
-		AbstractGangTask("Par Remark"), _cm(cm) {
-		_cm->terminator()->reset_for_reuse(active_workers);
+		AbstractGangTask("Par Remark"), _semeru_cm(cm) {
+		_semeru_cm->terminator()->reset_for_reuse(active_workers);
 	}
 };
 
@@ -1926,10 +2055,10 @@ void G1SemeruConcurrentMark::finalize_marking() {
 	ResourceMark rm;
 	HandleMark   hm;
 
-	_g1h->ensure_parsability(false);
+	_semeru_h->ensure_parsability(false);
 
 	// this is remark, so we'll use up all active threads
-	uint active_workers = _g1h->workers()->active_workers();
+	uint active_workers = _semeru_h->workers()->active_workers();
 	set_concurrency_and_phase(active_workers, false /* concurrent */);
 	// Leave _parallel_marking_threads at it's
 	// value originally calculated in the G1SemeruConcurrentMark
@@ -1943,7 +2072,7 @@ void G1SemeruConcurrentMark::finalize_marking() {
 		// We will start all available threads, even if we decide that the
 		// active_workers will be fewer. The extra ones will just bail out
 		// immediately.
-		_g1h->workers()->run_task(&remarkTask);
+		_semeru_h->workers()->run_task(&remarkTask);
 	}
 
 	// [?] Remark process all the items in satb queue ?
@@ -1975,31 +2104,127 @@ void G1SemeruConcurrentMark::clear_range_in_prev_bitmap(MemRegion mr) {
 	_prev_mark_bitmap->clear_range(mr);
 }
 
+
+/**
+ * Semeru Memory Server - Cliam a Region from the Old Space to Concurrent Mark.
+ *  
+ * 		There is a global pointer, _finger, to the scavenge.
+ * 
+ */
+// HeapRegion*
+// G1SemeruConcurrentMark::claim_region(uint worker_id) {
+// 	// "checkpoint" the finger
+// 	HeapWord* finger = _finger;
+
+// 	while (finger < _heap.end()) {
+// 		assert(_semeru_h->is_in_g1_reserved(finger), "invariant");
+
+// 		HeapRegion* curr_region = _semeru_h->heap_region_containing(finger);
+// 		// Make sure that the reads below do not float before loading curr_region.
+// 		OrderAccess::loadload();
+// 		// Above heap_region_containing may return NULL as we always scan claim
+// 		// until the end of the heap. In this case, just jump to the next region.
+// 		HeapWord* end = curr_region != NULL ? curr_region->end() : finger + HeapRegion::GrainWords;
+
+// 		// Is the gap between reading the finger and doing the CAS too long?
+// 		HeapWord* res = Atomic::cmpxchg(end, &_finger, finger);
+// 		if (res == finger && curr_region != NULL) {
+// 			// we succeeded
+// 			HeapWord*   bottom        = curr_region->bottom();
+// 			HeapWord*   limit         = curr_region->next_top_at_mark_start();
+
+// 			// notice that _finger == end cannot be guaranteed here since,
+// 			// someone else might have moved the finger even further
+// 			assert(_finger >= end, "the finger should have moved forward");
+
+// 			if (limit > bottom) {
+// 				return curr_region;
+// 			} else {
+// 				assert(limit == bottom,
+// 							 "the region limit should be at bottom");
+// 				// we return NULL and the caller should try calling
+// 				// claim_region() again.
+// 				return NULL;
+// 			}
+// 		} else {
+// 			assert(_finger > finger, "the finger should have moved forward");
+// 			// read it again
+// 			finger = _finger;
+// 		}
+// 	}
+
+// 	return NULL;
+// }
+
+
+/**
+ * Semeru Memory Server 
+ *  Cliam a Region from memory server's CSet.
+ * 
+ * [?] nothing to do with the parameter worker_id ??
+ * 
+ * Structrure of the Chain:
+ * 	HeapRegion ---(_mem_server_cset_next)--> HeapRegion --> HeapRegion ...... 
+ * 																															^
+ * 																										G1SemeruConcurrentMark->_finger
+ * 																										The first not scanned HeapRegion.
+ * 
+ * [x] Multiple concurrent threads may race for the same HeapRegion parallelly ?  NO at present.
+ * 	=> In current design, the HeapRegion is quite big. 
+ * 		 Everytime, reclaim a single HeapRegion and scan it parallelly, if there are multiple concurrent marking threads.	
+ * 
+ * 
+ */
 HeapRegion*
 G1SemeruConcurrentMark::claim_region(uint worker_id) {
 	// "checkpoint" the finger
-	HeapWord* finger = _finger;
+	HeapWord* old_finger = _finger;
 
-	while (finger < _heap.end()) {
-		assert(_g1h->is_in_g1_reserved(finger), "invariant");
+	//while ( finger != NULL && finger < _heap.end()) {  // [??] Warning : it's betteer to change _heap.end() to CSet end.
+	
+	// The Regions in memory server CSet may come from any region. 
+	// The flag of reaching the end of the CSet is that _finger is NULL.
+	while( _finger != NULL){  
 
-		HeapRegion* curr_region = _g1h->heap_region_containing(finger);
+		//debug
+		//tty->print("%s, Change the _heap.end() to memory server CSet end().", __func__);
+
+		assert(_semeru_h->is_in_g1_reserved(old_finger), "invariant");
+		HeapRegion* curr_region = _semeru_h->heap_region_containing(old_finger);
+		assert(curr_region != NULL, "%s,if _finger isn't NULL, curr_region can't be NULL in a serial cliamation mode.\n", __func__);
+
+		// Read Barrier
 		// Make sure that the reads below do not float before loading curr_region.
 		OrderAccess::loadload();
+		
 		// Above heap_region_containing may return NULL as we always scan claim
 		// until the end of the heap. In this case, just jump to the next region.
-		HeapWord* end = curr_region != NULL ? curr_region->end() : finger + HeapRegion::GrainWords;
+		//
+		// [?] Why can the curr_region be NULL, if the _finger isn't NULL. 
+		//	=> heap_region_containing(addr) get the corresponding regions from  SemeruHeapRegionManager->_regions[]
+		//		 The freed HeapRegions will be removed from the _regions[].
+		//	
+		//HeapWord* end = curr_region != NULL ? curr_region->end() : finger + HeapRegion::GrainWords;
+		HeapWord* end =  curr_region->mem_server_cset_next()!= NULL ? 
+															curr_region->mem_server_cset_next()->bottom() : 
+															NULL;	// end points the end address of current claimed Region.
+
 
 		// Is the gap between reading the finger and doing the CAS too long?
-		HeapWord* res = Atomic::cmpxchg(end, &_finger, finger);
-		if (res == finger && curr_region != NULL) {
+		// Let _finger points to the next available HeapRegion in memory server's CSet.
+		// if end == NULL, means curr_region is the last Region in memory server CSet.
+		// Atomic::cmpxchg(new, pointer, old)
+		HeapWord* res = Atomic::cmpxchg(end, &_finger, old_finger);
+
+		// if  the end is NULL, also return false.
+		if (res == old_finger) {
 			// we succeeded
 			HeapWord*   bottom        = curr_region->bottom();
 			HeapWord*   limit         = curr_region->next_top_at_mark_start();
 
 			// notice that _finger == end cannot be guaranteed here since,
 			// someone else might have moved the finger even further
-			assert(_finger >= end, "the finger should have moved forward");
+		//	assert(_finger >= end, "the finger should have moved forward");
 
 			if (limit > bottom) {
 				return curr_region;
@@ -2011,37 +2236,50 @@ G1SemeruConcurrentMark::claim_region(uint worker_id) {
 				return NULL;
 			}
 		} else {
-			assert(_finger > finger, "the finger should have moved forward");
-			// read it again
-			finger = _finger;
-		}
-	}
+			
+			// We don't get this Region successfully.
+				// assert(_finger > finger, "the finger should have moved forward");
+				// // read it again
+				// finger = _finger;
 
-	return NULL;
+				guarantee(false, "%s, it's not possible to reach here in a sequential mode. \n", __func__);
+			
+		}
+
+	} // finger != NULL
+
+	return NULL; // run out of CSet regions.
 }
+
+
+
+
+
+
+
 
 #ifndef PRODUCT
 class VerifyNoCSetOops {
-	G1SemeruCollectedHeap* _g1h;
+	G1SemeruCollectedHeap* _semeru_h;
 	const char* _phase;
 	int _info;
 
 public:
 	VerifyNoCSetOops(const char* phase, int info = -1) :
-		_g1h(G1SemeruCollectedHeap::heap()),
+		_semeru_h(G1SemeruCollectedHeap::heap()),
 		_phase(phase),
 		_info(info)
 	{ }
 
 	void operator()(G1SemeruTaskQueueEntry task_entry) const {
 		if (task_entry.is_array_slice()) {
-			guarantee(_g1h->is_in_reserved(task_entry.slice()), "Slice " PTR_FORMAT " must be in heap.", p2i(task_entry.slice()));
+			guarantee(_semeru_h->is_in_reserved(task_entry.slice()), "Slice " PTR_FORMAT " must be in heap.", p2i(task_entry.slice()));
 			return;
 		}
 		guarantee(oopDesc::is_oop(task_entry.obj()),
 							"Non-oop " PTR_FORMAT ", phase: %s, info: %d",
 							p2i(task_entry.obj()), _phase, _info);
-		guarantee(!_g1h->is_in_cset(task_entry.obj()),
+		guarantee(!_semeru_h->is_in_cset(task_entry.obj()),
 							"obj: " PTR_FORMAT " in CSet, phase: %s, info: %d",
 							p2i(task_entry.obj()), _phase, _info);
 	}
@@ -2049,7 +2287,7 @@ public:
 
 void G1SemeruConcurrentMark::verify_no_cset_oops() {
 	assert(SafepointSynchronize::is_at_safepoint(), "should be at a safepoint");
-	if (!_g1h->collector_state()->mark_or_rebuild_in_progress()) {
+	if (!_semeru_h->collector_state()->mark_or_rebuild_in_progress()) {
 		return;
 	}
 
@@ -2067,7 +2305,7 @@ void G1SemeruConcurrentMark::verify_no_cset_oops() {
 	if (global_finger != NULL && global_finger < _heap.end()) {
 		// Since we always iterate over all regions, we might get a NULL HeapRegion
 		// here.
-		HeapRegion* global_hr = _g1h->heap_region_containing(global_finger);
+		HeapRegion* global_hr = _semeru_h->heap_region_containing(global_finger);
 		guarantee(global_hr == NULL || global_finger == global_hr->bottom(),
 							"global finger: " PTR_FORMAT " region: " HR_FORMAT,
 							p2i(global_finger), HR_FORMAT_PARAMS(global_hr));
@@ -2080,7 +2318,7 @@ void G1SemeruConcurrentMark::verify_no_cset_oops() {
 		HeapWord* task_finger = task->finger();
 		if (task_finger != NULL && task_finger < _heap.end()) {
 			// See above note on the global finger verification.
-			HeapRegion* task_hr = _g1h->heap_region_containing(task_finger);
+			HeapRegion* task_hr = _semeru_h->heap_region_containing(task_finger);
 			guarantee(task_hr == NULL || task_finger == task_hr->bottom() ||
 								!task_hr->in_collection_set(),
 								"task finger: " PTR_FORMAT " region: " HR_FORMAT,
@@ -2095,7 +2333,7 @@ void G1SemeruConcurrentMark::rebuild_rem_set_concurrently() {
 // Error
 	printf("Error in %s, please fix this. \n", __func__);
 
-//	_g1h->g1_rem_set()->rebuild_rem_set(this, _concurrent_workers, _worker_id_offset);
+//	_semeru_h->g1_rem_set()->rebuild_rem_set(this, _concurrent_workers, _worker_id_offset);
 }
 
 void G1SemeruConcurrentMark::print_stats() {
@@ -2119,7 +2357,7 @@ void G1SemeruConcurrentMark::concurrent_cycle_abort() {
 	// concurrent bitmap clearing.
 	{
 		GCTraceTime(Debug, gc) debug("Clear Next Bitmap");
-		clear_bitmap(_next_mark_bitmap, _g1h->workers(), false);
+		clear_bitmap(_next_mark_bitmap, _semeru_h->workers(), false);
 	}
 	// Note we cannot clear the previous marking bitmap here
 	// since VerifyDuringGC verifies the objects marked during
@@ -2197,24 +2435,38 @@ static ReferenceProcessor* get_cm_oop_closure_ref_processor(G1SemeruCollectedHea
 	return result;
 }
 
-G1CMOopClosure::G1CMOopClosure(G1SemeruCollectedHeap* g1h,
+// Override the constructor of  G1SemeruCMOopClosure
+// the declaration and definion of the class G1SemeruCMOopClosure is in G1CMOopClosure.hpp
+G1SemeruCMOopClosure::G1SemeruCMOopClosure(G1SemeruCollectedHeap* semeru_h,
 															 G1SemeruCMTask* task)
-	: MetadataVisitingOopIterateClosure(get_cm_oop_closure_ref_processor(g1h)),
-		_g1_semeru_h(g1h), _semeru_task(task)
+	: MetadataVisitingOopIterateClosure(get_cm_oop_closure_ref_processor(semeru_h)),
+		_semeru_h(semeru_h), _semeru_task(task)
 { }
 
+
+/**
+ * Set the Region to be scanned currently ?
+ * 
+ * OR only assign the first region to _curr_region only
+ *  
+ */
 void G1SemeruCMTask::setup_for_region(HeapRegion* hr) {
 	assert(hr != NULL,
 				"claim_region() should have filtered out NULL regions");
 	_curr_region  = hr;
-	_finger       = hr->bottom();
-	update_region_limit();
+
+	// Current scanning region's alive_bitmap and dest_bitmap 
+	_alive_bitmap	=	hr->alive_bitmap();
+	_dest_bitmap	=	hr->dest_bitmap();
+
+	//_finger       = hr->bottom();		// Semeru memory server CM doesn't use the local _finger.
+	//update_region_limit();
 }
 
 void G1SemeruCMTask::update_region_limit() {
 	HeapRegion* hr            = _curr_region;
 	HeapWord* bottom          = hr->bottom();
-	HeapWord* limit           = hr->next_top_at_mark_start();
+	HeapWord* limit           = hr->next_top_at_mark_start(); // All the newly allocated objects after the CM start will be handled seperately.
 
 	if (limit == bottom) {
 		// The region was collected underneath our feet.
@@ -2243,6 +2495,55 @@ void G1SemeruCMTask::update_region_limit() {
 	_region_limit = limit;
 }
 
+/**
+ * Semeru Memory Server
+ *  	Update the region limit for current MARKING region.
+ */
+// void G1SemeruCMTask::update_marking_region_limit() {
+// 	HeapRegion* hr            = _curr_region;   // both CM marking and STW compaction use the same pointer?
+// 	HeapWord* bottom          = hr->bottom();
+// 	HeapWord* limit           = hr->next_top_at_mark_start(); // All the newly allocated objects after the CM start will be handled seperately.
+
+// 	// [?] seems Semeru memory server doesn't need to maintain the G1SemeruCMTask->_finger .
+
+// 	// if (limit == bottom) {
+// 	// 	// The region was collected underneath our feet.
+// 	// 	// We set the finger to bottom to ensure that the bitmap
+// 	// 	// iteration that will follow this will not do anything.
+// 	// 	// (this is not a condition that holds when we set the region up,
+// 	// 	// as the region is not supposed to be empty in the first place)
+// 	// 	_finger = bottom;
+// 	// } else if (limit >= _region_limit) {
+// 	// 	assert(limit >= _finger, "peace of mind");
+// 	// } else {
+// 	// 	assert(limit < _region_limit, "only way to get here");
+// 	// 	// This can happen under some pretty unusual circumstances.  An
+// 	// 	// evacuation pause empties the region underneath our feet (NTAMS
+// 	// 	// at bottom). We then do some allocation in the region (NTAMS
+// 	// 	// stays at bottom), followed by the region being used as a GC
+// 	// 	// alloc region (NTAMS will move to top() and the objects
+// 	// 	// originally below it will be grayed). All objects now marked in
+// 	// 	// the region are explicitly grayed, if below the global finger,
+// 	// 	// and we do not need in fact to scan anything else. So, we simply
+// 	// 	// set _finger to be limit to ensure that the bitmap iteration
+// 	// 	// doesn't do anything.
+// 	// 	_finger = limit;
+// 	// }
+
+// 	_marking_region_limit = limit;
+// }
+
+
+
+/**
+ * Semeru Memory Server
+ *  	Compaction doesn't need such a pointer, need to evacuate all the alive objects in current Region.
+ * 		Which is HeapRegion->top
+ */
+
+
+
+
 void G1SemeruCMTask::giveup_current_region() {
 	assert(_curr_region != NULL, "invariant");
 	clear_region_fields();
@@ -2256,14 +2557,20 @@ void G1SemeruCMTask::clear_region_fields() {
 	_region_limit  = NULL;
 }
 
-void G1SemeruCMTask::set_cm_oop_closure(G1CMOopClosure* cm_oop_closure) {
-	if (cm_oop_closure == NULL) {
-		assert(_cm_oop_closure != NULL, "invariant");
+/**
+ *  Set the closure for scanning a marked object in the alive_bitmap. 
+ *  
+ */
+void G1SemeruCMTask::set_cm_oop_closure(G1SemeruCMOopClosure* semeru_cm_oop_closure) {
+	if (semeru_cm_oop_closure == NULL) {
+		assert(_semeru_cm_oop_closure != NULL, "invariant");
 	} else {
-		assert(_cm_oop_closure == NULL, "invariant");
+		assert(_semeru_cm_oop_closure == NULL, "invariant");
 	}
-	_cm_oop_closure = cm_oop_closure;
+	_semeru_cm_oop_closure = semeru_cm_oop_closure;
 }
+
+
 
 void G1SemeruCMTask::reset(G1CMBitMap* next_mark_bitmap) {
 	guarantee(next_mark_bitmap != NULL, "invariant");
@@ -2286,7 +2593,7 @@ bool G1SemeruCMTask::should_exit_termination() {
 	// This is called when we are in the termination protocol. We should
 	// quit if, for some reason, this task wants to abort or the global
 	// stack is not empty (this means that we can get work from it).
-	return !_cm->mark_stack_empty() || has_aborted();
+	return !_semeru_cm->mark_stack_empty() || has_aborted();
 }
 
 void G1SemeruCMTask::reached_limit() {
@@ -2308,19 +2615,19 @@ bool G1SemeruCMTask::regular_clock_call() {
 	// During the regular clock call we do the following
 
 	// (1) If an overflow has been flagged, then we abort.
-	if (_cm->has_overflown()) {
+	if (_semeru_cm->has_overflown()) {
 		return false;
 	}
 
 	// If we are not concurrent (i.e. we're doing remark) we don't need
 	// to check anything else. The other steps are only needed during
 	// the concurrent marking phase.
-	if (!_cm->concurrent()) {
+	if (!_semeru_cm->concurrent()) {
 		return true;
 	}
 
 	// (2) If marking has been aborted for Full GC, then we also abort.
-	if (_cm->has_aborted()) {
+	if (_semeru_cm->has_aborted()) {
 		return false;
 	}
 
@@ -2370,28 +2677,31 @@ void G1SemeruCMTask::decrease_limits() {
 	_refs_reached_limit  = _real_refs_reached_limit - 3 * refs_reached_period / 4;
 }
 
+
 void G1SemeruCMTask::move_entries_to_global_stack() {
 	// Local array where we'll store the entries that will be popped
 	// from the local queue.
-	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
+	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk]; // 1024 -1
 
 	size_t n = 0;
 	G1SemeruTaskQueueEntry task_entry;
-	while (n < G1SemeruCMMarkStack::EntriesPerChunk && _task_queue->pop_local(task_entry)) {
-		buffer[n] = task_entry;
+	while (n < G1SemeruCMMarkStack::EntriesPerChunk && _semeru_task_queue->pop_local(task_entry)) {
+		buffer[n] = task_entry;		// Assign the poped entry to the newly created buffer[].
 		++n;
 	}
+
 	if (n < G1SemeruCMMarkStack::EntriesPerChunk) {
-		buffer[n] = G1SemeruTaskQueueEntry();
+		buffer[n] = G1SemeruTaskQueueEntry();  // [?] what does this mean ? no operator new() ? invoke the constructor directly ?
 	}
 
 	if (n > 0) {
-		if (!_cm->mark_stack_push(buffer)) {
+		if (!_semeru_cm->mark_stack_push(buffer)) {  // Push the newly created Buffer[] into 
 			set_has_aborted();
 		}
 	}
 
 	// This operation was quite expensive, so decrease the limits.
+	// [?] What's the design logic for the limits ??
 	decrease_limits();
 }
 
@@ -2400,7 +2710,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 	// from the global stack.
 	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
 
-	if (!_cm->mark_stack_pop(buffer)) {
+	if (!_semeru_cm->mark_stack_pop(buffer)) {
 		return false;
 	}
 
@@ -2411,7 +2721,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 			break;
 		}
 		assert(task_entry.is_array_slice() || oopDesc::is_oop(task_entry.obj()), "Element " PTR_FORMAT " must be an array slice or oop", p2i(task_entry.obj()));
-		bool success = _task_queue->push(task_entry);
+		bool success = _semeru_task_queue->push(task_entry);
 		// We only call this when the local queue is empty or under a
 		// given target limit. So, we do not expect this push to fail.
 		assert(success, "invariant");
@@ -2424,7 +2734,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 
 
 /**
- * Tag : Drain the CM->_task_queue, StarTask queue.
+ * Tag : Drain the CM->_semeru_task_queue, StarTask queue.
  *  
  */
 void G1SemeruCMTask::drain_local_queue(bool partially) {
@@ -2437,23 +2747,23 @@ void G1SemeruCMTask::drain_local_queue(bool partially) {
 	// of things to do) or totally (at the very end).
 	size_t target_size;
 	if (partially) {
-		target_size = MIN2((size_t)_task_queue->max_elems()/3, (size_t)GCDrainStackTargetSize);
+		target_size = MIN2((size_t)_semeru_task_queue->max_elems()/3, (size_t)GCDrainStackTargetSize);
 	} else {
-		target_size = 0;
+		target_size = 0;  // Drain all the items.
 	}
 
-	if (_task_queue->size() > target_size) {
+	if (_semeru_task_queue->size() > target_size) {
 		G1SemeruTaskQueueEntry entry;
-		bool ret = _task_queue->pop_local(entry);
+		bool ret = _semeru_task_queue->pop_local(entry);
 		while (ret) {
 			scan_task_entry(entry);
-			if (_task_queue->size() <= target_size || has_aborted()) {
+			if (_semeru_task_queue->size() <= target_size || has_aborted()) {
 				ret = false;
 			} else {
-				ret = _task_queue->pop_local(entry);
+				ret = _semeru_task_queue->pop_local(entry);
 			}
 		}
-	}
+	} // end of if
 }
 
 void G1SemeruCMTask::drain_global_stack(bool partially) {
@@ -2463,7 +2773,7 @@ void G1SemeruCMTask::drain_global_stack(bool partially) {
 
 	// We have a policy to drain the local queue before we attempt to
 	// drain the global stack.
-	assert(partially || _task_queue->size() == 0, "invariant");
+	assert(partially || _semeru_task_queue->size() == 0, "invariant");
 
 	// Decide what the target size is, depending whether we're going to
 	// drain it partially (so that other tasks can steal if they run out
@@ -2474,8 +2784,8 @@ void G1SemeruCMTask::drain_global_stack(bool partially) {
 	// In case of total draining, we simply process until the global mark stack is
 	// totally empty, disregarding the size counter.
 	if (partially) {
-		size_t const target_size = _cm->partial_mark_stack_size_target();
-		while (!has_aborted() && _cm->mark_stack_size() > target_size) {
+		size_t const target_size = _semeru_cm->partial_mark_stack_size_target();
+		while (!has_aborted() && _semeru_cm->mark_stack_size() > target_size) {
 			if (get_entries_from_global_stack()) {
 				drain_local_queue(partially);
 			}
@@ -2502,7 +2812,7 @@ void G1SemeruCMTask::drain_satb_buffers() {
 	// very counter productive if it did that. :-)
 	_draining_satb_buffers = true;
 
-	G1CMSATBBufferClosure satb_cl(this, _g1h);
+	G1CMSATBBufferClosure satb_cl(this, _semeru_h);
 	SATBMarkQueueSet& satb_mq_set = G1BarrierSet::satb_mark_queue_set();
 
 	// This keeps claiming and applying the closure to completed buffers
@@ -2515,7 +2825,7 @@ void G1SemeruCMTask::drain_satb_buffers() {
 	_draining_satb_buffers = false;
 
 	assert(has_aborted() ||
-				 _cm->concurrent() ||
+				 _semeru_cm->concurrent() ||
 				 satb_mq_set.completed_buffers_num() == 0, "invariant");
 
 	// again, this was a potentially expensive operation, decrease the
@@ -2665,51 +2975,385 @@ bool G1SemeruConcurrentMark::try_stealing(uint worker_id, G1SemeruTaskQueueEntry
 		the MT remark code, and the MT reference processing closures.
 
  *****************************************************************************/
-
 void G1SemeruCMTask::do_marking_step(double time_target_ms,
 															 bool do_termination,
 															 bool is_serial) {
 	assert(time_target_ms >= 1.0, "minimum granularity is 1ms");
 
-
-	// Error
-	printf("Error in %s, Please fix this.\n",__func__);
-
+	// debug
+	guarantee(false, "Do NOT invoke this function for any purpose. \n");
 
 
-/*
+// 	// Error
+// 	guarantee(false, "%s, This function is discarded.\n", __func__);
+
+
+
+
+// 	_start_time_ms = os::elapsedVTime() * 1000.0;
+
+// 	// If do_stealing is true then do_marking_step will attempt to
+// 	// steal work from the other G1SemeruCMTasks. It only makes sense to
+// 	// enable stealing when the termination protocol is enabled
+// 	// and do_marking_step() is not being called serially.
+// 	bool do_stealing = do_termination && !is_serial;
+
+// 	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
+// 	_time_target_ms = time_target_ms - diff_prediction_ms;
+
+// 	// set up the variables that are used in the work-based scheme to
+// 	// call the regular clock method
+// 	_words_scanned = 0;
+// 	_refs_reached  = 0;
+// 	recalculate_limits();
+
+// 	// clear all flags
+// 	clear_has_aborted();
+// 	_has_timed_out = false;
+// 	_draining_satb_buffers = false;
+
+// 	++_calls;
+
+// 	// Set up the bitmap and oop closures. Anything that uses them is
+// 	// eventually called from this method, so it is OK to allocate these
+// 	// statically.
+// 	G1CMBitMapClosure bitmap_closure(this, _semeru_cm);
+// 	G1CMOopClosure cm_oop_closure(_semeru_h, this);
+// 	set_cm_oop_closure(&cm_oop_closure);
+
+// 	if (_semeru_cm->has_overflown()) {
+// 		// This can happen if the mark stack overflows during a GC pause
+// 		// and this task, after a yield point, restarts. We have to abort
+// 		// as we need to get into the overflow protocol which happens
+// 		// right at the end of this task.
+// 		set_has_aborted();
+// 	}
+
+// 	// First drain any available SATB buffers. After this, we will not
+// 	// look at SATB buffers before the next invocation of this method.
+// 	// If enough completed SATB buffers are queued up, the regular clock
+// 	// will abort this task so that it restarts.
+// 	drain_satb_buffers();
+// 	// ...then partially drain the local queue and the global stack
+// 	drain_local_queue(true);
+// 	drain_global_stack(true);
+
+// 	do {
+// 		if (!has_aborted() && _curr_region != NULL) {
+// 			// This means that we're already holding on to a region.
+// 			assert(_finger != NULL, "if region is not NULL, then the finger "
+// 						 "should not be NULL either");
+
+// 			// We might have restarted this task after an evacuation pause
+// 			// which might have evacuated the region we're holding on to
+// 			// underneath our feet. Let's read its limit again to make sure
+// 			// that we do not iterate over a region of the heap that
+// 			// contains garbage (update_region_limit() will also move
+// 			// _finger to the start of the region if it is found empty).
+// 			update_region_limit();
+// 			// We will start from _finger not from the start of the region,
+// 			// as we might be restarting this task after aborting half-way
+// 			// through scanning this region. In this case, _finger points to
+// 			// the address where we last found a marked object. If this is a
+// 			// fresh region, _finger points to start().
+// 			MemRegion mr = MemRegion(_finger, _region_limit);
+
+// 			assert(!_curr_region->is_humongous() || mr.start() == _curr_region->bottom(),
+// 						 "humongous regions should go around loop once only");
+
+// 			// Some special cases:
+// 			// If the memory region is empty, we can just give up the region.
+// 			// If the current region is humongous then we only need to check
+// 			// the bitmap for the bit associated with the start of the object,
+// 			// scan the object if it's live, and give up the region.
+// 			// Otherwise, let's iterate over the bitmap of the part of the region
+// 			// that is left.
+// 			// If the iteration is successful, give up the region.
+// 			if (mr.is_empty()) {
+// 				giveup_current_region();
+// 				abort_marking_if_regular_check_fail();
+// 			} else if (_curr_region->is_humongous() && mr.start() == _curr_region->bottom()) {
+// 				if (_next_mark_bitmap->is_marked(mr.start())) {
+// 					// The object is marked - apply the closure
+// 					bitmap_closure.do_addr(mr.start());
+// 				}
+// 				// Even if this task aborted while scanning the humongous object
+// 				// we can (and should) give up the current region.
+// 				giveup_current_region();
+// 				abort_marking_if_regular_check_fail();
+// 			} else if (_next_mark_bitmap->iterate(&bitmap_closure, mr)) {
+// 				giveup_current_region();
+// 				abort_marking_if_regular_check_fail();
+// 			} else {
+// 				assert(has_aborted(), "currently the only way to do so");
+// 				// The only way to abort the bitmap iteration is to return
+// 				// false from the do_bit() method. However, inside the
+// 				// do_bit() method we move the _finger to point to the
+// 				// object currently being looked at. So, if we bail out, we
+// 				// have definitely set _finger to something non-null.
+// 				assert(_finger != NULL, "invariant");
+
+// 				// Region iteration was actually aborted. So now _finger
+// 				// points to the address of the object we last scanned. If we
+// 				// leave it there, when we restart this task, we will rescan
+// 				// the object. It is easy to avoid this. We move the finger by
+// 				// enough to point to the next possible object header.
+// 				assert(_finger < _region_limit, "invariant");
+// 				HeapWord* const new_finger = _finger + ((oop)_finger)->size();
+// 				// Check if bitmap iteration was aborted while scanning the last object
+// 				if (new_finger >= _region_limit) {
+// 					giveup_current_region();
+// 				} else {
+// 					move_finger_to(new_finger);
+// 				}
+// 			}
+// 		}
+// 		// At this point we have either completed iterating over the
+// 		// region we were holding on to, or we have aborted.
+
+// 		// We then partially drain the local queue and the global stack.
+// 		// (Do we really need this?)
+// 		drain_local_queue(true);
+// 		drain_global_stack(true);
+
+// 		// Read the note on the claim_region() method on why it might
+// 		// return NULL with potentially more regions available for
+// 		// claiming and why we have to check out_of_regions() to determine
+// 		// whether we're done or not.
+// 		while (!has_aborted() && _curr_region == NULL && !_semeru_cm->out_of_regions()) {
+// 			// We are going to try to claim a new region. We should have
+// 			// given up on the previous one.
+// 			// Separated the asserts so that we know which one fires.
+// 			assert(_curr_region  == NULL, "invariant");
+// 			assert(_finger       == NULL, "invariant");
+// 			assert(_region_limit == NULL, "invariant");
+// 			HeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
+// 			if (claimed_region != NULL) {
+// 				// Yes, we managed to claim one
+// 				setup_for_region(claimed_region);
+// 				assert(_curr_region == claimed_region, "invariant");
+// 			}
+// 			// It is important to call the regular clock here. It might take
+// 			// a while to claim a region if, for example, we hit a large
+// 			// block of empty regions. So we need to call the regular clock
+// 			// method once round the loop to make sure it's called
+// 			// frequently enough.
+// 			abort_marking_if_regular_check_fail();
+// 		}
+
+// 		if (!has_aborted() && _curr_region == NULL) {
+// 			assert(_semeru_cm->out_of_regions(),
+// 						 "at this point we should be out of regions");
+// 		}
+// 	} while ( _curr_region != NULL && !has_aborted());
+
+// 	if (!has_aborted()) {
+// 		// We cannot check whether the global stack is empty, since other
+// 		// tasks might be pushing objects to it concurrently.
+// 		assert(_semeru_cm->out_of_regions(),
+// 					 "at this point we should be out of regions");
+// 		// Try to reduce the number of available SATB buffers so that
+// 		// remark has less work to do.
+// 		drain_satb_buffers();
+// 	}
+
+// 	// Since we've done everything else, we can now totally drain the
+// 	// local queue and global stack.
+// 	drain_local_queue(false);
+// 	drain_global_stack(false);
+
+// 	// Attempt at work stealing from other task's queues.
+// 	if (do_stealing && !has_aborted()) {
+// 		// We have not aborted. This means that we have finished all that
+// 		// we could. Let's try to do some stealing...
+
+// 		// We cannot check whether the global stack is empty, since other
+// 		// tasks might be pushing objects to it concurrently.
+// 		assert(_semeru_cm->out_of_regions() && _semeru_task_queue->size() == 0,
+// 					 "only way to reach here");
+// 		while (!has_aborted()) {
+// 			G1SemeruTaskQueueEntry entry;
+// 			if (_semeru_cm->try_stealing(_worker_id, entry)) {
+// 				scan_task_entry(entry);
+
+// 				// And since we're towards the end, let's totally drain the
+// 				// local queue and global stack.
+// 				drain_local_queue(false);
+// 				drain_global_stack(false);
+// 			} else {
+// 				break;
+// 			}
+// 		}
+// 	}
+
+// 	// We still haven't aborted. Now, let's try to get into the
+// 	// termination protocol.
+// 	if (do_termination && !has_aborted()) {
+// 		// We cannot check whether the global stack is empty, since other
+// 		// tasks might be concurrently pushing objects on it.
+// 		// Separated the asserts so that we know which one fires.
+// 		assert(_semeru_cm->out_of_regions(), "only way to reach here");
+// 		assert(_semeru_task_queue->size() == 0, "only way to reach here");
+// 		_termination_start_time_ms = os::elapsedVTime() * 1000.0;
+
+// 		// The G1SemeruCMTask class also extends the TerminatorTerminator class,
+// 		// hence its should_exit_termination() method will also decide
+// 		// whether to exit the termination protocol or not.
+// 		bool finished = (is_serial ||
+// 										 _semeru_cm->terminator()->offer_termination(this));
+// 		double termination_end_time_ms = os::elapsedVTime() * 1000.0;
+// 		_termination_time_ms +=
+// 			termination_end_time_ms - _termination_start_time_ms;
+
+// 		if (finished) {
+// 			// We're all done.
+
+// 			// We can now guarantee that the global stack is empty, since
+// 			// all other tasks have finished. We separated the guarantees so
+// 			// that, if a condition is false, we can immediately find out
+// 			// which one.
+// 			guarantee(_semeru_cm->out_of_regions(), "only way to reach here");
+// 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
+// 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
+// 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");
+// 			guarantee(!has_aborted(), "should never happen if termination has completed");
+// 		} else {
+// 			// Apparently there's more work to do. Let's abort this task. It
+// 			// will restart it and we can hopefully find more things to do.
+// 			set_has_aborted();
+// 		}
+// 	}
+
+// 	// Mainly for debugging purposes to make sure that a pointer to the
+// 	// closure which was statically allocated in this frame doesn't
+// 	// escape it by accident.
+// 	set_cm_oop_closure(NULL);
+// 	double end_time_ms = os::elapsedVTime() * 1000.0;
+// 	double elapsed_time_ms = end_time_ms - _start_time_ms;
+// 	// Update the step history.
+// 	_step_times_ms.add(elapsed_time_ms);
+
+// 	if (has_aborted()) {
+// 		// The task was aborted for some reason.
+// 		if (_has_timed_out) {
+// 			double diff_ms = elapsed_time_ms - _time_target_ms;
+// 			// Keep statistics of how well we did with respect to hitting
+// 			// our target only if we actually timed out (if we aborted for
+// 			// other reasons, then the results might get skewed).
+// 			_marking_step_diffs_ms.add(diff_ms);
+// 		}
+
+// 		if (_semeru_cm->has_overflown()) {
+// 			// This is the interesting one. We aborted because a global
+// 			// overflow was raised. This means we have to restart the
+// 			// marking phase and start iterating over regions. However, in
+// 			// order to do this we have to make sure that all tasks stop
+// 			// what they are doing and re-initialize in a safe manner. We
+// 			// will achieve this with the use of two barrier sync points.
+
+// 			if (!is_serial) {
+// 				// We only need to enter the sync barrier if being called
+// 				// from a parallel context
+// 				_semeru_cm->enter_first_sync_barrier(_worker_id);
+
+// 				// When we exit this sync barrier we know that all tasks have
+// 				// stopped doing marking work. So, it's now safe to
+// 				// re-initialize our data structures.
+// 			}
+
+// 			clear_region_fields();
+// 			flush_mark_stats_cache();
+
+// 			if (!is_serial) {
+// 				// If we're executing the concurrent phase of marking, reset the marking
+// 				// state; otherwise the marking state is reset after reference processing,
+// 				// during the remark pause.
+// 				// If we reset here as a result of an overflow during the remark we will
+// 				// see assertion failures from any subsequent set_concurrency_and_phase()
+// 				// calls.
+// 				if (_semeru_cm->concurrent() && _worker_id == 0) {
+// 					// Worker 0 is responsible for clearing the global data structures because
+// 					// of an overflow. During STW we should not clear the overflow flag (in
+// 					// G1SemeruConcurrentMark::reset_marking_state()) since we rely on it being true when we exit
+// 					// method to abort the pause and restart concurrent marking.
+// 					_semeru_cm->reset_marking_for_restart();
+
+// 					log_info(gc, marking)("Concurrent Mark reset for overflow");
+// 				}
+
+// 				// ...and enter the second barrier.
+// 				_semeru_cm->enter_second_sync_barrier(_worker_id);
+// 			}
+// 			// At this point, if we're during the concurrent phase of
+// 			// marking, everything has been re-initialized and we're
+// 			// ready to restart.
+// 		}
+// 	}
+
+} // end of do_marking_step.
+
+
+
+
+/**
+ * Semeru Memory Server  
+ * 
+ * [?] This function is used for concurrently marking one region ?
+ * 			=> We need a scheduler function to control the marking sequence for all the Regions in Memory Server CSet.
+ * 
+ * [?] Both Concurrent Marking and STW Remark use this function.
+ * 
+ * [?] how to let this function to support both Concurrent and STW ?
+ * 
+ */
+void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
+															 bool do_termination,
+															 bool is_serial) {
+	assert(time_target_ms >= 1.0, "minimum granularity is 1ms");
+
+
 	_start_time_ms = os::elapsedVTime() * 1000.0;
 
-	// If do_stealing is true then do_marking_step will attempt to
-	// steal work from the other G1SemeruCMTasks. It only makes sense to
-	// enable stealing when the termination protocol is enabled
-	// and do_marking_step() is not being called serially.
-	bool do_stealing = do_termination && !is_serial;
+	// // If do_stealing is true then do_marking_step will attempt to
+	// // steal work from the other G1SemeruCMTasks. It only makes sense to
+	// // enable stealing when the termination protocol is enabled
+	// // and do_marking_step() is not being called serially.
+	// bool do_stealing = do_termination && !is_serial;
 
-	double diff_prediction_ms = _g1h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
-	_time_target_ms = time_target_ms - diff_prediction_ms;
+	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
+	_time_target_ms = time_target_ms - diff_prediction_ms;		//[?] the estimated time for current marking step ??
 
-	// set up the variables that are used in the work-based scheme to
-	// call the regular clock method
-	_words_scanned = 0;
-	_refs_reached  = 0;
-	recalculate_limits();
+	// // set up the variables that are used in the work-based scheme to
+	// // call the regular clock method
+	// _words_scanned = 0;
+	// _refs_reached  = 0;
+	// recalculate_limits();
 
 	// clear all flags
-	clear_has_aborted();
+	clear_has_aborted();				// [?] What's this used for ?
 	_has_timed_out = false;
-	_draining_satb_buffers = false;
+	// _draining_satb_buffers = false;
 
 	++_calls;
 
 	// Set up the bitmap and oop closures. Anything that uses them is
 	// eventually called from this method, so it is OK to allocate these
 	// statically.
-	G1CMBitMapClosure bitmap_closure(this, _cm);
-	G1CMOopClosure cm_oop_closure(_g1h, this);
-	set_cm_oop_closure(&cm_oop_closure);
 
-	if (_cm->has_overflown()) {
+	// 1) Scan the HeapRegion's bitmap, does Semeru need this one ?
+	// 		seems not. Semeru only need to mark all the alive objects in the alive_bitmap.
+	//G1CMBitMapClosure bitmap_closure(this, _semeru_cm);				// Semeru only use the alive_bitmap to mark alive objects.
+	//G1CMOopClosure cm_oop_closure(_semeru_h, this);
+	//set_cm_oop_closure(&cm_oop_closure);
+
+	G1SemeruCMOopClosure semeru_cm_oop_closure(_semeru_h, this); 
+	set_cm_oop_closure(&semeru_cm_oop_closure);
+
+	// [?] we need a closure to scan the Target Obj Queue separately ?
+
+	// the global task queue G1SemeruConcurrentMark->_global_mark_stack is also overflowed.
+	// Then we have to abort this scanning.
+	if (_semeru_cm->has_overflown()) {
 		// This can happen if the mark stack overflows during a GC pause
 		// and this task, after a yield point, restarts. We have to abort
 		// as we need to get into the overflow protocol which happens
@@ -2717,84 +3361,126 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 		set_has_aborted();
 	}
 
+
+	// SATB queue is only maintained in CPU Server.
 	// First drain any available SATB buffers. After this, we will not
 	// look at SATB buffers before the next invocation of this method.
 	// If enough completed SATB buffers are queued up, the regular clock
 	// will abort this task so that it restarts.
-	drain_satb_buffers();
-	// ...then partially drain the local queue and the global stack
-	drain_local_queue(true);
-	drain_global_stack(true);
+	//drain_satb_buffers();
+	
+	// For semeru, this queue should be empty now before scan the Target Object Queue.
+	// // ...then partially drain the local queue and the global stack
+	// // [?] why do these 2 partially drain before scan the  Target Object Queue.
+	// drain_local_queue(true);
+	// drain_global_stack(true);
 
+	//
+	// Concurrently scan all the Regions in Memory Server's Collection Set. 
+	//
 	do {
-		if (!has_aborted() && _curr_region != NULL) {
+
+		//
+		// Tracing the Region pointed by _curr_region.
+		//
+		if (!has_aborted() && _curr_region != NULL) {  // [?] Should already make the _curr_region point to the first region of CSet.
 			// This means that we're already holding on to a region.
-			assert(_finger != NULL, "if region is not NULL, then the finger "
-						 "should not be NULL either");
+			
 
-			// We might have restarted this task after an evacuation pause
-			// which might have evacuated the region we're holding on to
-			// underneath our feet. Let's read its limit again to make sure
-			// that we do not iterate over a region of the heap that
-			// contains garbage (update_region_limit() will also move
-			// _finger to the start of the region if it is found empty).
-			update_region_limit();
-			// We will start from _finger not from the start of the region,
-			// as we might be restarting this task after aborting half-way
-			// through scanning this region. In this case, _finger points to
-			// the address where we last found a marked object. If this is a
-			// fresh region, _finger points to start().
-			MemRegion mr = MemRegion(_finger, _region_limit);
+				// 1.1) Handle humonguous objects separately
+			if (_curr_region->is_humongous() && (_curr_region->used()!=0) ) {
+				// if (_next_mark_bitmap->is_marked(mr.start())) {
+				// 	// The object is marked - apply the closure
+				// 	bitmap_closure.do_addr(mr.start());
+				// }
+				// // Even if this task aborted while scanning the humongous object
+				// // we can (and should) give up the current region.
+				// giveup_current_region();
+				// abort_marking_if_regular_check_fail();
 
-			assert(!_curr_region->is_humongous() || mr.start() == _curr_region->bottom(),
-						 "humongous regions should go around loop once only");
+				assert(false, "%s, not support humonguous objet here. \n",__func__);
 
-			// Some special cases:
-			// If the memory region is empty, we can just give up the region.
-			// If the current region is humongous then we only need to check
-			// the bitmap for the bit associated with the start of the object,
-			// scan the object if it's live, and give up the region.
-			// Otherwise, let's iterate over the bitmap of the part of the region
-			// that is left.
-			// If the iteration is successful, give up the region.
-			if (mr.is_empty()) {
-				giveup_current_region();
-				abort_marking_if_regular_check_fail();
-			} else if (_curr_region->is_humongous() && mr.start() == _curr_region->bottom()) {
-				if (_next_mark_bitmap->is_marked(mr.start())) {
-					// The object is marked - apply the closure
-					bitmap_closure.do_addr(mr.start());
-				}
-				// Even if this task aborted while scanning the humongous object
-				// we can (and should) give up the current region.
-				giveup_current_region();
-				abort_marking_if_regular_check_fail();
-			} else if (_next_mark_bitmap->iterate(&bitmap_closure, mr)) {
-				giveup_current_region();
-				abort_marking_if_regular_check_fail();
-			} else {
-				assert(has_aborted(), "currently the only way to do so");
-				// The only way to abort the bitmap iteration is to return
-				// false from the do_bit() method. However, inside the
-				// do_bit() method we move the _finger to point to the
-				// object currently being looked at. So, if we bail out, we
-				// have definitely set _finger to something non-null.
-				assert(_finger != NULL, "invariant");
+			} else{
+			
+				// 1.2) Process a Normal Region.
 
-				// Region iteration was actually aborted. So now _finger
-				// points to the address of the object we last scanned. If we
-				// leave it there, when we restart this task, we will rescan
-				// the object. It is easy to avoid this. We move the finger by
-				// enough to point to the next possible object header.
-				assert(_finger < _region_limit, "invariant");
-				HeapWord* const new_finger = _finger + ((oop)_finger)->size();
-				// Check if bitmap iteration was aborted while scanning the last object
-				if (new_finger >= _region_limit) {
-					giveup_current_region();
-				} else {
-					move_finger_to(new_finger);
-				}
+				// Concurrently Scan the Region poited by _curr_region.
+				TargetObjQueue* target_obj_q = _curr_region->target_obj_queue();
+				trim_target_object_queue(target_obj_q);
+
 			}
+	
+
+			// // Semeru memory server doesn't need the _finger.
+			// assert(_finger != NULL, "if region is not NULL, then the finger "
+			//  			 "should not be NULL either");
+
+			// // We might have restarted this task after an evacuation pause
+			// // which might have evacuated the region we're holding on to
+			// // underneath our feet. Let's read its limit again to make sure
+			// // that we do not iterate over a region of the heap that
+			// // contains garbage (update_region_limit() will also move
+			// // _finger to the start of the region if it is found empty).
+			// update_region_limit();
+
+
+			// // We will start from _finger not from the start of the region,
+			// // as we might be restarting this task after aborting half-way
+			// // through scanning this region. In this case, _finger points to
+			// // the address where we last found a marked object. If this is a
+			// // fresh region, _finger points to start().
+			// MemRegion mr = MemRegion(_finger, _region_limit);
+
+			// assert(!_curr_region->is_humongous() || mr.start() == _curr_region->bottom(),
+			// 			 "humongous regions should go around loop once only");
+
+			// // Some special cases:
+			// // If the memory region is empty, we can just give up the region.
+			// // If the current region is humongous then we only need to check
+			// // the bitmap for the bit associated with the start of the object,
+			// // scan the object if it's live, and give up the region.
+			// // Otherwise, let's iterate over the bitmap of the part of the region
+			// // that is left.
+			// // If the iteration is successful, give up the region.
+			// if (mr.is_empty()) {
+			// 	giveup_current_region();
+			// 	abort_marking_if_regular_check_fail();
+			// } else if (_curr_region->is_humongous() && mr.start() == _curr_region->bottom()) {
+			// 	if (_next_mark_bitmap->is_marked(mr.start())) {
+			// 		// The object is marked - apply the closure
+			// 		bitmap_closure.do_addr(mr.start());
+			// 	}
+			// 	// Even if this task aborted while scanning the humongous object
+			// 	// we can (and should) give up the current region.
+			// 	giveup_current_region();
+			// 	abort_marking_if_regular_check_fail();
+			// } else if (_next_mark_bitmap->iterate(&bitmap_closure, mr)) {
+			// 	giveup_current_region();
+			// 	abort_marking_if_regular_check_fail();
+			// } else {
+			// 	assert(has_aborted(), "currently the only way to do so");
+			// 	// The only way to abort the bitmap iteration is to return
+			// 	// false from the do_bit() method. However, inside the
+			// 	// do_bit() method we move the _finger to point to the
+			// 	// object currently being looked at. So, if we bail out, we
+			// 	// have definitely set _finger to something non-null.
+			// 	assert(_finger != NULL, "invariant");
+
+			// 	// Region iteration was actually aborted. So now _finger
+			// 	// points to the address of the object we last scanned. If we
+			// 	// leave it there, when we restart this task, we will rescan
+			// 	// the object. It is easy to avoid this. We move the finger by
+			// 	// enough to point to the next possible object header.
+			// 	assert(_finger < _region_limit, "invariant");
+			// 	HeapWord* const new_finger = _finger + ((oop)_finger)->size();
+			// 	// Check if bitmap iteration was aborted while scanning the last object
+			// 	if (new_finger >= _region_limit) {
+			// 		giveup_current_region();
+			// 	} else {
+			// 		move_finger_to(new_finger);
+			// 	}
+			// }
+
 		}
 		// At this point we have either completed iterating over the
 		// region we were holding on to, or we have aborted.
@@ -2804,23 +3490,30 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 		drain_local_queue(true);
 		drain_global_stack(true);
 
+
+		// 2) Claim a NEW Region from Semeru memory server's CSet to scan.
+
+
 		// Read the note on the claim_region() method on why it might
 		// return NULL with potentially more regions available for
-		// claiming and why we have to check out_of_regions() to determine
+		// claiming and why we have to check out_of_memory_server_cset() to determine
 		// whether we're done or not.
-		while (!has_aborted() && _curr_region == NULL && !_cm->out_of_regions()) {
+		//while (!has_aborted() && _curr_region == NULL && !_semeru_cm->out_of_memory_server_cset()) {
+			
+		while (!has_aborted() && !_semeru_cm->out_of_memory_server_cset()) {
 			// We are going to try to claim a new region. We should have
 			// given up on the previous one.
 			// Separated the asserts so that we know which one fires.
-			assert(_curr_region  == NULL, "invariant");
+			//assert(_curr_region  == NULL, "invariant");
 			assert(_finger       == NULL, "invariant");
 			assert(_region_limit == NULL, "invariant");
-			HeapRegion* claimed_region = _cm->claim_region(_worker_id);
+			HeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
 				setup_for_region(claimed_region);
 				assert(_curr_region == claimed_region, "invariant");
 			}
+
 			// It is important to call the regular clock here. It might take
 			// a while to claim a region if, for example, we hit a large
 			// block of empty regions. So we need to call the regular clock
@@ -2829,20 +3522,28 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 			abort_marking_if_regular_check_fail();
 		}
 
+
+		// End of CSet processing.
+		// If reach here, all the regions in memory server CSet should be already processed already.
 		if (!has_aborted() && _curr_region == NULL) {
-			assert(_cm->out_of_regions(),
+			assert(_semeru_cm->out_of_memory_server_cset(),
 						 "at this point we should be out of regions");
 		}
+
+
 	} while ( _curr_region != NULL && !has_aborted());
 
 	if (!has_aborted()) {
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
-		assert(_cm->out_of_regions(),
+		assert(_semeru_cm->out_of_memory_server_cset(),
 					 "at this point we should be out of regions");
+		
+		// Semeru memory servers don't have SATB buffer.
+		
 		// Try to reduce the number of available SATB buffers so that
 		// remark has less work to do.
-		drain_satb_buffers();
+		//drain_satb_buffers();
 	}
 
 	// Since we've done everything else, we can now totally drain the
@@ -2850,67 +3551,84 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 	drain_local_queue(false);
 	drain_global_stack(false);
 
+
+
+	// [?] Because the Semeru Region is quit big, how about scan reach Region parallelly.
+	// 		Then how to apply work stealing in this case.
+
 	// Attempt at work stealing from other task's queues.
-	if (do_stealing && !has_aborted()) {
-		// We have not aborted. This means that we have finished all that
-		// we could. Let's try to do some stealing...
+	// if (do_stealing && !has_aborted()) {
+	// 	// We have not aborted. This means that we have finished all that
+	// 	// we could. Let's try to do some stealing...
 
-		// We cannot check whether the global stack is empty, since other
-		// tasks might be pushing objects to it concurrently.
-		assert(_cm->out_of_regions() && _task_queue->size() == 0,
-					 "only way to reach here");
-		while (!has_aborted()) {
-			G1SemeruTaskQueueEntry entry;
-			if (_cm->try_stealing(_worker_id, entry)) {
-				scan_task_entry(entry);
+	// 	// We cannot check whether the global stack is empty, since other
+	// 	// tasks might be pushing objects to it concurrently.
+	// 	assert(_semeru_cm->out_of_memory_server_cset() && _semeru_task_queue->size() == 0,
+	// 				 "only way to reach here");
+	// 	while (!has_aborted()) {
+	// 		G1SemeruTaskQueueEntry entry;
+	// 		if (_semeru_cm->try_stealing(_worker_id, entry)) {
+	// 			scan_task_entry(entry);
 
-				// And since we're towards the end, let's totally drain the
-				// local queue and global stack.
-				drain_local_queue(false);
-				drain_global_stack(false);
-			} else {
-				break;
-			}
-		}
-	}
+	// 			// And since we're towards the end, let's totally drain the
+	// 			// local queue and global stack.
+	// 			drain_local_queue(false);
+	// 			drain_global_stack(false);
+	// 		} else {
+	// 			break;
+	// 		}
+	// 	}
+	// }
 
-	// We still haven't aborted. Now, let's try to get into the
-	// termination protocol.
-	if (do_termination && !has_aborted()) {
-		// We cannot check whether the global stack is empty, since other
-		// tasks might be concurrently pushing objects on it.
-		// Separated the asserts so that we know which one fires.
-		assert(_cm->out_of_regions(), "only way to reach here");
-		assert(_task_queue->size() == 0, "only way to reach here");
-		_termination_start_time_ms = os::elapsedVTime() * 1000.0;
 
-		// The G1SemeruCMTask class also extends the TerminatorTerminator class,
-		// hence its should_exit_termination() method will also decide
-		// whether to exit the termination protocol or not.
-		bool finished = (is_serial ||
-										 _cm->terminator()->offer_termination(this));
-		double termination_end_time_ms = os::elapsedVTime() * 1000.0;
-		_termination_time_ms +=
-			termination_end_time_ms - _termination_start_time_ms;
+	//
+	// [?] What's the termination protocol used for ??
+	//
 
-		if (finished) {
-			// We're all done.
+	// // We still haven't aborted. Now, let's try to get into the
+	// // termination protocol.
+	// if (do_termination && !has_aborted()) {
+	// 	// We cannot check whether the global stack is empty, since other
+	// 	// tasks might be concurrently pushing objects on it.
+	// 	// Separated the asserts so that we know which one fires.
+	// 	assert(_semeru_cm->out_of_memory_server_cset(), "only way to reach here");
+	// 	assert(_semeru_task_queue->size() == 0, "only way to reach here");
+	// 	_termination_start_time_ms = os::elapsedVTime() * 1000.0;
 
-			// We can now guarantee that the global stack is empty, since
-			// all other tasks have finished. We separated the guarantees so
-			// that, if a condition is false, we can immediately find out
-			// which one.
-			guarantee(_cm->out_of_regions(), "only way to reach here");
-			guarantee(_cm->mark_stack_empty(), "only way to reach here");
-			guarantee(_task_queue->size() == 0, "only way to reach here");
-			guarantee(!_cm->has_overflown(), "only way to reach here");
-			guarantee(!has_aborted(), "should never happen if termination has completed");
-		} else {
-			// Apparently there's more work to do. Let's abort this task. It
-			// will restart it and we can hopefully find more things to do.
-			set_has_aborted();
-		}
-	}
+	// 	// The G1SemeruCMTask class also extends the TerminatorTerminator class,
+	// 	// hence its should_exit_termination() method will also decide
+	// 	// whether to exit the termination protocol or not.
+	// 	bool finished = (is_serial ||
+	// 									 _semeru_cm->terminator()->offer_termination(this));
+	// 	double termination_end_time_ms = os::elapsedVTime() * 1000.0;
+	// 	_termination_time_ms +=
+	// 		termination_end_time_ms - _termination_start_time_ms;
+
+	// 	if (finished) {
+	// 		// We're all done.
+
+	// 		// We can now guarantee that the global stack is empty, since
+	// 		// all other tasks have finished. We separated the guarantees so
+	// 		// that, if a condition is false, we can immediately find out
+	// 		// which one.
+	// 		guarantee(_semeru_cm->out_of_memory_server_cset(), "only way to reach here");
+	// 		guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
+	// 		guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
+	// 		guarantee(!_semeru_cm->has_overflown(), "only way to reach here");
+	// 		guarantee(!has_aborted(), "should never happen if termination has completed");
+	// 	} else {
+	// 		// Apparently there's more work to do. Let's abort this task. It
+	// 		// will restart it and we can hopefully find more things to do.
+	// 		set_has_aborted();
+	// 	}
+		
+	// }  // termination protocol
+
+
+	//
+	// End of the concurrent marking OR STW Remark.
+	//  1) if have aborted, reset all the fields and try to restart the concurent marking.
+	//  
 
 	// Mainly for debugging purposes to make sure that a pointer to the
 	// closure which was statically allocated in this frame doesn't
@@ -2931,7 +3649,7 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 			_marking_step_diffs_ms.add(diff_ms);
 		}
 
-		if (_cm->has_overflown()) {
+		if (_semeru_cm->has_overflown()) {
 			// This is the interesting one. We aborted because a global
 			// overflow was raised. This means we have to restart the
 			// marking phase and start iterating over regions. However, in
@@ -2942,7 +3660,7 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 			if (!is_serial) {
 				// We only need to enter the sync barrier if being called
 				// from a parallel context
-				_cm->enter_first_sync_barrier(_worker_id);
+				_semeru_cm->enter_first_sync_barrier(_worker_id);
 
 				// When we exit this sync barrier we know that all tasks have
 				// stopped doing marking work. So, it's now safe to
@@ -2959,27 +3677,30 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 				// If we reset here as a result of an overflow during the remark we will
 				// see assertion failures from any subsequent set_concurrency_and_phase()
 				// calls.
-				if (_cm->concurrent() && _worker_id == 0) {
+				if (_semeru_cm->concurrent() && _worker_id == 0) { 
 					// Worker 0 is responsible for clearing the global data structures because
 					// of an overflow. During STW we should not clear the overflow flag (in
 					// G1SemeruConcurrentMark::reset_marking_state()) since we rely on it being true when we exit
 					// method to abort the pause and restart concurrent marking.
-					_cm->reset_marking_for_restart();
+					_semeru_cm->reset_marking_for_restart();
 
 					log_info(gc, marking)("Concurrent Mark reset for overflow");
 				}
 
 				// ...and enter the second barrier.
-				_cm->enter_second_sync_barrier(_worker_id);
+				_semeru_cm->enter_second_sync_barrier(_worker_id);
 			}
 			// At this point, if we're during the concurrent phase of
 			// marking, everything has been re-initialized and we're
 			// ready to restart.
 		}
 	}
-	*/
 
-}
+} // end of do_marking_step.
+
+
+
+
 
 G1SemeruCMTask::G1SemeruCMTask(uint worker_id,
 									 G1SemeruConcurrentMark* cm,
@@ -2988,15 +3709,15 @@ G1SemeruCMTask::G1SemeruCMTask(uint worker_id,
 									 uint max_regions) :
 	_objArray_processor(this),
 	_worker_id(worker_id),
-	_g1h(G1SemeruCollectedHeap::heap()),
-	_cm(cm),
+	_semeru_h(G1SemeruCollectedHeap::heap()),
+	_semeru_cm(cm),
 	_next_mark_bitmap(NULL),
-	_task_queue(task_queue),
+	_semeru_task_queue(task_queue),
 	_mark_stats_cache(mark_stats, max_regions, RegionMarkStatsCacheSize),
 	_calls(0),
 	_time_target_ms(0.0),
 	_start_time_ms(0.0),
-	_cm_oop_closure(NULL),
+	_semeru_cm_oop_closure(NULL),
 	_curr_region(NULL),
 	_finger(NULL),
 	_region_limit(NULL),

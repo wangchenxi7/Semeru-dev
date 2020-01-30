@@ -260,6 +260,10 @@ class MarkingCodeBlobClosure : public CodeBlobToOopClosure {
   MarkingCodeBlobClosure(OopClosure* cl, bool fix_relocations) : CodeBlobToOopClosure(cl, fix_relocations) {}
   // Called for each code blob, but at most once per unique blob.
 
+  // semeru
+  //MarkingCodeBlobClosure(OopClosure* cl, bool fix_relocations) : CodeBlobToOopClosure(cl, fix_relocations) {}
+
+
   virtual void do_code_blob(CodeBlob* cb);
 };
 

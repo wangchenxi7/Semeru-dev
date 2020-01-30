@@ -39,6 +39,12 @@
 #include "oops/oop.inline.hpp"
 #include "runtime/prefetch.inline.hpp"
 
+
+// Semeru
+#include "gc/g1/g1SemeruCollectedHeap.hpp"
+#include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
+
+
 template <class T>
 inline void G1ScanClosureBase::prefetch_and_push(T* p, const oop obj) {
 	// We're not going to even bother checking whether the object is
@@ -148,6 +154,17 @@ template <class T>
 inline void G1CMOopClosure::do_oop_work(T* p) {
 	_task->deal_with_reference(p);
 }
+
+/**
+ * Semeru Memory Server concurrent marking. 
+ * 
+ */
+template <class T>
+inline void G1SemeruCMOopClosure::do_oop_work(T* p) {
+	_semeru_task->deal_with_reference(p);
+}
+
+
 
 template <class T>
 inline void G1RootRegionScanClosure::do_oop_work(T* p) {

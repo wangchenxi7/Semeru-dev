@@ -52,13 +52,19 @@ class G1SemeruConcurrentMark;
 #pragma warning(disable:4522)
 #endif
 
-// This is a container class for either an oop or a continuation address for
-// mark stack entries. Both are pushed onto the mark stack.
+/** 
+ * This is a container class for either an oop or a continuation address for
+ * mark stack entries. Both are pushed onto the mark stack.
+ *
+ * [?] Why do we need such a wrapper for the oop ? 
+ *    => To unify both the oop and obj_array slice.
+ * 
+ */
 class G1SemeruTaskQueueEntry {
 private:
   void* _holder;
 
-  static const uintptr_t ArraySliceBit = 1;
+  static const uintptr_t ArraySliceBit = 1; //[x] the flag bit. If it's a ArraySlice, attach this bit at the end of the _holder.
 
   G1SemeruTaskQueueEntry(oop obj) : _holder(obj) {
     assert(_holder != NULL, "Not allowed to set NULL task queue element");
@@ -298,8 +304,11 @@ public:
   bool wait_until_scan_finished();
 };
 
-// This class manages data structures and methods for doing liveness analysis in
-// G1's concurrent cycle.
+/** 
+ * This class manages data structures and methods for doing liveness analysis in
+ * G1's Semeru concurrent cycle.
+ *
+ */
 class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   friend class G1ConcurrentMarkThread;            // [?] Change to Semeru thread
   friend class G1SemeruCMRefProcTaskProxy;
@@ -313,16 +322,29 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   // [?] How many concurrent marking threads ??
   //
-  G1ConcurrentMarkThread* _cm_thread;       // The thread doing the work
-  G1SemeruCollectedHeap*        _g1h;           // The heap
+  G1ConcurrentMarkThread*     _cm_thread;       // The thread doing the work
+  G1SemeruCollectedHeap*      _semeru_h;       // The heap
   
   bool                    _completed_initialization; // Set to true when initialization is complete
 
+  // [xx] Semeru abandons these bitmao now. [xx]
   // Concurrent marking support structures
-  G1CMBitMap              _mark_bitmap_1;    // [??] this is the _prev_mark_bitmap ?
+  // These 2 bitmap covered the whole heap region
+  G1CMBitMap              _mark_bitmap_1;    //the real content of _prev/next_mark_bitmap ?
   G1CMBitMap              _mark_bitmap_2;
   G1CMBitMap*             _prev_mark_bitmap; // Completed mark bitmap
   G1CMBitMap*             _next_mark_bitmap; // Under-construction mark bitmap
+
+
+  // Semeru memory sever
+
+  //  Every HeapRegion should has its own _alive_bitmap.
+  //  Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
+  //  So it's better to cut the bitmap into slices, one slice per HeapRegion.
+  //
+  //  Move these fields to G1SemeruCMTask
+  //G1CMBitMap*             _alive_bitmap; // Points to the scanning Region's bitmap. HeapRegion->alive_bitmap
+  //G1CMBitMap*             _dest_bitmap;  
 
   // Heap bounds
   MemRegion const         _heap;
@@ -330,10 +352,14 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // Root region tracking and claiming
   // [?] Initial phase add regions into the Root Region ??
   //
-  G1SemeruCMRootRegions         _root_regions;
+  G1SemeruCMRootRegions   _root_regions;
 
   // For grey objects
-  G1SemeruCMMarkStack           _global_mark_stack; // Grey objects behind global finger
+
+  // The global sermeru_task queue for G1SemeruCMTask->_semeru_task_queue, store the overflowed object waiting to be scanned.
+  G1SemeruCMMarkStack     _global_mark_stack; // Grey objects behind global finger
+
+  // [!!] Semeru memory server also uses the _finger to control the CSet Region claiming.
   HeapWord* volatile      _finger;            // The global finger, region aligned,
                                               // always pointing to the end of the
                                               // last claimed region
@@ -342,11 +368,12 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   uint                    _max_num_tasks;    // Maximum number of marking tasks
   uint                    _num_active_tasks; // Number of tasks currently active
 
-  // [?] Do we need Semeru specific CMTask ??
-  G1SemeruCMTask**              _tasks;            // Task queue array (max_worker_id length)
+  // Semeru CM Tasks,
+  // The CMTask define what operations need to be done by the attached CM Thread.
+  G1SemeruCMTask**              _tasks;         // Task queue array (max_worker_id length)
 
-  G1SemeruCMTaskQueueSet*       _task_queues; // Task queue set
-  TaskTerminator          _terminator;  // For termination
+  G1SemeruCMTaskQueueSet*       _task_queues;   // [?]Task queue set, each G1SemeruCMTask->_task_queue points  here ?
+  TaskTerminator                _terminator;    // For termination
 
   // Two sync barriers that are used to synchronize tasks when an
   // overflow occurs. The algorithm is the following. All tasks enter
@@ -374,7 +401,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   ConcurrentGCTimer*      _gc_timer_cm;
 
-  G1OldTracer*            _gc_tracer_cm;
+  G1OldTracer*            _gc_tracer_cm;    // [?] G1 Old space logging systems
 
   // Timing statistics. All of them are in ms
   NumberSeq _init_times;
@@ -459,6 +486,16 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // objects in those regions will be considered live anyway because of
   // SATB guarantees (i.e. their TAMS will be equal to bottom).
   bool out_of_regions() { return _finger >= _heap.end(); }
+
+  // Semeru Memory Server
+  // If the regions in memory server CSet are all processed.
+  bool out_of_memory_server_cset()  {  
+
+    // debug
+    tty->print("%s, this function is not fully implementted yet. \n",__func__);
+
+    return _finger == NULL;  
+  }
 
   // Returns the task with the given id
   G1SemeruCMTask* task(uint id) {
@@ -558,6 +595,7 @@ public:
   const G1CMBitMap* const prev_mark_bitmap() const { return _prev_mark_bitmap; }
   G1CMBitMap* next_mark_bitmap() const { return _next_mark_bitmap; }
 
+
   // Calculates the number of concurrent GC threads to be used in the marking phase.
   uint calc_active_marking_workers();
 
@@ -576,6 +614,17 @@ public:
   void pre_initial_mark();
   void post_initial_mark();
 
+  //
+  // Semeru Memory Server functions
+  //
+
+  // Concurrent Mark.
+  void semeru_concurrent_mark_a_region( HeapRegion* region_to_scan); 
+
+  // The compact is executed in STW mode.
+  void semeru_stw_compact_a_region( HeapRegion* region_to_scan);
+
+
   // Scan all the root regions and mark everything reachable from
   // them.
   void scan_root_regions();
@@ -585,6 +634,9 @@ public:
 
   // Do concurrent phase of marking, to a tentative transitive closure.
   void mark_from_roots();
+
+  // the concurrent marking phase for a new region
+  void semeru_concurrent_marking();
 
   // Do concurrent preclean work.
   void preclean();
@@ -639,7 +691,13 @@ private:
 };
 
 
-// A class representing a marking task.
+/** 
+ * A class representing a marking task.
+ *  
+ *  Task isn't a Thread. Task is the computation to be executed by the thread.
+ *    All th closures are implemented in the CMTask?
+ * 
+ */
 class G1SemeruCMTask : public TerminatorTerminator {
 private:
   enum PrivateConstants {
@@ -659,14 +717,18 @@ private:
 
   G1CMObjArrayProcessor       _objArray_processor;
 
-  uint                        _worker_id;
-  G1SemeruCollectedHeap*            _g1h;
-  G1SemeruConcurrentMark*           _cm;
-  G1CMBitMap*                 _next_mark_bitmap;
-  // the task queue of this task
-  G1SemeruCMTaskQueue*              _task_queue;      // The StarTask queue for CM ?
+  uint                              _worker_id;
+  G1SemeruCollectedHeap*            _semeru_h;      // Only process the semeru heap.
+  G1SemeruConcurrentMark*           _semeru_cm;
+  G1CMBitMap*                       _next_mark_bitmap;
 
-  G1RegionMarkStatsCache      _mark_stats_cache;
+  G1CMBitMap*                       _alive_bitmap;  // points to the scanned Region's alive_bitmap.
+  G1CMBitMap*                       _dest_bitmap;
+
+  // the task queue of this task
+  G1SemeruCMTaskQueue*              _semeru_task_queue;      // The StarTask queue for CM
+
+  G1RegionMarkStatsCache      _mark_stats_cache;    // [?] What's this StatCache used for ??
   // Number of calls to this task
   uint                        _calls;
 
@@ -676,7 +738,9 @@ private:
   double                      _start_time_ms;
 
   // Oop closure used for iterations over oops
-  G1CMOopClosure*             _cm_oop_closure;
+  //G1CMOopClosure*             _cm_oop_closure;    // [??] The closure for concurrent marking. Trace an object.
+
+  G1SemeruCMOopClosure*         _semeru_cm_oop_closure; // the closure for scan a marked object
 
   // Region this task is scanning, NULL if we're not scanning any
   HeapRegion*                 _curr_region;
@@ -684,6 +748,24 @@ private:
   HeapWord*                   _finger;
   // Limit of the region this task is scanning, NULL if we're not scanning one
   HeapWord*                   _region_limit;
+
+  //
+  // Semeru Memory Server concurrent marking and compacting process
+  //
+
+  // [?] For the marking and compacting, use two lists seperately.
+  // [?] When to initialize these two list ?
+  // Region this task is scanning, NULL if we're not scanning any
+  //HeapRegion*                 _curr_marking_region;     //[x] _curr_region points to current marking Region now.
+  // Limit of the region this task is scanning, NULL if we're not scanning one
+  //HeapWord*                   _marking_region_limit;
+
+  // Region this task is scanning, NULL if we're not scanning any
+  HeapRegion*                 _curr_compacting_region;
+  // Limit of the region this task is scanning, NULL if we're not scanning one
+  HeapWord*                   _compacting_region_limit;
+
+
 
   // Number of words this task has scanned
   size_t                      _words_scanned;
@@ -702,7 +784,7 @@ private:
   // called. Notice this this might be decreased under certain
   // circumstances (i.e. when we believe that we did an expensive
   // operation).
-  size_t                      _refs_reached_limit;
+  size_t                      _refs_reached_limit;      // [??] What's the purpose to set such a limit ??
   // Initial value of _refs_reached_limit (i.e. what it was before
   // it was decreased).
   size_t                      _real_refs_reached_limit;
@@ -725,7 +807,7 @@ private:
   // When this task got into the termination protocol
   double                      _termination_start_time_ms;
 
-  TruncatedSeq                _marking_step_diffs_ms;
+  TruncatedSeq                _marking_step_diffs_ms;     // [?] What's this time used for ??
 
   // Updates the local fields after this task has claimed
   // a new region to scan
@@ -749,6 +831,7 @@ private:
       reached_limit();
     }
   }
+
   // Supposed to be called regularly during a marking step as
   // it checks a bunch of conditions that might cause the marking step
   // to abort
@@ -780,6 +863,22 @@ public:
                        bool do_termination,
                        bool is_serial);
 
+
+  //
+  // Semeru
+  //
+  G1CMBitMap*    alive_bitmap()  { return _alive_bitmap; }
+  G1CMBitMap*    dest_bitmap()   { return _dest_bitmap;  }
+
+  // Mark an object alive in current scanning region, pointed by _curr_region.
+  inline bool mark_in_alive_bitmap(uint const worker_id, oop const obj);
+  inline bool make_reference_alive(oop obj); 
+
+  void do_semeru_marking_step(double time_target_ms,
+															 bool do_termination,
+															 bool is_serial);
+
+
   // These two calls start and stop the timer
   void record_start_time() {
     _elapsed_time_ms = os::elapsedTime() * 1000.0;
@@ -806,7 +905,7 @@ public:
   void set_has_aborted()        { _has_aborted = true; }
   void clear_has_aborted()      { _has_aborted = false; }
 
-  void set_cm_oop_closure(G1CMOopClosure* cm_oop_closure);
+  void set_cm_oop_closure(G1SemeruCMOopClosure* cm_oop_closure);
 
   // Increment the number of references this task has visited.
   void increment_refs_reached() { ++_refs_reached; }
@@ -814,7 +913,9 @@ public:
   // Grey the object by marking it.  If not already marked, push it on
   // the local queue if below the finger. obj is required to be below its region's NTAMS.
   // Returns whether there has been a mark to the bitmap.
-  inline bool make_reference_grey(oop obj);
+  //inline bool make_reference_grey(oop obj);
+  // [xx] change to make_reference_alive(oop obj)
+
 
   // Grey the object (by calling make_grey_reference) if required,
   // e.g. obj is below its containing region's NTAMS.
@@ -868,6 +969,18 @@ public:
   Pair<size_t, size_t> flush_mark_stats_cache();
   // Prints statistics associated with this task
   void print_stats();
+
+  //
+  // Target object queue related
+  //
+
+  inline void trim_target_object_queue(TargetObjQueue* target_obj_queue);
+
+  inline void trim_target_object_queue_to_threshold(TargetObjQueue* target_obj_queue, uint threshold);
+
+  inline void dispatch_reference(StarTask ref);
+
+
 };
 
 // Class that's used to to print out per-region liveness

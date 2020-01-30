@@ -51,7 +51,7 @@ class G1RegionToSpaceMapper : public CHeapObj<mtGC> {
   G1MappingChangedListener* _listener;
  protected:
   // Backing storage.
-  G1PageBasedVirtualSpace _storage;   // page based ?
+  G1PageBasedVirtualSpace _storage;   // Storage for the bitmap. page based. for the whole reversed ? or for the commit ?
 
   size_t _region_granularity;         // region size ?? duplicated with HeapRegion::GrainBytes ?
   // Mapping management
