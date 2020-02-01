@@ -96,7 +96,7 @@ void HeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 															 G1RegionToSpaceMapper* card_counts) {
 	_allocated_heapregions_length = 0;
 
-	_heap_mapper = heap_storage;				// [?] purpose ?
+	_heap_mapper = heap_storage;				// [?] Used for commiting the heap sapce ?  Region to Page mapping.
 
 	_prev_bitmap_mapper = prev_bitmap;
 	_next_bitmap_mapper = next_bitmap;

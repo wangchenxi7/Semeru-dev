@@ -342,8 +342,8 @@ G1CollectedHeap::humongous_obj_allocate_initialize_regions(uint first,
 	return new_obj;
 }
 /** 
- * Tag : Calculate the needed Region number.     
- * 
+ * Tag : Calculate the needed number of Regions for current humongous object.     
+ * 		According to this, the humongous object allocation is Region alignment.
  * 
  */
 size_t G1CollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
@@ -351,9 +351,11 @@ size_t G1CollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
 	return align_up(word_size, HeapRegion::GrainWords) / HeapRegion::GrainWords;
 }
 
-// If could fit into free regions w/o expansion, try.
-// Otherwise, if can expand, do so.
-// Otherwise, if using ex regions might help, try with ex given back.
+/**
+ * If could fit into free regions w/o expansion, try.
+ * Otherwise, if can expand, do so.
+ * Otherwise, if using ex regions might help, try with ex given back.
+ */
 HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size) {
 	assert_heap_locked_or_at_safepoint(true /* should_be_vm_thread */);
 
@@ -366,6 +368,7 @@ HeapWord* G1CollectedHeap::humongous_obj_allocate(size_t word_size) {
 		// Only one region to allocate, try to use a fast path by directly allocating
 		// from the free lists. Do not try to expand here, we will potentially do that
 		// later.
+		// [x] Get a free Region from HeapRegionManager->_free_list 
 		HeapRegion* hr = new_region(word_size, HeapRegionType::Humongous, false /* do_expand */); //Single Region,same as Old Space path.
 		if (hr != NULL) {
 			first = hr->hrm_index();
@@ -441,14 +444,18 @@ HeapWord* G1CollectedHeap::allocate_new_tlab(size_t min_size,
 	return attempt_allocation(min_size, requested_size, actual_size);
 }
 
+/**
+ * Allocate space into Java heap directly. 
+ */
 HeapWord*
 G1CollectedHeap::mem_allocate(size_t word_size,
 															bool*  gc_overhead_limit_was_exceeded) {
 	assert_heap_not_locked_and_not_at_safepoint();
 
-	if (is_humongous(word_size)) {
+	if (is_humongous(word_size)) {		// the humongous threshold is half of the HeapRegion size.
 		return attempt_allocation_humongous(word_size);
 	}
+
 	size_t dummy = 0;
 	return attempt_allocation(word_size, word_size, &dummy);
 }
@@ -928,8 +935,11 @@ HeapWord* G1CollectedHeap::attempt_allocation_humongous(size_t word_size) {
 			// collection hoping that there's enough space in the heap.
 			result = humongous_obj_allocate(word_size);
 			if (result != NULL) {
+
+				// [x] is humongous objects allocation always region alignmetn ? 
+				// 		=> Yes.
 				size_t size_in_regions = humongous_obj_size_in_regions(word_size);
-				g1_policy()->add_bytes_allocated_in_old_since_last_gc(size_in_regions * HeapRegion::GrainBytes);
+				g1_policy()->add_bytes_allocated_in_old_since_last_gc(size_in_regions * HeapRegion::GrainBytes);  // serveral Regions
 				return result;
 			}
 

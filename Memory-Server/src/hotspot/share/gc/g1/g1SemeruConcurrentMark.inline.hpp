@@ -28,7 +28,7 @@
 //#include "gc/g1/g1CollectedHeap.inline.hpp"
 //#include "gc/g1/g1ConcurrentMark.hpp"
 #include "gc/g1/g1ConcurrentMarkBitMap.inline.hpp"
-#include "gc/g1/g1ConcurrentMarkObjArrayProcessor.inline.hpp"
+//#include "gc/g1/g1ConcurrentMarkObjArrayProcessor.inline.hpp"
 #include "gc/g1/g1OopClosures.inline.hpp"
 #include "gc/g1/g1Policy.hpp"
 #include "gc/g1/g1RegionMarkStatsCache.inline.hpp"
@@ -43,6 +43,7 @@
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/g1ParScanThreadState.hpp"
+#include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.inline.hpp"
 
 // inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
 //   return !_semeru_h->is_obj_ill(obj);
@@ -300,29 +301,25 @@ inline bool G1SemeruCMTask::is_below_finger(oop obj, HeapWord* global_finger) co
  * Use G1SemeruCMOopClosure to handle each fields.
  *  Like a BFS order.  
  * 
+ * [?] Until here, the grey object should be already marked in alive_bitmap ?
+ *      => Yes. the grey objects are poped up from G1SemeruCMTask->_semeru_task_queue.
+ *         The objects have to be marked alive in alive_bitmap before enqueuing the _semeru_task_queue.
+ *      => task_entry's field will be traced and marked alive in alive_bitmap by _semeru_cm_oop_closure.
+ * 
  */
 template<bool scan>
 inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_entry) {
   assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
-  assert(task_entry.is_array_slice() || _next_mark_bitmap->is_marked((HeapWord*)task_entry.obj()),
+  assert(task_entry.is_array_slice() || _alive_bitmap->is_marked((HeapWord*)task_entry.obj()),
          "Any stolen object should be a slice or marked");
 
   if (scan) {
-    if (task_entry.is_array_slice()) {    // alrady sliced
-     // _words_scanned += _objArray_processor.process_slice(task_entry.slice());
-
-      //debug
-      assert(false, "%s, object array slice tracing  Not finished yet \n", __func__);
-
+    if (task_entry.is_array_slice()) {    // the large array is  alrady sliced
+      _words_scanned += _objArray_processor.process_slice(task_entry.slice());
     } else {
-      oop obj = task_entry.obj();
+      oop obj = task_entry.obj(); // This can be an object on humongous regions
       if (G1CMObjArrayProcessor::should_be_sliced(obj)) {   // an entire object array, should be sliced
-       // _words_scanned += _objArray_processor.process_obj(obj);
-
-        //debug
-        assert(false, "%s, object array tracing  Not finished yet \n", __func__);
-        
-
+        _words_scanned += _objArray_processor.process_obj(obj);
       } else {
         _words_scanned += obj->oop_iterate_size(_semeru_cm_oop_closure);  // a normal object instance, scan its fields.
       }
@@ -334,6 +331,9 @@ inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_
 }
 
 
+/**
+ *  Scan a slice, specified by the MemRegion, of an object array.
+ */
 inline size_t G1SemeruCMTask::scan_objArray(objArrayOop obj, MemRegion mr) {
   obj->oop_iterate(_semeru_cm_oop_closure, mr);
   return mr.word_size();
@@ -457,9 +457,12 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
 /**
  * Semeru Memory Server - Concurrently mark an object alive in HeapRegion->alive_bitmap
  *  
- *  [?] There may be multiple Semeru CM Threads marking the alive objects here ?
- *    => We need to confirm the MT safe.
- *       For a bitmap, this can be easily handled.
+ *  [x] There may be multiple Semeru CM Threads marking the alive objects here ?
+ *    => yes. The Multiple-Thread Safe && de-duplication are guaranteed by the alive_bitmap marking.
+ *        Only the thread successfully mark the bit, can push the grey objects into G1SemeruCMTask->_semeru_task_queue.
+ *    => Which means : 1) mark object alive (grey) in HeapRegion->alive_bitmap
+ *                     2) Enqueue the marked object into G1SemeruCMTask->_semeru_task_queue (to scan its fields.)
+ * 
  * 
  * [?] Do we need the global_finger ??
  *    => Both CM and Remark use this function, so the marking can exceed the TAMS ?  
@@ -468,7 +471,7 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
  * 
  */
 inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
-  
+  // Mark the object alive (grey) before push them into G1SemeruCMTask->_semeru_task_queue
   // At this time, each Region has its own alive_bitmap. Not like the global _next_bitmap which covers the whole heap.
   if( !mark_in_alive_bitmap(_worker_id, obj) ) {  // Mark object alive in alive_bitmap
     return false;
@@ -518,10 +521,10 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
 // }
 
 /**
- * Semeru Memory Server - Concurrent Marking 
+ * Semeru Memory Server - Trace an object's field.
  * 
- * [?] Mark the objects alive in corresponding Region's alive_bitmap. 
- * 
+ * [x] 1) Mark the target objects alive in corresponding Region's alive_bitmap. 
+ *     2) Enqueue the target object into G1SemeruCMTask->_semeru_task_queue
  */
 template <class T>
 inline bool G1SemeruCMTask::deal_with_reference(T* p) {

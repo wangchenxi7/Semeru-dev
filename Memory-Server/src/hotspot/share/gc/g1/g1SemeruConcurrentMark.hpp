@@ -26,12 +26,15 @@
 #define SHARE_VM_GC_G1_SEMERU_G1CONCURRENTMARK_HPP
 
 #include "gc/g1/g1ConcurrentMarkBitMap.hpp"
-#include "gc/g1/g1ConcurrentMarkObjArrayProcessor.hpp"
+//#include "gc/g1/g1ConcurrentMarkObjArrayProcessor.hpp"
 #include "gc/g1/g1HeapVerifier.hpp"
 #include "gc/g1/g1RegionMarkStatsCache.hpp"
 #include "gc/g1/heapRegionSet.hpp"
 #include "gc/shared/taskqueue.hpp"
 #include "memory/allocation.hpp"
+
+// Semeru headers
+#include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.hpp"
 
 class ConcurrentGCTimer;
 class G1ConcurrentMarkThread;
@@ -715,7 +718,7 @@ private:
   // low cache miss rate.
   static const uint RegionMarkStatsCacheSize = 1024;
 
-  G1CMObjArrayProcessor       _objArray_processor;
+  G1SemeruCMObjArrayProcessor       _objArray_processor;  // Specified to process big object array.
 
   uint                              _worker_id;
   G1SemeruCollectedHeap*            _semeru_h;      // Only process the semeru heap.
@@ -847,6 +850,10 @@ private:
 
   template<bool scan> void process_grey_task_entry(G1SemeruTaskQueueEntry task_entry);
 public:
+
+  // Semeru
+  bool semeru_cm_task_do_addr(HeapWord* const addr);
+
   // Apply the closure on the given area of the objArray. Return the number of words
   // scanned.
   inline size_t scan_objArray(objArrayOop obj, MemRegion mr);

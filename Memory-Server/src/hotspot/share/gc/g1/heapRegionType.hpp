@@ -68,7 +68,7 @@ private:
     EdenTag               = YoungMask,
     SurvTag               = YoungMask + 1,
 
-    HumongousMask         = 4,
+    HumongousMask         = 4,     // [?] What's the HumongousMask used for ?
     PinnedMask            = 8,
     StartsHumongousTag    = HumongousMask | PinnedMask,
     ContinuesHumongousTag = HumongousMask | PinnedMask + 1,
@@ -193,7 +193,7 @@ public:
   static const HeapRegionType Eden;
   static const HeapRegionType Survivor;
   static const HeapRegionType Old;
-  static const HeapRegionType Humongous;
+  static const HeapRegionType Humongous;      // [?] What's the definition for humongous ?
 };
 
 #endif // SHARE_VM_GC_G1_HEAPREGIONTYPE_HPP

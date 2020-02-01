@@ -69,34 +69,6 @@
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 
 
-// [?] Need to implement to Semeru version.
-//     At this time, we are using the implemenation version under g1ConcurrentMark.cpp
-//
-// bool G1CMBitMapClosure::do_addr(HeapWord* const addr) {
-
-
-	// assert(addr < _semeru_cm->finger(), "invariant");
-	// assert(addr >= _task->finger(), "invariant");
-
-	// // We move that task's local finger along.
-	// _task->move_finger_to(addr);
-
-	// _task->scan_task_entry(G1SemeruTaskQueueEntry::from_oop(oop(addr)));
-	// // we only partially drain the local queue and global stack
-	// _task->drain_local_queue(true);
-	// _task->drain_global_stack(true);
-
-	// // if the has_aborted flag has been raised, we need to bail out of
-	// // the iteration
-	// return !_task->has_aborted();
-
-
-
-// 	//debug
-// 	printf("Error in %s, please fix this. \n", __func__);
-
-// 	return false;
-// }
 
 G1SemeruCMMarkStack::G1SemeruCMMarkStack() :
 	_max_chunk_capacity(0),
@@ -1636,11 +1608,12 @@ public:
 // added by the 'keep alive' oop closure above.
 //
 //	[?] What's this closure used for ??
+//		=> weak reference related ?
 //
 class G1SemeruCMDrainMarkingStackClosure : public VoidClosure {
 	G1SemeruConcurrentMark* _semeru_cm;
 	G1SemeruCMTask*         _task;
-	bool              _is_serial;
+	bool              			_is_serial;
  public:
 	G1SemeruCMDrainMarkingStackClosure(G1SemeruConcurrentMark* cm, G1SemeruCMTask* task, bool is_serial) :
 		_semeru_cm(cm), _task(task), _is_serial(is_serial) {
@@ -1745,6 +1718,12 @@ void G1SemeruCMRefProcTaskExecutor::execute(ProcessTask& proc_task, uint ergo_wo
 	_workers->run_task(&proc_task_proxy, ergo_workers);
 }
 
+
+/**
+ * Semeru Memory Server
+ * [?] Does the concurrent GC also need to trace the weak reference ?? 
+ * 
+ */
 void G1SemeruConcurrentMark::weak_refs_work(bool clear_all_soft_refs) {
 	ResourceMark rm;
 	HandleMark   hm;
@@ -2173,6 +2152,7 @@ void G1SemeruConcurrentMark::clear_range_in_prev_bitmap(MemRegion mr) {
  * 	=> In current design, the HeapRegion is quite big. 
  * 		 Everytime, reclaim a single HeapRegion and scan it parallelly, if there are multiple concurrent marking threads.	
  * 
+ * [x] The _curr_region can be NULL. Because it may be reseted to NULL after finishing scaning it. 
  * 
  */
 HeapRegion*
@@ -2676,6 +2656,44 @@ void G1SemeruCMTask::decrease_limits() {
 	_words_scanned_limit = _real_words_scanned_limit - 3 * words_scanned_period / 4;
 	_refs_reached_limit  = _real_refs_reached_limit - 3 * refs_reached_period / 4;
 }
+
+
+
+
+
+/**
+ * Semeru Memory Server
+ * 
+ * [x] Trace an alive objects directly, without marking it alive in alive_bitmap.
+ *  
+ * [?] This function is usually invoked to process a humongous Region.
+ * 		 There should be a very large object occupied the entire Region.
+ * 		 So no need to mark the  alive_bitmap for a humonguous Region ??
+ * 
+ * [x] Because this function is usually to process a humongous Region.
+ * 		So, partially drain the semeru_taskqueue after processing the big object.
+ * 
+ * [?] Why does it define this scavenge within the bitmap closure ??
+ * 		=> We even don't need the bitmap ?
+ * 
+ */
+bool G1SemeruCMTask::semeru_cm_task_do_addr(HeapWord* const addr) {
+
+	// Confirm this object is within the covered range of the bitmap.
+	assert(_curr_region->is_in_reserved(addr), " oop's start address have to be in the current scanning Region." );
+
+	scan_task_entry(G1SemeruTaskQueueEntry::from_oop(oop(addr)));
+	// we only partially drain the local queue and global stack
+	drain_local_queue(true);
+	drain_global_stack(true);
+
+	// if the has_aborted flag has been raised, we need to bail out of
+	// the iteration
+	return !has_aborted();
+}
+
+
+
 
 
 void G1SemeruCMTask::move_entries_to_global_stack() {
@@ -3387,18 +3405,45 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// This means that we're already holding on to a region.
 			
 
-				// 1.1) Handle humonguous objects separately
-			if (_curr_region->is_humongous() && (_curr_region->used()!=0) ) {
-				// if (_next_mark_bitmap->is_marked(mr.start())) {
-				// 	// The object is marked - apply the closure
-				// 	bitmap_closure.do_addr(mr.start());
-				// }
-				// // Even if this task aborted while scanning the humongous object
-				// // we can (and should) give up the current region.
-				// giveup_current_region();
-				// abort_marking_if_regular_check_fail();
+			// 1.1) Handle humonguous objects separately
+			// [?] _curr_region can the start of a humongous region or in the midle of a humongous obejcts ?
+			//	=> Only scan the first humongous Region occupied by the humongous objects.
+			if (_curr_region->is_humongous()) {
+				
+				assert(_curr_region->used()!=0, "%s, Can't be empty humongous Region. ", __func__);
 
-				assert(false, "%s, not support humonguous objet here. \n",__func__);
+				// 1) Humongous object is larger than HeapRegion size/2
+				// 2) Humongous object allocation is always HeapRegion alignment.
+				// 3) One humongous object can spread several continous HeapRegions.
+				if ( _curr_region->is_starts_humongous() &&  
+							_alive_bitmap->is_marked(_curr_region->bottom())) {
+
+					// The object is marked - apply the closure
+					// [?] Can this detect if this is a oop start address ??
+					//			=> seem no. if not start of a oop, will crash.
+					// [x] Just push this humongous objects into task_queue  ?
+					//			=> No need to mark the humongous's bitmap. 
+					//			=> Mark its fields alive and push them into task_queue.
+					// [x] How to mark multiple Regions' alive_bitmap ??
+					//			=> No need to mark any humongous region's alive_bitmap.
+					//bitmap_closure.do_addr(_curr_region->bottom());  
+
+					if(semeru_cm_task_do_addr(_curr_region->bottom()) ){
+						// if scan failed,
+						assert(false, "%s, process humongous Region error.",__func__);
+						return; 
+					}
+
+				}
+
+				// 1) After handle a humongous Region, reset all the  fields pointed to this Region.
+				// 2) No need to process continuous humongous Regions, just skip them.
+				//			[?] How to record the already scanned region , Semeru Memory Server CSet ?
+				//							=> Can we use the global  G1SemeruConcurrentMark->_finger ??
+				// Even if this task aborted while scanning the humongous object
+				// we can (and should) give up the current region.
+				giveup_current_region();
+				abort_marking_if_regular_check_fail();
 
 			} else{
 			

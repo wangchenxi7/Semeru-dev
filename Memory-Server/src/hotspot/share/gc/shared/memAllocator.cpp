@@ -251,6 +251,10 @@ void MemAllocator::Allocation::notify_allocation() {
   notify_allocation_jvmti_sampler();
 }
 
+/**
+ * Tag : allocate object into heap directly.
+ *      Sometimes, object is too large to allocate into a TLAB.
+ */
 HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
   allocation._allocated_outside_tlab = true;
   HeapWord* mem = _heap->mem_allocate(_word_size, &allocation._overhead_limit_exceeded);

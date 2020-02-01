@@ -68,7 +68,12 @@
 // Semeru
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 
-
+/**
+ * Tag : scan a region Or a range of memory ?
+ * 
+ * we can reach here via scanning a humongous object.
+ *  
+ */
 bool G1CMBitMapClosure::do_addr(HeapWord* const addr) {
 	assert(addr < _cm->finger(), "invariant");
 	assert(addr >= _task->finger(), "invariant");

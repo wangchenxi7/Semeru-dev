@@ -63,7 +63,7 @@ class DirtyCardToOopClosure;
 class Space: public CHeapObj<mtGC> {
   friend class VMStructs;
  protected:
-  HeapWord* _bottom;
+  HeapWord* _bottom;    // When manage space, JVM uses HeapWords as default.
   HeapWord* _end;
 
   // Used in support of save_marks()
