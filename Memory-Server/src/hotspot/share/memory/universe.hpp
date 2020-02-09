@@ -110,6 +110,10 @@ class Universe: AllStatic {
   friend bool  universe_post_init();
   friend void  universe_post_module_init();
 
+  // semeru
+  friend bool  semeru_universe_post_init();
+
+
  private:
   // Known classes in the VM
   static Klass* _typeArrayKlassObjs[T_LONG+1];

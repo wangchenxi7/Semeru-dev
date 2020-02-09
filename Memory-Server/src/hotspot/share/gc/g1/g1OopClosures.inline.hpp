@@ -165,7 +165,11 @@ inline void G1SemeruCMOopClosure::do_oop_work(T* p) {
 }
 
 
-
+/**
+ * Tag : Closure of scanning Root Regions for CM.
+ * 	Mark the object alive in next_bitmap directly, without pushing any fields/objects into task_queue.
+ * 	One concurrent thread per Region.
+ */
 template <class T>
 inline void G1RootRegionScanClosure::do_oop_work(T* p) {
 	T heap_oop = RawAccess<MO_VOLATILE>::oop_load(p);

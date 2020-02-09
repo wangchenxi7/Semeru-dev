@@ -31,6 +31,8 @@
 
 #include <new>
 
+
+
 class AllocFailStrategy {
 public:
   enum AllocFailEnum { EXIT_OOM, RETURN_NULL };
@@ -185,8 +187,9 @@ void FreeHeap(void* p);
  *     new HeapRegion() will invoke the new(size) Operator here.
  * 
  * [?] What's the meaning of AllocateHeap, just function name ??
- *    => meaning that allocate object into C-Heap ?
- *       This function request memory from OS by using os::malloc().
+ *    => There are 2 functions for the operator new:
+ *    1) Allocate space from OS
+ *    2) Invoke the constructor to initialize the class instance.
  * 
  */
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
@@ -344,6 +347,13 @@ class MetaspaceObj {
 
 class Arena;
 
+
+/**
+ * [?] What's the meaning of this "AllStatic" ?
+ *  
+ * All the fields and functions of the subclass should be static ?? 
+ * 
+ */
 class AllStatic {
  public:
   AllStatic()  { ShouldNotCallThis(); }
@@ -556,33 +566,6 @@ class ArrayAllocator : public AllStatic {
   static void free(E* addr, size_t length);
 };
 
-// Semeru support
-
-/**
- *  Allocate data in fixed address.
- *  Used for data structure transfered by RDMA.
- */
-template <class E>
-class SemeruArrayAllocator : public AllStatic {
- private:
-  static bool should_use_malloc(size_t length);
-
-  static E* allocate_malloc(size_t length, MEMFLAGS flags);
-  static E* allocate_mmap(size_t length, MEMFLAGS flags);
-  static E* allocate_mmap_at(size_t length, MEMFLAGS flags, char* requested_addr); 
-  //static E* commit_at(size_t length, MEMFLAGS flags, char* requested_addr);
-
-  static void free_malloc(E* addr, size_t length);
-  static void free_mmap(E* addr, size_t length);
-
- public:
-  static E* allocate(size_t length, MEMFLAGS flags);
-  static E* allocate_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);    // specificed for target oop allocation.
-  static E* commit_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);
-  static E* reallocate(E* old_addr, size_t old_length, size_t new_length, MEMFLAGS flags);
-  static void free(E* addr, size_t length);
-};
-
 
 
 // Uses mmaped memory for all allocations. All allocations are initially
@@ -611,5 +594,88 @@ class MallocArrayAllocator : public AllStatic {
   static E* allocate(size_t length, MEMFLAGS flags);
   static void free(E* addr);
 };
+
+
+
+
+//
+// Semeru support
+//
+
+/**
+ *  Allocate data in fixed address.
+ *  Used for data structure transfered by RDMA.
+ */
+template <class E>
+class SemeruArrayAllocator : public AllStatic {
+ private:
+  static bool should_use_malloc(size_t length);
+
+  static E* allocate_malloc(size_t length, MEMFLAGS flags);
+  static E* allocate_mmap(size_t length, MEMFLAGS flags);
+  static E* allocate_mmap_at(size_t length, MEMFLAGS flags, char* requested_addr); 
+  //static E* commit_at(size_t length, MEMFLAGS flags, char* requested_addr);
+
+  static void free_malloc(E* addr, size_t length);
+  static void free_mmap(E* addr, size_t length);
+
+ public:
+  static E* allocate(size_t length, MEMFLAGS flags);
+  static E* allocate_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);    // specificed for target oop allocation.
+  static E* commit_target_oop_q(size_t length, MEMFLAGS flags, char* requested_addr);
+  static E* reallocate(E* old_addr, size_t old_length, size_t new_length, MEMFLAGS flags);
+  static void free(E* addr, size_t length);
+};
+
+
+/**
+ * This allocator is used to allocate objects into fixed address for RDMA communications between CPU and memory server.
+ * 
+ * [?] CHeapObj allocates object into C-Heap by malloc().
+ *     We commit space from reserved space.
+ *    
+ * [x] We only need to use the operator new to invoke class's constructor.
+ * 
+ * [x] The RDMA class should use flexible array to store data.
+ * 
+ * [x] Its subclass may have non-static fields, so do NOT inherit from AllStatic class.
+ * 
+ */
+template <class E> 
+class CHeapRDMAObj{
+  friend class MmapArrayAllocator<E>;
+
+ public:
+
+
+
+  // add a new allocation function
+  // 1) this function is only used to commit space on reserved space
+  // 2) the new operation first, invoke this override function to allocate space
+  //    second, it invokes the constructor to do initialization.
+  //    BUT the return value of operator new, has to be void*.
+  // 3) The override operator always work like static, 
+  //     It can only invoke static functions.
+  //
+  ALWAYSINLINE void* operator new(size_t size, size_t commit_size , char* requested_addr) throw() {
+    //  return (void*)test_new_operator(size, commit_size, requested_addr);
+
+    // discard the parameter, size, which is defined by sizeof(clas)
+    return (void*)commit_at(commit_size, mtGC, requested_addr);
+  }
+
+
+  // commit space on reserved space
+ // static char* commit_at(size_t length, MEMFLAGS flags, char* requested_addr)
+
+  static E* commit_at(size_t commit_byte_size, MEMFLAGS flags, char* requested_addr);
+
+  // debug
+  static E* test_new_operator( size_t size, size_t commit_size, char* requested_addr);
+
+
+};
+
+
 
 #endif // SHARE_VM_MEMORY_ALLOCATION_HPP

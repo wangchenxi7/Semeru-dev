@@ -135,10 +135,20 @@
 // 1) First part is for the Target Object queue, 128M
 
 // [0, 1GB), small meta data space
+
+// 1.1 Target object queue , 128MB
 #define TARGET_OBJ_OFFSET     (size_t)0
 #define TARGET_OBJ_SIZE_BYTE  (size_t)0x8000000   // 128M bytes
 
-// [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
+// 1.2 Memory server CSet
+#define MEMORY_SERVER_CSET_OFFSET     (size_t)0x8000000   // +128MB
+#define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
+
+// 1.3 Flags setted by CPU srver
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET  (size_t)0x8100000 // 129MB
+#define FLAGS_OF_CPU_SERVER_STATE_SIZE    (size_t)0x1000    // 4KB
+
+//2.  [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
 #define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // offset to semeru start addr, 1GB
 #define DEST_BITMAP_OFFSET       (size_t)0x80000000     // 2GB
 

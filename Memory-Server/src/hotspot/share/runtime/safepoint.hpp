@@ -120,8 +120,8 @@ public:
 
   // Roll all threads forward to safepoint. Must be called by the
   // VMThread or CMS_thread.
-  static void begin();
-  static void end();                    // Start all suspended threads again...
+  static void begin();          // Park ? Synchronized all the running threads.
+  static void end();            // Start all suspended threads again...
 
   static bool safepoint_safe(JavaThread *thread, JavaThreadState state);
 

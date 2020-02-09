@@ -2287,6 +2287,16 @@ void G1CollectedHeap::increment_old_marking_cycles_completed(bool concurrent) {
 	FullGCCount_lock->notify_all();
 }
 
+/**
+ * Trigger a GC,
+ * 
+ * Build the corresponding GC Operations:
+ * 
+ * Young GC 			-	VM_G1CollectForAllocation with 
+ * Concurrent GC 	- VM_G1CollectForAllocation with a Initial Marking.
+ * STW Full GC 		- VM_G1CollectFull
+ *  
+ */
 void G1CollectedHeap::collect(GCCause::Cause cause) {
 	try_collect(cause, true);
 }
@@ -2314,6 +2324,9 @@ bool G1CollectedHeap::try_collect(GCCause::Cause cause, bool retry_on_gc_failure
 		}
 
 		if (should_do_concurrent_full_gc(cause)) {
+			// 1) Trigger the Concurrent GC,
+			//		Because the CM is piggybacked by a Young GC, trigger a STW CPU server GC first. 
+			//
 			// Schedule an initial-mark evacuation pause that will start a
 			// concurrent cycle. We're setting word_size to 0 which means that
 			// we are not requesting a post-GC allocation.
@@ -2789,7 +2802,16 @@ HeapWord* G1CollectedHeap::do_collection_pause(size_t word_size,
 	return result;
 }
 
+/**
+ * Wake the concurrent threads waiting on the CGC_lock. 
+ * 
+ */
 void G1CollectedHeap::do_concurrent_mark() {
+
+	// Debug
+	tty->print("%s, Disable the wakeup procedure of the Normal Concurrernt Threads. \n", __func__);
+	return;
+
 	MutexLockerEx x(CGC_lock, Mutex::_no_safepoint_check_flag);
 	if (!_cm_thread->in_progress()) {
 		_cm_thread->set_started();
@@ -3100,7 +3122,10 @@ G1CollectedHeap::do_collection_pause_at_safepoint(double target_pause_time_ms) {
 
 	g1_policy()->note_gc_start();
 
-	wait_for_root_region_scanning();   // [1] ? Scan all the root --> young gen  reference ?
+	// ? CM GC's Roor Region scanning ? 
+	// For a CM GC, all the suvivor Regions belong to Root which will be evucated during this STW Young GC.
+	// So, this STW Young GC has to wait for its finishing.
+	wait_for_root_region_scanning();   
 
 	print_heap_before_gc();
 	print_heap_regions();

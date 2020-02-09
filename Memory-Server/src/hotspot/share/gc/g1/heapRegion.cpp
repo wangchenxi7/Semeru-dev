@@ -349,15 +349,16 @@ HeapRegion::HeapRegion(uint hrm_index,
                        G1BlockOffsetTable* bot,
                        MemRegion mr) :
     G1ContiguousSpace(bot),
-    _rem_set(NULL),
-    _target_obj_queue(NULL),
-    _alive_bitmap(),  // Semeru, invoke the constructor
-    _dest_bitmap(),
     _hrm_index(hrm_index),
     _type(),
     _humongous_start_region(NULL),
-    _evacuation_failed(false),
+    _target_obj_queue(NULL),
+    _alive_bitmap(),  // Semeru, invoke the constructor
+    _dest_bitmap(),
     _next(NULL), _prev(NULL),
+    _cm_scanned(false),
+    _rem_set(NULL),
+    _evacuation_failed(false),
     _mem_server_cset_next(NULL),  // Semeru memory server
 #ifdef ASSERT
     _containing_set(NULL),

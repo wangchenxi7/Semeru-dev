@@ -93,12 +93,19 @@ bool OWSTTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
   }
 }
 
+
+/**
+ * Tag : Whats the connection between thread terminator and thread work stealing ?
+ *  
+ *  [?] Guess, instead of terminating the thread, schedule it to steal work from other threads ?
+ * 
+ */
 bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
   uint yield_count = 0;
   // Number of hard spin loops done since last yield
   uint hard_spin_count = 0;
   // Number of iterations in the hard spin loop.
-  uint hard_spin_limit = WorkStealingHardSpins;
+  uint hard_spin_limit = WorkStealingHardSpins;   // [?] what does this control mean ?
 
   // If WorkStealingSpinToYieldRatio is 0, no hard spinning is done.
   // If it is greater than 0, then start with a small number
@@ -106,14 +113,16 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
   // the count of hard spins exceeds WorkStealingSpinToYieldRatio.
   // Then do a yield() call and start spinning afresh.
   if (WorkStealingSpinToYieldRatio > 0) {
-    hard_spin_limit = WorkStealingHardSpins >> WorkStealingSpinToYieldRatio;
+    hard_spin_limit = WorkStealingHardSpins >> WorkStealingSpinToYieldRatio;   // Reduce the HardSpin times to find a change steal work?
     hard_spin_limit = MAX2(hard_spin_limit, 1U);
   }
+
   // Remember the initial spin limit.
   uint hard_spin_start = hard_spin_limit;
 
-  // Loop waiting for all threads to offer termination or
-  // more work.
+  // Loop waiting for all threads to offer termination or more work.
+  // [?] Other threads can offer work ??
+  //
   while (true) {
     // Look for more work.
     // Periodically sleep() instead of yield() to give threads
@@ -127,7 +136,7 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
       // After WorkStealingSpinToYieldRatio spins, do a yield() call
       // and reset the counts and starting limit.
       if (hard_spin_count > WorkStealingSpinToYieldRatio) {
-        yield();
+        yield();        // [?] give up the occupied cores to other threads ??
         hard_spin_count = 0;
         hard_spin_limit = hard_spin_start;
 #ifdef TRACESPINNING
@@ -139,7 +148,7 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
         hard_spin_limit = MIN2(2*hard_spin_limit,
                                (uint) WorkStealingHardSpins);
         for (uint j = 0; j < hard_spin_limit; j++) {
-          SpinPause();
+          SpinPause();    // [?] What's this for ?
         }
         hard_spin_count++;
 #ifdef TRACESPINNING
@@ -147,15 +156,18 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
 #endif
       }
     } else {
+      // [?] Meaning of this block ??
+      //
+
       log_develop_trace(gc, task)("OWSTTaskTerminator::do_spin_master_work() thread " PTR_FORMAT " sleeps after %u yields",
                                   p2i(Thread::current()), yield_count);
       yield_count = 0;
 
       MonitorLockerEx locker(_blocker, Mutex::_no_safepoint_check_flag);
       _spin_master = NULL;
-      locker.wait(Mutex::_no_safepoint_check_flag, WorkStealingSleepMillis);
+      locker.wait(Mutex::_no_safepoint_check_flag, WorkStealingSleepMillis); 
       if (_spin_master == NULL) {
-        _spin_master = Thread::current();
+        _spin_master = Thread::current(); // [?] points to current thread ??
       } else {
         return false;
       }
@@ -170,6 +182,8 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
       MonitorLockerEx locker(_blocker, Mutex::_no_safepoint_check_flag);
       // Termination condition reached
       if (_offered_termination == _n_threads) {
+        // all threads are terminated ??
+
         _spin_master = NULL;
         return true;
       } else if (exit) {
@@ -184,5 +198,5 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
         return false;
       }
     }
-  }
+  }  // end of while(true)
 }

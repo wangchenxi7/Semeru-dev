@@ -660,6 +660,13 @@ void* os::malloc(size_t size, MEMFLAGS flags) {
   return os::malloc(size, flags, CALLER_PC);
 }
 
+/**
+ * Tag : Who assigns the parameter NativeCallStack ? and what's the purpose ?
+ *       => Seems it's only used for MemTracker 
+ * 
+ *      [?] does this allocate space on STACK ??
+ * 
+ */
 void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
   NOT_PRODUCT(inc_stat_counter(&num_mallocs, 1));
   NOT_PRODUCT(inc_stat_counter(&alloc_bytes, size));
@@ -682,7 +689,7 @@ void* os::malloc(size_t size, MEMFLAGS memflags, const NativeCallStack& stack) {
 #ifndef ASSERT
   const size_t alloc_size = size + nmt_header_size;
 #else
-  const size_t alloc_size = GuardedMemory::get_total_size(size + nmt_header_size);
+  const size_t alloc_size = GuardedMemory::get_total_size(size + nmt_header_size);  // [?] the gurad is for stack overflow ?
   if (size + nmt_header_size > alloc_size) { // Check for rollover.
     return NULL;
   }

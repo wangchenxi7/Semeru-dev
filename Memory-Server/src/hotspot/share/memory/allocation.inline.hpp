@@ -331,8 +331,26 @@ void SemeruArrayAllocator<E>::free(E* addr, size_t length) {
 }
 
 
+template <class E> 
+E* CHeapRDMAObj<E>::test_new_operator( size_t size, size_t commit_size, char* requested_addr ){
+    tty->print("received parameters size %lu, commit_size %lu, requested_addr 0x%lx \n",
+                      size, commit_size, (size_t)requested_addr);
+
+    return NULL;
+}
 
 
+
+// Commit the space at already reserved space directly.
+template <class E>
+E* CHeapRDMAObj<E>::commit_at(size_t commit_size, MEMFLAGS flags, char* requested_addr) {
+  //size_t size = size_for(length);
+
+  // why here is !ExecMem ?
+  os::commit_memory_or_exit(requested_addr, commit_size, !ExecMem, "Allocator (commit)");  // Commit the space.
+
+  return (E*)requested_addr;
+}
 
 
 

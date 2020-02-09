@@ -75,9 +75,9 @@ bool VM_G1CollectForAllocation::doit_prologue() {
 
 
 /**
- * Tag
+ * Tag : Do a STW Young GC, it may work as a Initialize Marking GC.
  * 
- * [?] Entry of Concurrent  marking ?
+ * [?] How to invoke the Concurrent Marking from here ?
  * 
  * 
  * [?] Try to allocate objects and regions agian, before trigger the Concurrent GC ?
@@ -92,7 +92,7 @@ bool VM_G1CollectForAllocation::doit_prologue() {
  * g1h->should_do_concurrent_full_gc(_gc_cause) == true ?
  * 
  * 
- * [?] _word_size ? allocation word size ??
+ * [x] _word_size : the post-allocation word size. Try to allocate the space after GC.
  * 
  */
 void VM_G1CollectForAllocation::doit() {
@@ -100,6 +100,7 @@ void VM_G1CollectForAllocation::doit() {
 	assert(!_should_initiate_conc_mark || g1h->should_do_concurrent_full_gc(_gc_cause),
 			"only a GC locker, a System.gc(), stats update, whitebox, or a hum allocation induced GC should start a cycle");
 
+	// The _word_size is 0 for Concurrent GC.
 	if (_word_size > 0) {
 		// An allocation has been requested. So, try to do that first.
 		_result = g1h->attempt_allocation_at_safepoint(_word_size,
@@ -179,7 +180,7 @@ void VM_G1CollectForAllocation::doit() {
 			// kind of GC.
 			_result = g1h->satisfy_failed_allocation(_word_size, &_gc_succeeded);
 		} else {
-			bool should_upgrade_to_full = g1h->should_upgrade_to_full_gc(_gc_cause);
+			bool should_upgrade_to_full = g1h->should_upgrade_to_full_gc(_gc_cause);  // If this GC is for CM, no need to upgrade to full.
 
 			if (should_upgrade_to_full) {
 				// There has been a request to perform a GC to free some space. We have no

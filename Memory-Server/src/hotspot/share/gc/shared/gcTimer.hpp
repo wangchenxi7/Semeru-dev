@@ -157,6 +157,15 @@ class STWGCTimer : public GCTimer {
   virtual void register_gc_end(const Ticks& time = Ticks::now());
 };
 
+
+/**
+ * Tag : 
+ * 
+ * [?] Pause phase ? the STW Young Phase ?
+ *      Or the STW Concurrent Phase ? e.g. Remark ?
+ * 
+ *  
+ */
 class ConcurrentGCTimer : public GCTimer {
   // ConcurrentGCTimer can't be used if there is an overlap between a pause phase and a concurrent phase.
   // _is_concurrent_phase_active is used to find above case.

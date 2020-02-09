@@ -75,6 +75,11 @@ extern Monitor* Threads_lock;                    // a lock on the Threads table 
 extern Mutex*   NonJavaThreadsList_lock;         // a lock on the NonJavaThreads list
 extern Monitor* CGC_lock;                        // used for coordination between
                                                  // fore- & background GC threads.
+
+extern Monitor* SemeruCGC_lock;                  // used for coordination between
+                                                 // CPU & Memory GC threads.
+
+
 extern Monitor* STS_lock;                        // used for joining/leaving SuspendibleThreadSet.
 extern Monitor* FullGCCount_lock;                // in support of "concurrent" full gc
 extern Mutex*   SATB_Q_FL_lock;                  // Protects SATB Q
@@ -131,6 +136,7 @@ extern Mutex*   FreeList_lock;                   // protects the free region lis
 extern Mutex*   Semeru_FreeList_lock;            // protects the semeru free region list during safepoints.
 
 extern Mutex*   OldSets_lock;                    // protects the old region sets
+extern Monitor* RootRegionCompact_lock;          // used to notify that the CM threads have finished compacting the IM snapshot regions
 extern Monitor* RootRegionScan_lock;             // used to notify that the CM threads have finished scanning the IM snapshot regions
 
 extern Mutex*   Management_lock;                 // a lock used to serialize JVM management
@@ -235,7 +241,7 @@ class MutexLockerEx: public StackObj {
       assert(mutex->rank() > Mutex::special || no_safepoint_check,
         "Mutexes with rank special or lower should not do safepoint checks");
       if (no_safepoint_check)
-        _mutex->lock_without_safepoint_check();
+        _mutex->lock_without_safepoint_check();  // [?] To check who is in safepoint ?
       else
         _mutex->lock();
     }

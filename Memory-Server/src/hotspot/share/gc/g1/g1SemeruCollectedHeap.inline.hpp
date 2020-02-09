@@ -143,7 +143,7 @@ G1SemeruCollectedHeap::dirty_young_block(HeapWord* start, size_t word_size) {
 // }
 
 inline bool G1SemeruCollectedHeap::is_marked_next(oop obj) const {
-  return _cm->next_mark_bitmap()->is_marked((HeapWord*)obj);
+  return _semeru_cm->next_mark_bitmap()->is_marked((HeapWord*)obj);
 }
 
 inline bool G1SemeruCollectedHeap::is_in_cset(oop obj) {

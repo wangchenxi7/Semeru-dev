@@ -262,6 +262,7 @@ public:
 		_g1h(g1h), _cm(cm), _worker_id(worker_id) { }
 
 	// Semeru memory server
+	// [?] Seems Semeru memory server doesn't need this closure.
 	G1RootRegionScanClosure(G1SemeruCollectedHeap* g1h, G1SemeruConcurrentMark* cm, uint worker_id) :
 		//_g1h(g1h), 
 		//_cm(cm), 

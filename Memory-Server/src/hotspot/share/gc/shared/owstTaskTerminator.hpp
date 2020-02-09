@@ -45,8 +45,8 @@
 
 class OWSTTaskTerminator: public ParallelTaskTerminator {
 private:
-  Monitor*    _blocker;
-  Thread*     _spin_master;
+  Monitor*    _blocker;       // heavy locker ?  
+  Thread*     _spin_master;   // spin-lock ?
 
 public:
   OWSTTaskTerminator(uint n_threads, TaskQueueSetSuper* queue_set) :

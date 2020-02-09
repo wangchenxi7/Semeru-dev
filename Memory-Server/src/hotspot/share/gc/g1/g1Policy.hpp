@@ -317,6 +317,9 @@ public:
 
   bool need_to_start_conc_mark(const char* source, size_t alloc_word_size = 0);
 
+  // Semeru Memory Server
+  bool need_to_start_semeru_memory_server_conc_mark(const char* source, size_t alloc_word_size = 0);
+
   bool about_to_start_mixed_phase() const;
 
   // Record the start and end of an evacuation pause.

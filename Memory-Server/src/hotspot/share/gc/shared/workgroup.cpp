@@ -254,6 +254,10 @@ static GangTaskDispatcher* create_dispatcher() {
 	return new MutexGangTaskDispatcher();
 }
 
+/**
+ * [?] What's the conenction between WorkGang and Thrad ?
+ *  
+ */
 WorkGang::WorkGang(const char* name,
 									 uint  workers,
 									 bool  are_GC_task_threads,
@@ -346,6 +350,10 @@ void GangWorker::run_task(WorkData data) {
 																	name(), data._task->name(), data._worker_id, p2i(Thread::current()));
 }
 
+/**
+ * Tag : Schedule the task and its corresponding thread to run.
+ *  		 This is a infinite loop. Need the task to exit of suspend by itself.
+ */
 void GangWorker::loop() {
 	while (true) {
 		WorkData data = wait_for_task();

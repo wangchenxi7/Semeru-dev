@@ -51,7 +51,7 @@
 
 // Semeru
 inline bool G1SemeruCMIsAliveClosure::do_object_b(oop obj) {
-  return !_g1_semeru_h->is_obj_ill(obj);
+  return !_semeru_h->is_obj_ill(obj);
 }
 
 
@@ -77,8 +77,8 @@ inline bool G1SemeruCMSubjectToDiscoveryClosure::do_object_b(oop obj) {
   if (obj == NULL) {
     return false;
   }
-  assert(_g1_semeru_h->is_in_semeru_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
-  return _g1_semeru_h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
+  assert(_semeru_h->is_in_semeru_reserved(obj), "Trying to discover obj " PTR_FORMAT " not in heap", p2i(obj));
+  return _semeru_h->heap_region_containing(obj)->is_old_or_humongous_or_archive();
 }
 
 

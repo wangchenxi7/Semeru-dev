@@ -36,7 +36,6 @@
 #include "gc/g1/g1CollectorState.hpp"
 #include "gc/g1/g1ConcurrentRefine.hpp"
 #include "gc/g1/g1ConcurrentRefineThread.hpp"
-#include "gc/g1/g1ConcurrentMarkThread.inline.hpp"
 #include "gc/g1/g1EvacStats.inline.hpp"
 #include "gc/g1/g1FullCollector.hpp"
 #include "gc/g1/g1GCPhaseTimes.hpp"
@@ -100,6 +99,8 @@
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.hpp"
+#include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
+
 
 size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 
@@ -1056,8 +1057,8 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_humongous(size_t word_size) 
 // 	// be moving objects / updating references. So let's wait until
 // 	// they are done. By telling them to abort, they should complete
 // 	// early.
-// 	_cm->root_regions()->abort();
-// 	_cm->root_regions()->wait_until_scan_finished();
+// 	_semeru_cm->root_regions()->abort();
+// 	_semeru_cm->root_regions()->wait_until_scan_finished();
 
 // 	// Disable discovery and empty the discovered lists
 // 	// for the CM ref processor.
@@ -1145,7 +1146,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_humongous(size_t word_size) 
 // 	// the prev bitmap.
 // 	if (G1VerifyBitmaps) {
 // 		GCTraceTime(Debug, gc)("Clear Prev Bitmap for Verification");
-// 		_cm->clear_prev_bitmap(workers());
+// 		_semeru_cm->clear_prev_bitmap(workers());
 // 	}
 // 	// This call implicitly verifies that the next bitmap is clear after Full GC.
 // 	_verifier->check_bitmaps("Full GC End");
@@ -1576,6 +1577,8 @@ void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
 
 G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_policy) :
  	CollectedHeap(true),
+	_recv_mem_server_cset(NULL),
+	_cpu_server_flags(NULL),
 	_semeru_rs(NULL),
 	_workers(NULL),
 	_collector_policy(collector_policy),
@@ -1595,6 +1598,8 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 	//_heap_sizing_policy(NULL),
 	_collection_set(this, _g1_policy),
 	_g1_rem_set(NULL),
+	_semeru_cm(NULL),
+	_semeru_cm_thread(NULL),
 	_ref_processor_stw(NULL),
  	_is_alive_closure_stw(this),
  	_is_subject_to_discovery_stw(this),
@@ -1635,92 +1640,6 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 		tty->print("%s, a fake constructor. \n", __func__);
 }
 
-// G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_policy) :
-// 	CollectedHeap(),
-// 	_young_gen_sampling_thread(NULL),
-// 	_workers(NULL),
-// 	_collector_policy(collector_policy),
-// 	_card_table(NULL),
-// 	_soft_ref_policy(),
-// 	_old_set("Old Region Set", new OldRegionSetChecker()),
-// 	_archive_set("Archive Region Set", new ArchiveRegionSetChecker()),
-// 	_humongous_set("Humongous Region Set", new HumongousRegionSetChecker()),
-// 	_bot(NULL),
-// 	_listener(),
-// 	_hrm(NULL),
-// 	_allocator(NULL),
-// 	_verifier(NULL),
-// 	_summary_bytes_used(0),
-// 	_archive_allocator(NULL),
-// 	_survivor_evac_stats("Young", YoungPLABSize, PLABWeight),
-// 	_old_evac_stats("Old", OldPLABSize, PLABWeight),
-// 	_expand_heap_after_alloc_failure(true),
-// 	_g1mm(NULL),
-// 	_humongous_reclaim_candidates(),
-// 	_has_humongous_reclaim_candidates(false),
-// 	_hr_printer(),
-// 	_collector_state(),
-// 	_old_marking_cycles_started(0),
-// 	_old_marking_cycles_completed(0),
-// 	_eden(),
-// 	_survivor(),
-// 	_gc_timer_stw(new (ResourceObj::C_HEAP, mtGC) STWGCTimer()),
-// 	_gc_tracer_stw(new (ResourceObj::C_HEAP, mtGC) G1NewTracer()),
-// 	_g1_policy(G1Policy::create_policy(collector_policy, _gc_timer_stw)),
-// 	_heap_sizing_policy(NULL),
-// 	_collection_set(this, _g1_policy),
-// 	_hot_card_cache(NULL),
-// 	_g1_rem_set(NULL),
-// 	_dirty_card_queue_set(false),
-// 	_cm(NULL),
-// 	_cm_thread(NULL),
-// 	_cr(NULL),
-// 	_task_queues(NULL),
-// 	_evacuation_failed(false),
-// 	_evacuation_failed_info_array(NULL),
-// 	_preserved_marks_set(true /* in_c_heap */),
-// #ifndef PRODUCT
-// 	_evacuation_failure_alot_for_current_gc(false),
-// 	_evacuation_failure_alot_gc_number(0),
-// 	_evacuation_failure_alot_count(0),
-// #endif
-// 	_ref_processor_stw(NULL),
-// 	_is_alive_closure_stw(this),
-// 	_is_subject_to_discovery_stw(this),
-// 	_ref_processor_cm(NULL),
-// 	_is_alive_closure_cm(this),
-// 	_is_subject_to_discovery_cm(this),
-// 	_in_cset_fast_test() {
-
-// 	_verifier = new G1HeapVerifier(this);
-
-// 	_allocator = new G1Allocator(this);
-
-// 	_heap_sizing_policy = G1HeapSizingPolicy::create(this, _g1_policy->analytics());
-
-// 	_humongous_object_threshold_in_words = humongous_threshold_for(HeapRegion::GrainWords);
-
-// 	// Override the default _filler_array_max_size so that no humongous filler
-// 	// objects are created.
-// 	_filler_array_max_size = _humongous_object_threshold_in_words;
-
-// 	uint n_queues = ParallelGCThreads;
-// 	_task_queues = new RefToScanQueueSet(n_queues);
-
-// 	_evacuation_failed_info_array = NEW_C_HEAP_ARRAY(EvacuationFailedInfo, n_queues, mtGC);
-
-// 	for (uint i = 0; i < n_queues; i++) {
-// 		RefToScanQueue* q = new RefToScanQueue();
-// 		q->initialize();
-// 		_task_queues->register_queue(i, q);
-// 		::new (&_evacuation_failed_info_array[i]) EvacuationFailedInfo();
-// 	}
-
-// 	// Initialize the G1EvacuationFailureALot counters and flags.
-// 	NOT_PRODUCT(reset_evacuation_should_fail();)
-
-// 	guarantee(_task_queues != NULL, "task_queues allocation failure.");
-// }
 
 /**
  * Tag : Check the page size of current reserved heap, 4k or huge page.
@@ -1989,6 +1908,25 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 																																	(size_t)(rdma_rs.base() + rdma_rs.size()) );
 	#endif
 
+	//
+	// Allocate and intialize the meta data RDMA structure here
+	//
+
+	// For the memory_server_cset, we need to allocate space && invoke construction, so it should be operator new().
+	// if _mem_server_cset->_num_regions != 0, means new data are sent to Semeru memory server
+	//	  the real data is stored in flexible array, _mem_server_cset->_region_cset[]
+	_recv_mem_server_cset 	= new(MEMORY_SERVER_CSET_SIZE, rdma_rs.base() + MEMORY_SERVER_CSET_OFFSET) received_memory_server_cset();
+	_cpu_server_flags			=	new(FLAGS_OF_CPU_SERVER_STATE_SIZE, rdma_rs.base() + FLAGS_OF_CPU_SERVER_STATE_OFFSET) flags_of_cpu_server_state();
+
+
+
+
+
+	//
+	// End of RDMA structure section
+	//
+
+
 	// Carve out the space after reserved_for_rdma_data as a the reserved G1 Java heap space.
  	ReservedSpace g1_rs = heap_rs.last_part(reserved_for_rdma_data);   
 	#ifdef ASSERT
@@ -2126,14 +2064,14 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	// Create the G1ConcurrentMark data structure and thread.
 	// (Must do this late, so that "max_regions" is defined.)
-	//_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
+	//_semeru_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
 	
-	_cm = new G1SemeruConcurrentMark(this, NULL, NULL);   // G1 GC related data structure
-	if (_cm == NULL || !_cm->completed_initialization()) {
+	_semeru_cm = new G1SemeruConcurrentMark(this, NULL, NULL);   // G1 GC related data structure
+	if (_semeru_cm == NULL || !_semeru_cm->completed_initialization()) {
 		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
 		return JNI_ENOMEM;
 	}
-	_cm_thread = _cm->cm_thread(); // Semeru should have its own CM thread ? or use the same thread but unique tracing closure ?
+	_semeru_cm_thread = _semeru_cm->semeru_cm_thread(); // Semeru should have its own CM thread ? or use the same thread but unique tracing closure ?
 
 
 	//debug - Pass
@@ -2199,6 +2137,11 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	_collection_set.initialize(max_regions());
 
+
+	// debug
+	// Wake up the concurrent threads waiting on SemeruCGC_lock
+	wake_up_semeru_mem_server_concurrent_gc();
+
  	return JNI_OK;
 }
 
@@ -2222,7 +2165,7 @@ void G1SemeruCollectedHeap::stop() {
 	// // that are destroyed during shutdown.
 	// _cr->stop();
 	// _young_gen_sampling_thread->stop();
-	// _cm_thread->stop();
+	// _semeru_cm_thread->stop();
 	// if (G1StringDedup::is_enabled()) {
 	// 	G1StringDedup::stop();
 	// }
@@ -2241,7 +2184,11 @@ void G1SemeruCollectedHeap::safepoint_synchronize_end() {
 // }
 
 void G1SemeruCollectedHeap::post_initialize() {
-	CollectedHeap::post_initialize();
+	
+	// [?] For Semeru, no need to re-initialize the base CollectedHeap's fields.
+	//
+	//CollectedHeap::post_initialize();
+	
 	ref_processing_init();
 }
 
@@ -2484,7 +2431,7 @@ size_t G1SemeruCollectedHeap::used_unlocked() const {
 // 	// is set) so that if a waiter requests another System.gc() it doesn't
 // 	// incorrectly see that a marking cycle is still in progress.
 // 	if (concurrent) {
-// 		_cm_thread->set_idle();
+// 		_semeru_cm_thread->set_idle();
 // 	}
 
 // 	// This notify_all() will ensure that a thread that called
@@ -2720,11 +2667,11 @@ bool G1SemeruCollectedHeap::supports_concurrent_phase_control() const {
 }
 
 const char* const* G1SemeruCollectedHeap::concurrent_phases() const {
-	return _cm_thread->concurrent_phases();
+	return _semeru_cm_thread->concurrent_phases();
 }
 
 bool G1SemeruCollectedHeap::request_concurrent_phase(const char* phase) {
-	return _cm_thread->request_concurrent_phase(phase);
+	return _semeru_cm_thread->request_concurrent_phase(phase);
 }
 
 class SemeruPrintRegionClosure: public HeapRegionClosure {
@@ -2806,17 +2753,17 @@ void G1SemeruCollectedHeap::print_extended_on(outputStream* st) const {
 void G1SemeruCollectedHeap::print_on_error(outputStream* st) const {
 // 	this->CollectedHeap::print_on_error(st);
 
-// 	if (_cm != NULL) {
+// 	if (_semeru_cm != NULL) {
 // 		st->cr();
-// 		_cm->print_on_error(st);
+// 		_semeru_cm->print_on_error(st);
 // 	}
 }
 
 void G1SemeruCollectedHeap::print_gc_threads_on(outputStream* st) const {
 // 	workers()->print_worker_threads_on(st);
-// 	_cm_thread->print_on(st);
+// 	_semeru_cm_thread->print_on(st);
 // 	st->cr();
-// 	_cm->print_worker_threads_on(st);
+// 	_semeru_cm->print_worker_threads_on(st);
 // 	_cr->print_threads_on(st);
 // 	_young_gen_sampling_thread->print_on(st);
 // 	if (G1StringDedup::is_enabled()) {
@@ -2826,8 +2773,8 @@ void G1SemeruCollectedHeap::print_gc_threads_on(outputStream* st) const {
 
 void G1SemeruCollectedHeap::gc_threads_do(ThreadClosure* tc) const {
 // 	workers()->threads_do(tc);
-// 	tc->do_thread(_cm_thread);
-// 	_cm->threads_do(tc);
+// 	tc->do_thread(_semeru_cm_thread);
+// 	_semeru_cm->threads_do(tc);
 // 	_cr->threads_do(tc);
 // 	tc->do_thread(_young_gen_sampling_thread);
 // 	if (G1StringDedup::is_enabled()) {
@@ -3006,13 +2953,20 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
  	return result;
 }
 
-// void G1SemeruCollectedHeap::do_concurrent_mark() {
-// 	MutexLockerEx x(CGC_lock, Mutex::_no_safepoint_check_flag);
-// 	if (!_cm_thread->in_progress()) {
-// 		_cm_thread->set_started();
-// 		CGC_lock->notify();
-// 	}
-// }
+/**
+ * Semeru Memory Server - Wake up the Semeru Concurrent Threads waiting on the SmeruCGC_lock
+ * 
+ * 1）Let VM Thread acquire the SemeruCGC_lock  // [?] Only VM Thread's can invoke this ??
+ * 2) Wake up all the Semeru concurrent threads waiting on the SemeruCGC_lock.
+ * 
+ */
+void G1SemeruCollectedHeap::do_concurrent_mark() {
+	MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
+	if (!_semeru_cm_thread->in_progress()) {
+		_semeru_cm_thread->set_started();
+		SemeruCGC_lock->notify();
+	}
+}
 
 // size_t G1SemeruCollectedHeap::pending_card_num() {
 // 	size_t extra_cards = 0;
@@ -3246,7 +3200,7 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 // 	// root regions as it's the only way to ensure that all the
 // 	// objects on them have been correctly scanned before we start
 // 	// moving them during the GC.
-// 	bool waited = _cm->root_regions()->wait_until_scan_finished();
+// 	bool waited = _semeru_cm->root_regions()->wait_until_scan_finished();
 // 	double wait_time_ms = 0.0;
 // 	if (waited) {
 // 		double scan_wait_end = os::elapsedTime();
@@ -3279,22 +3233,8 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 
 // /**
 //  * Tag : Entry, the Stop-The-World Young GC.
-//  * 
-//  * 
-//  * [?] Meaning of safepoint ?
-//  *     => Mutator is suspended ?
-//  * 
-//  * [?] How many phases does the Young GC have ?
-//  *    a. Root scan
-//  *    b. Old to Yong 
-//  *    c. Steal work ?
-//  * 
-//  * 
-//  * More Explanation.
-//  * 
-//  * [x] Who sets the _in_initial_mark_gc to trigger the Concurrent marking ??
-//  *    => G1Policy::decide_on_conc_mark_initiation() 
-//  *    => This function check if the heap usage/occupancy exceeds the intial threshold.
+//  * 	
+//  *  Semeru Memory Server doesn't need STW Young GC.
 //  * 
 //  * 
 //  */
@@ -3333,7 +3273,7 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 // 	//
 // 	//
 // 	// We should not be doing initial mark unless the conc mark thread is running
-// 	if (!_cm_thread->should_terminate()) {
+// 	if (!_semeru_cm_thread->should_terminate()) {
 // 		// This call will decide whether this pause is an initial-mark
 // 		// pause. If it is, in_initial_mark_gc() will return true
 // 		// for the duration of this pause.
@@ -3360,7 +3300,7 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 // 			// We are about to start a marking cycle, so we increment the
 // 			// full collection counter.
 // 			increment_old_marking_cycles_started();
-// 			_cm->gc_tracer_cm()->set_gc_cause(gc_cause());
+// 			_semeru_cm->gc_tracer_cm()->set_gc_cause(gc_cause());
 // 		}
 
 // 		_gc_tracer_stw->report_yc_type(collector_state()->yc_type());
@@ -3474,7 +3414,7 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 
 // 				// We call this after finalize_cset() to
 // 				// ensure that the CSet has been finalized.
-// 				_cm->verify_no_cset_oops();
+// 				_semeru_cm->verify_no_cset_oops();
 
 // 				if (_hr_printer.is_active()) {
 // 					G1PrintCollectionSetClosure cl(&_hr_printer);
@@ -3562,7 +3502,7 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 
 // 				// We redo the verification but now wrt to the new CSet which
 // 				// has just got initialized after the previous CSet was freed.
-// 				_cm->verify_no_cset_oops();
+// 				_semeru_cm->verify_no_cset_oops();
 
 // 				// This timing is only used by the ergonomics to handle our pause target.
 // 				// It is unclear why this should not include the full pause. We will
@@ -3648,6 +3588,41 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 
 // 	return true;
 // }
+
+
+
+/**
+ * Semeru Memory Server - Wake up the concurrent threads waiting on lock.
+ * 	1) This function is executed by VM Thread.
+ *  2) The 2-sided RDMA message is received by a native thread. 
+ * 	
+ *  [?] How can we let  thread 2) to inform	thread 1) ?
+ * 
+ */
+void G1SemeruCollectedHeap::wake_up_semeru_mem_server_concurrent_gc(){
+
+	//bool should_start_conc_mark = message from RDMA signal 
+
+	// Debug
+	bool should_start_conc_mark = true;
+
+	if (should_start_conc_mark) {
+		// CAUTION: after the doConcurrentMark() call below,
+		// the concurrent marking thread(s) could be running
+		// concurrently with us. Make sure that anything after
+		// this point does not assume that we are the only GC thread
+		// running. Note: of course, the actual marking work will
+		// not start until the safepoint itself is released in
+		// SuspendibleThreadSet::desynchronize().
+		do_concurrent_mark();
+	}
+
+}
+
+
+
+
+
 
 // void G1SemeruCollectedHeap::remove_self_forwarding_pointers() {
 // 	G1ParRemoveSelfForwardPtrsTask rsfp_task;
@@ -4150,7 +4125,7 @@ bool G1SemeruSTWSubjectToDiscoveryClosure::do_object_b(oop obj) {
 // 		oop pll_head = Universe::reference_pending_list();
 // 		if (pll_head != NULL) {
 // 			// Any valid worker id is fine here as we are in the VM thread and single-threaded.
-// 			_cm->mark_in_next_bitmap(0 /* worker_id */, pll_head);
+// 			_semeru_cm->mark_in_next_bitmap(0 /* worker_id */, pll_head);
 // 		}
 // 	}
 // }
@@ -5222,7 +5197,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 
 // 	bool const during_im = collector_state()->in_initial_mark_gc();
 // 	if (during_im && allocated_bytes > 0) {
-// 		_cm->root_regions()->add(alloc_region);
+// 		_semeru_cm->root_regions()->add(alloc_region);
 // 	}
 // 	_hr_printer.retire(alloc_region);
 // }
@@ -5347,6 +5322,7 @@ void G1SemeruCollectedHeap::unregister_nmethod(nmethod* nm) {
 // 	CodeCache::blobs_do(&blob_cl);
 // }
 
+// [??] Seems that Semeru don't need this init ??
 void G1SemeruCollectedHeap::initialize_serviceability() {
 	_g1mm->initialize_serviceability();
 }

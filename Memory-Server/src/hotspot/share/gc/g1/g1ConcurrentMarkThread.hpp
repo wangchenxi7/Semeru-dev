@@ -28,6 +28,9 @@
 #include "gc/shared/concurrentGCPhaseManager.hpp"
 #include "gc/shared/concurrentGCThread.hpp"
 
+// Semeru
+#include "gc/shared/rdmaStructure.hpp"
+
 class G1ConcurrentMark;
 class G1Policy;
 
@@ -130,6 +133,12 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   ConcurrentGCPhaseManager::Stack* phase_manager_stack() {
     return &_phase_manager_stack;
   }
+
+  //
+  // Semeru Memory Server
+  //
+  void dispatch_received_regions(received_memory_server_cset* mem_server_cset);
+
 };
 
 #endif // SHARE_VM_GC_G1_G1CONCURRENTMARKTHREAD_HPP

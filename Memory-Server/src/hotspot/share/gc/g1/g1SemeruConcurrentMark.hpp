@@ -37,7 +37,6 @@
 #include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.hpp"
 
 class ConcurrentGCTimer;
-class G1ConcurrentMarkThread;
 class G1CMOopClosure;
 class G1OldTracer;
 class G1RegionToSpaceMapper;
@@ -47,6 +46,7 @@ class G1SurvivorRegions;
 class G1SemeruCMTask;
 class G1SemeruCollectedHeap;
 class G1SemeruConcurrentMark;
+class G1SemeruConcurrentMarkThread;
 
 
 #ifdef _MSC_VER
@@ -119,10 +119,10 @@ typedef GenericTaskQueueSet<G1SemeruCMTaskQueue, mtGC> G1SemeruCMTaskQueueSet;
 // are alive. An instance is also embedded into the
 // reference processor as the _is_alive_non_header field
 class G1SemeruCMIsAliveClosure : public BoolObjectClosure {
-  G1SemeruCollectedHeap *_g1_semeru_h;
+  G1SemeruCollectedHeap *_semeru_h;
 
 public:
-  G1SemeruCMIsAliveClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  G1SemeruCMIsAliveClosure(G1SemeruCollectedHeap* semeru_h) : _semeru_h(semeru_h) {}
 
   //implement the virtual function.
   bool do_object_b(oop obj);
@@ -130,10 +130,10 @@ public:
 
 
 class G1SemeruCMSubjectToDiscoveryClosure : public BoolObjectClosure {
-  G1SemeruCollectedHeap *_g1_semeru_h;
+  G1SemeruCollectedHeap *_semeru_h;
 
 public:
-  G1SemeruCMSubjectToDiscoveryClosure(G1SemeruCollectedHeap* g1_semeru_h) : _g1_semeru_h(g1_semeru_h) {}
+  G1SemeruCMSubjectToDiscoveryClosure(G1SemeruCollectedHeap* semeru_h) : _semeru_h(semeru_h) {}
 
   // Implement the pure virtual function.
   bool do_object_b(oop obj);
@@ -256,56 +256,146 @@ private:
 // references.
 // Root regions comprise of the complete contents of survivor regions, and any
 // objects copied into old gen during GC.
-class G1SemeruCMRootRegions {
-  HeapRegion** _root_regions;
-  size_t const _max_regions;
+// class G1SemeruCMRootRegions {
+//   HeapRegion** _root_regions;
+//   size_t const _max_regions;
 
-  volatile size_t _num_root_regions; // Actual number of root regions.
+//   volatile size_t _num_root_regions; // Actual number of root regions.
 
-  volatile size_t _claimed_root_regions; // Number of root regions currently claimed.
+//   volatile size_t _claimed_root_regions; // Number of root regions currently claimed.
 
+//   volatile bool _scan_in_progress;
+//   volatile bool _should_abort;
+
+//   void notify_scan_done();
+
+// public:
+//   G1SemeruCMRootRegions(uint const max_regions);
+//   ~G1SemeruCMRootRegions();
+
+//   // Reset the data structure to allow addition of new root regions.
+//   void reset();
+
+//   void add(HeapRegion* hr);
+
+//   // Reset the claiming / scanning of the root regions.
+//   void prepare_for_scan();
+
+//   // Forces get_next() to return NULL so that the iteration aborts early.
+//   void abort() { _should_abort = true; }
+
+//   // Return true if the CM thread are actively scanning root regions,
+//   // false otherwise.
+//   bool scan_in_progress() { return _scan_in_progress; }
+
+//   // Claim the next root region to scan atomically, or return NULL if
+//   // all have been claimed.
+//   HeapRegion* claim_next();
+
+//   // The number of root regions to scan.
+//   uint num_root_regions() const;
+
+//   void cancel_scan();
+
+//   // Flag that we're done with root region scanning and notify anyone
+//   // who's waiting on it. If aborted is false, assume that all regions
+//   // have been claimed.
+//   void scan_finished();
+
+//   // If CM threads are still scanning root regions, wait until they
+//   // are done. Return true if we had to wait, false otherwise.
+//   bool wait_until_scan_finished();
+// };
+
+
+/**
+ * Semeru Memory Server - Regions received from CPU server.
+ *  2 categories 
+ *    1) CM Scanned Regions, already scanned by CM. Remark adn evacuate the regions during STW window.
+ *    2) Freshly evicted Regions, apply CM on these Regions.
+ * 
+ * This Structure is only built and used in Semeru Memory Server.
+ *    This structure is built from the region index set from CPU server.
+ */
+class G1SemeruCMCSetRegions {
+  HeapRegion** _cm_scanned_regions;
+  HeapRegion** _freshly_evicted_regions;
+
+  //size_t const _max_cm_scanned_regions;
+  //size_t const _max_freshly_evicted_regions;
+  size_t const _max_regions;    // both cm_scanned and freshly_evicted use the same value.
+
+  volatile size_t _num_cm_scanned_regions; // Actual number of cm scanned regions.
+  volatile size_t _num_freshly_evicted_regions;   // Actual number of freshly evicted regions.
+
+  volatile size_t _claimed_cm_scanned_regions;
+  volatile size_t _claimed_freshly_evicted_regions; // Number of root regions currently claimed.
+
+  volatile bool _compact_in_progress;
   volatile bool _scan_in_progress;
-  volatile bool _should_abort;
 
-  void notify_scan_done();
+  volatile bool _should_abort_compact;
+  volatile bool _should_abort_scan;
+
+  void notify_compact_done();     // [?] Notify the CPU server, STW compaction is done, can trigger the field update phase.
+  void notify_scan_done();        // [?] Do we need this ?
 
 public:
-  G1SemeruCMRootRegions(uint const max_regions);
-  ~G1SemeruCMRootRegions();
+   G1SemeruCMCSetRegions(uint const max_regions);
+   ~G1SemeruCMCSetRegions();
 
   // Reset the data structure to allow addition of new root regions.
   void reset();
 
-  void add(HeapRegion* hr);
+  void add_cm_scanned_regions(HeapRegion* hr);
+  void add_freshly_evicted_regions(HeapRegion* hr);
 
   // Reset the claiming / scanning of the root regions.
+  void prepare_for_compact();
   void prepare_for_scan();
 
   // Forces get_next() to return NULL so that the iteration aborts early.
-  void abort() { _should_abort = true; }
+  void abort_compact() { _should_abort_compact = true; }
+  void abort_scan()    { _should_abort_scan = true; }
 
+
+  bool compact_in_progress()  { return _compact_in_progress;  }
   // Return true if the CM thread are actively scanning root regions,
   // false otherwise.
-  bool scan_in_progress() { return _scan_in_progress; }
+  bool scan_in_progress()     { return _scan_in_progress; }
 
   // Claim the next root region to scan atomically, or return NULL if
   // all have been claimed.
-  HeapRegion* claim_next();
+  HeapRegion* claim_cm_scanned_next();
+  HeapRegion* claim_freshly_evicted_next();
 
   // The number of root regions to scan.
-  uint num_root_regions() const;
+  size_t num_cm_scanned_regions() const;
+  size_t num_freshly_evicted_regions() const;
 
+  bool is_compact_finished();
+  bool is_cm_scan_finished();
+
+  void cancel_compact();
   void cancel_scan();
 
   // Flag that we're done with root region scanning and notify anyone
   // who's waiting on it. If aborted is false, assume that all regions
   // have been claimed.
+  void compact_finished();
   void scan_finished();
 
   // If CM threads are still scanning root regions, wait until they
   // are done. Return true if we had to wait, false otherwise.
+  bool wait_until_compact_finished();
   bool wait_until_scan_finished();
 };
+
+
+
+
+
+
 
 /** 
  * This class manages data structures and methods for doing liveness analysis in
@@ -325,7 +415,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   // [?] How many concurrent marking threads ??
   //
-  G1ConcurrentMarkThread*     _cm_thread;       // The thread doing the work
+  G1SemeruConcurrentMarkThread*     _semeru_cm_thread;       // The thread doing the work
   G1SemeruCollectedHeap*      _semeru_h;       // The heap
   
   bool                    _completed_initialization; // Set to true when initialization is complete
@@ -355,7 +445,8 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // Root region tracking and claiming
   // [?] Initial phase add regions into the Root Region ??
   //
-  G1SemeruCMRootRegions   _root_regions;
+  // G1SemeruCMRootRegions   _root_regions;
+  G1SemeruCMCSetRegions   _mem_server_cset;
 
   // For grey objects
 
@@ -376,6 +467,9 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   G1SemeruCMTask**              _tasks;         // Task queue array (max_worker_id length)
 
   G1SemeruCMTaskQueueSet*       _task_queues;   // [?]Task queue set, each G1SemeruCMTask->_task_queue points  here ?
+
+  // [?] What's the working mechanism for this terminator ?
+  //
   TaskTerminator                _terminator;    // For termination
 
   // Two sync barriers that are used to synchronize tasks when an
@@ -387,7 +481,12 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // ensure, that no task starts doing work before all data
   // structures (local and global) have been re-initialized. When they
   // exit it, they are free to start working again.
-  WorkGangBarrierSync     _first_overflow_barrier_sync;
+  //
+  // [?] What does the overflow mean ?? 
+  //    transfer task_entry from local to global marking stack ??
+  //
+  //
+  WorkGangBarrierSync     _first_overflow_barrier_sync;      
   WorkGangBarrierSync     _second_overflow_barrier_sync;
 
   // This is set by any task, when an overflow on the global data
@@ -416,7 +515,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   double*   _accum_task_vtime;   // Accumulated task vtime
 
-  WorkGang* _concurrent_workers;     // [?] Manage the concurrent GC threads
+  WorkGang* _concurrent_workers;     // [?] Manage the concurrent GC threads. Execute the G1SemeruCMTask.
   uint      _num_concurrent_workers; // The number of marking worker threads we're using
   uint      _max_concurrent_workers; // Maximum number of marking worker threads
 
@@ -481,6 +580,8 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // method. So, this way, each task will spend very little time in
   // claim_region() and is allowed to call the regular clock method
   // frequently.
+  //HeapRegion* claim_region(uint worker_id);
+
   HeapRegion* claim_region(uint worker_id);
 
   // Determines whether we've run out of regions to scan. Note that
@@ -490,14 +591,12 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // SATB guarantees (i.e. their TAMS will be equal to bottom).
   bool out_of_regions() { return _finger >= _heap.end(); }
 
+
   // Semeru Memory Server
   // If the regions in memory server CSet are all processed.
-  bool out_of_memory_server_cset()  {  
-
-    // debug
-    tty->print("%s, this function is not fully implementted yet. \n",__func__);
-
-    return _finger == NULL;  
+  bool out_of_memory_server_cset()  {
+    // both cm_scanned and freshly_evicted regions are empty.
+    return (mem_server_cset()->is_compact_finished() && mem_server_cset()->is_cm_scan_finished() );
   }
 
   // Returns the task with the given id
@@ -565,7 +664,11 @@ public:
   size_t partial_mark_stack_size_target() const { return _global_mark_stack.capacity() / 3; }
   bool mark_stack_empty() const                 { return _global_mark_stack.is_empty(); }
 
-  G1SemeruCMRootRegions* root_regions() { return &_root_regions; }
+  //G1SemeruCMRootRegions* root_regions() { return &_root_regions; }
+
+  // Transfer content from G1SemeruCollectedHeap->_recv_mem_server_cset
+  // The structure of G1SemeruCMCSetRegions support Multiple-Thread safe.
+  G1SemeruCMCSetRegions*  mem_server_cset()   { return &_mem_server_cset;  }
 
   void concurrent_cycle_start();
   // Abandon current marking iteration due to a Full GC.
@@ -586,14 +689,14 @@ public:
   // Attempts to steal an object from the task queues of other tasks
   bool try_stealing(uint worker_id, G1SemeruTaskQueueEntry& task_entry);
 
-  G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1_semeru_h,
+  G1SemeruConcurrentMark(G1SemeruCollectedHeap* semeru_h,
                    G1RegionToSpaceMapper* prev_bitmap_storage,
                    G1RegionToSpaceMapper* next_bitmap_storage);
 
 
   ~G1SemeruConcurrentMark();
 
-  G1ConcurrentMarkThread* cm_thread() { return _cm_thread; }   //[?] Change to Semeru CM thread
+  G1SemeruConcurrentMarkThread* semeru_cm_thread() { return _semeru_cm_thread; }   //[?] Change to Semeru CM thread
 
   const G1CMBitMap* const prev_mark_bitmap() const { return _prev_mark_bitmap; }
   G1CMBitMap* next_mark_bitmap() const { return _next_mark_bitmap; }
@@ -697,8 +800,10 @@ private:
 /** 
  * A class representing a marking task.
  *  
- *  Task isn't a Thread. Task is the computation to be executed by the thread.
- *    All th closures are implemented in the CMTask?
+ *  Task isn't a Thread. Task is the computation to be executed by ONE thread.
+ *  Contents of the G1SemeruCMTask:
+ *    1) The attadched concurrent thread, recorded by _worker_id, G1SemeruConcurrentMark->_concurrent_workers[_worker_id]
+ *    2) Trace the cliamed Region, pointed by _curr_region.
  * 
  */
 class G1SemeruCMTask : public TerminatorTerminator {
@@ -720,15 +825,17 @@ private:
 
   G1SemeruCMObjArrayProcessor       _objArray_processor;  // Specified to process big object array.
 
-  uint                              _worker_id;
+  uint                              _worker_id;     // [?] Only one concurrent Thread can cliam this Region.
+                                                    // Let other available concurrent threads to steal work from here ?
+
   G1SemeruCollectedHeap*            _semeru_h;      // Only process the semeru heap.
   G1SemeruConcurrentMark*           _semeru_cm;
-  G1CMBitMap*                       _next_mark_bitmap;
+  G1CMBitMap*                       _next_mark_bitmap;    // abandoned 
 
   G1CMBitMap*                       _alive_bitmap;  // points to the scanned Region's alive_bitmap.
   G1CMBitMap*                       _dest_bitmap;
 
-  // the task queue of this task
+  // the task(entry) queue of this task
   G1SemeruCMTaskQueue*              _semeru_task_queue;      // The StarTask queue for CM
 
   G1RegionMarkStatsCache      _mark_stats_cache;    // [?] What's this StatCache used for ??
@@ -743,7 +850,7 @@ private:
   // Oop closure used for iterations over oops
   //G1CMOopClosure*             _cm_oop_closure;    // [??] The closure for concurrent marking. Trace an object.
 
-  G1SemeruCMOopClosure*         _semeru_cm_oop_closure; // the closure for scan a marked object
+  G1SemeruCMOopClosure*       _semeru_cm_oop_closure; // the closure for scan a marked object
 
   // Region this task is scanning, NULL if we're not scanning any
   HeapRegion*                 _curr_region;
@@ -870,6 +977,11 @@ public:
                        bool do_termination,
                        bool is_serial);
 
+  // Semeru : Concurrent or STW Remark a claimed Region.
+  // [?] How to let multiple concurrent workers to scan a single Region ??
+  void do_semeru_marking_step(double time_target_ms,
+															 bool do_termination,
+															 bool is_serial);
 
   //
   // Semeru
@@ -881,9 +993,10 @@ public:
   inline bool mark_in_alive_bitmap(uint const worker_id, oop const obj);
   inline bool make_reference_alive(oop obj); 
 
-  void do_semeru_marking_step(double time_target_ms,
-															 bool do_termination,
-															 bool is_serial);
+
+  // [?] The closure for Semeru memory server compact.
+  //
+  void  semeru_mem_server_compact();
 
 
   // These two calls start and stop the timer

@@ -322,6 +322,8 @@ uint G1CMRootRegions::num_root_regions() const {
 	return (uint)_num_root_regions;
 }
 
+
+
 void G1CMRootRegions::notify_scan_done() {
 	MutexLockerEx x(RootRegionScan_lock, Mutex::_no_safepoint_check_flag);
 	_scan_in_progress = false;

@@ -58,7 +58,7 @@
 // Semeru
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/SemeruHeapRegionManager.hpp"  // G1SemeruCollectedHeap --> SemeruHeapRegionManager, the invoke sequence.
-
+#include "gc/shared/rdmaStructure.hpp"
 
 // A "G1SemeruCollectedHeap" is an implementation of a java memory pool in HotSpot for CPU server.
 // It uses the modified "Garbage First" heap organization and algorithm, which
@@ -85,7 +85,7 @@ class G1RemSet;
 class G1YoungRemSetSamplingThread;
 class HeapRegionRemSetIterator;
 // class G1ConcurrentMark;
-class G1ConcurrentMarkThread;
+//class G1ConcurrentMarkThread;
 class G1ConcurrentRefine;
 class GenerationCounters;
 class STWGCTimer;
@@ -105,6 +105,7 @@ class G1EvacSummary;
 // Used for the declaration in G1SemeruSTWIsAliveClosure.
 class G1SemeruCollectedHeap;
 class G1SemeruCollectorPolicy;
+class G1SemeruConcurrentMarkThread;
 
 
 typedef OverflowTaskQueue<StarTask, mtGC>         RefToScanQueue;
@@ -177,6 +178,41 @@ class G1SemeruCollectedHeap : public CollectedHeap {
 
   // Testing classes.
   friend class G1CheckCSetFastTableClosure;
+
+//
+// Fields needed to be initialized by CPU server
+//
+
+
+
+//
+// Fields needed to be updated by CPU Server
+//
+private :
+
+  // receive data from CPU server.
+  // fixed offset ?
+  received_memory_server_cset* _recv_mem_server_cset;
+
+
+public :
+
+  // This flag can only be setted by CPU server via the RDMA.
+  // Memory server keeps reading its value to know the runging state of CPU server.
+  // Memory server has to read  the value from memory every time.
+  // the fileds of flags_of_cpu_server_state are  all volatile.
+  flags_of_cpu_server_state* _cpu_server_flags;
+
+  received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
+  bool is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  }
+
+//
+// Fields needed to be sent to CPU server
+//
+
+
+
+
 
 private:
 //   G1YoungRemSetSamplingThread* _young_gen_sampling_thread;
@@ -262,6 +298,7 @@ private:
 //   bool _expand_heap_after_alloc_failure;
 
   // Helper for monitoring and management support.
+  // [?] What's the purpose of this ??
   G1MonitoringSupport* _g1mm;
 
 //   // Records whether the region at the given index is (still) a
@@ -760,11 +797,11 @@ private:
   void shrink(size_t expand_bytes);
 //   void shrink_helper(size_t expand_bytes);
 
-//   #if TASKQUEUE_STATS
-//   static void print_taskqueue_stats_hdr(outputStream* const st);
-//   void print_taskqueue_stats() const;
-//   void reset_taskqueue_stats();
-//   #endif // TASKQUEUE_STATS
+  #if TASKQUEUE_STATS
+  static void print_taskqueue_stats_hdr(outputStream* const st);
+  void print_taskqueue_stats() const;
+  void reset_taskqueue_stats();
+  #endif // TASKQUEUE_STATS
 
   // Schedule the VM operation that will do an evacuation pause to
   // satisfy an allocation request of word_size. *succeeded will
@@ -838,8 +875,8 @@ private:
 //   void abandon_collection_set(G1CollectionSet* collection_set);
 
   // The concurrent marker (and the thread it runs in.)
-  G1SemeruConcurrentMark* _cm;
-  G1ConcurrentMarkThread* _cm_thread;
+  G1SemeruConcurrentMark* _semeru_cm;
+  G1SemeruConcurrentMarkThread* _semeru_cm_thread;
 
 //   // The concurrent refiner.
 //   G1ConcurrentRefine* _cr;
@@ -982,9 +1019,9 @@ private:
   G1SemeruCMSubjectToDiscoveryClosure _is_subject_to_discovery_cm;
 public:
 
-//   RefToScanQueue *task_queue(uint i) const;
+  //  RefToScanQueue *task_queue(uint i) const;
 
-//   uint num_task_queues() const;
+  //  uint num_task_queues() const;
 
 //   // A set of cards where updates happened during the GC
 //   DirtyCardQueueSet& dirty_card_queue_set() { return _dirty_card_queue_set; }
@@ -1078,6 +1115,9 @@ public:
 //   G1NewTracer* gc_tracer_stw() const { return _gc_tracer_stw; }
 
   // The Concurrent Marking reference processor...
+  //  [?] The _ref_processor_cm is only used for special data ?
+  //      metadata, klass and cld ? 
+  //
   ReferenceProcessor* ref_processor_cm() const { return _ref_processor_cm; }
 
   size_t unused_committed_regions_in_bytes() const;
@@ -1350,12 +1390,14 @@ public:
 //   // *** Stuff related to concurrent marking.  It's not clear to me that so
 //   // many of these need to be public.
 
-//   // The functions below are helper functions that a subclass of
-//   // "CollectedHeap" can use in the implementation of its virtual
-//   // functions.
-//   // This performs a concurrent marking of the live objects in a
-//   // bitmap off to the side.
-//   void do_concurrent_mark();
+  // The functions below are helper functions that a subclass of
+  // "CollectedHeap" can use in the implementation of its virtual
+  // functions.
+  // This performs a concurrent marking of the live objects in a
+  // bitmap off to the side.
+  void wake_up_semeru_mem_server_concurrent_gc();
+
+  void do_concurrent_mark();
 
   bool is_marked_next(oop obj) const;
 
@@ -1365,7 +1407,7 @@ public:
   // is not marked, and c) it is not in an archive region.
   bool is_obj_dead(const oop obj, const HeapRegion* hr) const {
     return
-      hr->is_obj_dead(obj, _cm->prev_mark_bitmap()) &&
+      hr->is_obj_dead(obj, _semeru_cm->prev_mark_bitmap()) &&
       !hr->is_archive();
   }
 
@@ -1392,7 +1434,7 @@ public:
 //   inline bool is_obj_dead_full(const oop obj, const HeapRegion* hr) const;
 //   inline bool is_obj_dead_full(const oop obj) const;
 
-  G1SemeruConcurrentMark* concurrent_mark() const { return _cm; }
+  G1SemeruConcurrentMark* concurrent_mark() const { return _semeru_cm; }
 
 //   // Refinement
 

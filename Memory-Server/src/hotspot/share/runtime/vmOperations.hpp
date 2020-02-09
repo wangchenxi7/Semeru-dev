@@ -126,6 +126,11 @@
   template(PrintMetadata)                         \
   template(GTestExecuteAtSafepoint)               \
 
+
+/**
+ * The VM_operation decide if we need to stop the mutators when shcedule it. 
+ * 
+ */
 class VM_Operation: public CHeapObj<mtInternal> {
  public:
   enum Mode {

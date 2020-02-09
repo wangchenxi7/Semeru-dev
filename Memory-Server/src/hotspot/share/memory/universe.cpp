@@ -1121,6 +1121,28 @@ void universe_post_module_init() {
 	Universe::_module_initialized = true;
 }
 
+
+/**
+ * Semeru - post_initialization dedicated for Semeru GC
+ * 					These fields need to be post-initialized separetely. 
+ * 
+ */
+bool semeru_universe_post_init() {
+
+	// const char* target_gc_name="G1";
+	// controlled by -XX:SemeruEnableMemPool && -XX:+UseG1GC.
+	//if( SemeruEnableMemPool && (_collectedHeap->kind() == CollectedHeap::G1) ){
+
+	if( SemeruEnableMemPool && Universe::semeru_heap()!=NULL ){
+		// ("weak") refs processing infrastructure initialization
+		Universe::semeru_heap()->post_initialize();
+	}
+
+	return true;
+}
+
+
+
 bool universe_post_init() {
 	assert(!is_init_completed(), "Error: initialization not yet completed!");
 	Universe::_fully_initialized = true;
@@ -1232,8 +1254,15 @@ bool universe_post_init() {
 #if INCLUDE_CDS
 	MetaspaceShared::post_initialize(CHECK_false);
 #endif
+
+	// Semeru support
+	semeru_universe_post_init();
+
 	return true;
 }
+
+
+
 
 
 void Universe::compute_base_vtable_size() {

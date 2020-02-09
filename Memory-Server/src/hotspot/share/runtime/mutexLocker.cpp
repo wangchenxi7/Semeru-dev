@@ -78,6 +78,8 @@ Monitor* SerializePage_lock           = NULL;
 Monitor* Threads_lock                 = NULL;
 Mutex*   NonJavaThreadsList_lock      = NULL;
 Monitor* CGC_lock                     = NULL;
+// Semeru
+Monitor* SemeruCGC_lock               = NULL;
 Monitor* STS_lock                     = NULL;
 Monitor* FullGCCount_lock             = NULL;
 Mutex*   SATB_Q_FL_lock               = NULL;
@@ -128,7 +130,9 @@ Mutex*   FreeList_lock                = NULL;
 Mutex*   Semeru_FreeList_lock         = NULL;
 
 Mutex*   OldSets_lock                 = NULL;
+Monitor* RootRegionCompact_lock       = NULL;
 Monitor* RootRegionScan_lock          = NULL;
+
 
 Monitor* GCTaskManager_lock           = NULL;
 
@@ -202,12 +206,33 @@ void assert_lock_strong(const Monitor * lock) {
   _mutex_array[_num_mutex++] = var;                                      \
 }
 
+/** 
+ * Semeru - Define RDMA mutex lock.
+ *  [x] Memory Server threads wait on these Mutex.
+ *      CPU server can wake up these threads waiting on these Mutex.
+ *     => How to implement this ?
+ *        1) Let a local native thread, e.g. call it RDMA_lock holder, acuiqre the RDMA_lock and sleep on IB signal.  
+ *        2) Let CPU server send a 2-sided RDMA signal to Memory server.
+ *           The IB hardware will ware up the RDMA_lock holder.
+ * 
+ */
+#define semeru_def(var, type, pri, vm_block, safepoint_check_allowed ) {  \
+  var = new type(Mutex::pri, #var, vm_block, safepoint_check_allowed);    \
+  assert(_num_mutex < MAX_NUM_MUTEX, "increase MAX_NUM_MUTEX");           \
+  _mutex_array[_num_mutex++] = var;                                       \
+}
+
+
 // Using Padded subclasses to prevent false sharing of these global monitors and mutexes.
 void mutex_init() {
   def(tty_lock                     , PaddedMutex  , tty,         true,  Monitor::_safepoint_check_never);      // allow to lock in VM
 
   def(CGC_lock                     , PaddedMonitor, special,     true,  Monitor::_safepoint_check_never);      // coordinate between fore- and background GC
   def(STS_lock                     , PaddedMonitor, leaf,        true,  Monitor::_safepoint_check_never);
+
+  // Semeru
+  semeru_def(SemeruCGC_lock               , PaddedMonitor, special,     true,  Monitor::_safepoint_check_never);      // coordinate between CPU and Memory Server GC
+
 
   def(VMWeakAlloc_lock             , PaddedMutex  , vmweak,      true,  Monitor::_safepoint_check_never);
   def(VMWeakActive_lock            , PaddedMutex  , vmweak-1,    true,  Monitor::_safepoint_check_never);
@@ -233,6 +258,7 @@ void mutex_init() {
     def(Semeru_FreeList_lock       , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
 
     def(OldSets_lock               , PaddedMutex  , leaf     ,   true,  Monitor::_safepoint_check_never);
+    def(RootRegionCompact_lock     , PaddedMonitor, leaf     ,   true,  Monitor::_safepoint_check_never);
     def(RootRegionScan_lock        , PaddedMonitor, leaf     ,   true,  Monitor::_safepoint_check_never);
 
     def(StringDedupQueue_lock      , PaddedMonitor, leaf,        true,  Monitor::_safepoint_check_never);

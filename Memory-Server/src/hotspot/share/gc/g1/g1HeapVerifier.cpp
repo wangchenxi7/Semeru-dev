@@ -792,6 +792,9 @@ class G1CheckCSetFastTableClosure : public HeapRegionClosure {
  public:
   G1CheckCSetFastTableClosure() : HeapRegionClosure(), _failures(false) { }
 
+  //
+  // [?] What's the purpose of this Region ?? 
+  //
   virtual bool do_heap_region(HeapRegion* hr) {
     uint i = hr->hrm_index();
     InCSetState cset_state = (InCSetState) G1CollectedHeap::heap()->_in_cset_fast_test.get_by_index(i);

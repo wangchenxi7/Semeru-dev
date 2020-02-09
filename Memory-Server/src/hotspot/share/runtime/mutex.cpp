@@ -315,8 +315,8 @@ int Monitor::TryFast() {
   if (v == 0) return 1;
 
   for (;;) {
-    if ((v & _LBIT) != 0) return 0;
-    const intptr_t u = Atomic::cmpxchg(v|_LBIT, &_LockWord.FullWord, v);
+    if ((v & _LBIT) != 0) return 0;   // v!= 0, means another thread acuired this lock.
+    const intptr_t u = Atomic::cmpxchg(v|_LBIT, &_LockWord.FullWord, v);  // [?] Use v|_LBIT to make a new value ??
     if (v == u) return 1;
     v = u;
   }
@@ -433,12 +433,12 @@ void Monitor::ILock(Thread * Self) {
 
   if (TryFast()) {
  Exeunt:
-    assert(ILocked(), "invariant");
+    assert(ILocked(), "invariant");   // This thread aquire the lock successfully.
     return;
   }
 
   ParkEvent * const ESelf = Self->_MutexEvent;
-  assert(_OnDeck != ESelf, "invariant");
+  assert(_OnDeck != ESelf, "invariant");        // What's the mutex->_OnDeck ?
 
   // As an optimization, spinners could conditionally try to set _OnDeck to _LBIT
   // Synchronizer.cpp uses a similar optimization.
@@ -701,9 +701,15 @@ bool Monitor::notify_all() {
   return true;
 }
 
+/**
+ * [?] What's the Enqueue Self on WaitSet ?
+ *    => not successfully wait on the Mutex ?? 
+ * 
+ */
 int Monitor::IWait(Thread * Self, jlong timo) {
   assert(ILocked(), "invariant");
 
+  //  Every (Java) Thread has a _MutexEvent.
   // Phases:
   // 1. Enqueue Self on WaitSet - currently prepend
   // 2. unlock - drop the outer lock
@@ -713,7 +719,7 @@ int Monitor::IWait(Thread * Self, jlong timo) {
   ParkEvent * const ESelf = Self->_MutexEvent;
   ESelf->Notified = 0;
   ESelf->reset();
-  OrderAccess::fence();
+  OrderAccess::fence();     // [?] What's the purpose of a fence() ? disable the INS's out of oder execution ?
 
   // Add Self to WaitSet
   // Ideally only the holder of the outer lock would manipulate the WaitSet -
@@ -766,7 +772,7 @@ int Monitor::IWait(Thread * Self, jlong timo) {
   for (;;) {
     if (ESelf->Notified) break;
     int err = ParkCommon(ESelf, timo);
-    if (err == OS_TIMEOUT) break;
+    if (err == OS_TIMEOUT) break;         // OS_TIMEOUT means this thread should be dead ?
   }
 
   // Prepare for reentry - if necessary, remove ESelf from WaitSet
@@ -915,6 +921,11 @@ void Monitor::lock(Thread * Self) {
   goto Exeunt;
 }
 
+/**
+ * Tag : Aquire a mutex lock with checking it's in safepoint.
+ *  [?] how to check that this thread is in safepoint ? 
+ * 
+ */
 void Monitor::lock() {
   this->lock(Thread::current());
 }
@@ -928,7 +939,7 @@ void Monitor::lock_without_safepoint_check(Thread * Self) {
   // Ensure that the Monitor does not require or allow safepoint checks.
   assert(_safepoint_check_required != Monitor::_safepoint_check_always,
          "This lock should always have a safepoint check: %s", name());
-  assert(_owner != Self, "invariant");
+  assert(_owner != Self, "invariant");    // The owner of this lock should be NULL ? or how can we aquire it ?
   ILock(Self);
   assert(_owner == NULL, "invariant");
   set_owner(Self);
@@ -1055,6 +1066,7 @@ void Monitor::jvm_raw_unlock() {
   IUnlock(false);
 }
 
+
 bool Monitor::wait(bool no_safepoint_check, long timeout,
                    bool as_suspend_equivalent) {
   // Make sure safepoint checking is used properly.
@@ -1086,7 +1098,7 @@ bool Monitor::wait(bool no_safepoint_check, long timeout,
   int wait_status;
   // conceptually set the owner to NULL in anticipation of
   // abdicating the lock in wait
-  set_owner(NULL);
+  set_owner(NULL);          // [?] Why set the owner of Monitor to NULL ?
   if (no_safepoint_check) {
     wait_status = IWait(Self, timeout);
   } else {

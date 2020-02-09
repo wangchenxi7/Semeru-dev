@@ -36,6 +36,13 @@
 #include "services/memTracker.hpp"
 #include "utilities/ostream.hpp"
 
+
+/**
+ * [?] These AllocatedHeap() functions doesn't belong to any classes ?
+ *  Because these functions belong to base class. 
+ * 
+ */
+
 // allocate using malloc; will fail if no memory available
 char* AllocateHeap(size_t size,
                    MEMFLAGS flags,
@@ -52,6 +59,8 @@ char* AllocateHeap(size_t size,
  * Tag : The overwrite function, new , in hotspot.
  *      How to implement the mapping from "new" to current AllocateHeap ? 
  * 
+ * [?] where is the declaration of these functions ?
+ *    
  */
 char* AllocateHeap(size_t size,
                    MEMFLAGS flags,
@@ -73,6 +82,11 @@ char* ReallocateHeap(char *old,
 void FreeHeap(void* p) {
   os::free(p);
 }
+
+
+
+
+
 
 void* MetaspaceObj::_shared_metaspace_base = NULL;
 void* MetaspaceObj::_shared_metaspace_top  = NULL;
@@ -290,5 +304,39 @@ void ReallocMark::check() {
   }
 #endif
 }
+
+
+//
+// Semeru Section
+//
+
+
+
+// char* CHeapRDMAObj::AllocateHeap(size_t size,
+//                    MEMFLAGS flags,
+//                    const NativeCallStack& stack,
+//                    AllocFailType alloc_failmode /* = AllocFailStrategy::EXIT_OOM*/) {
+//   char* p = (char*) os::malloc(size, flags, stack);
+//   if (p == NULL && alloc_failmode == AllocFailStrategy::EXIT_OOM) {
+//     vm_exit_out_of_memory(size, OOM_MALLOC_ERROR, "AllocateHeap");
+//   }
+//   return p;
+// }
+
+
+// [?] if define this static function here,
+//     the inline function, operatior new can't find it.
+//     because , after new is inlined, we don't know the corresponding function is defined in allocation.cpp
+//     But the corresponding file has already included allocation.inline.hpp, it can find the function definition there.
+//
+// template <MEMFLAGS F> 
+// char* CHeapRDMAObj<F>::test_new_operator( size_t size, size_t commit_size, char* requested_addr ){
+//     tty->print("received parameters size %lu, commit_size %lu, requested_addr 0x%lx \n",
+//                       size, commit_size, (size_t)requested_addr);
+
+//     return NULL;
+// }
+
+
 
 #endif // Non-product

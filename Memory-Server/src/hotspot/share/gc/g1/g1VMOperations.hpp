@@ -48,6 +48,13 @@ public:
   bool gc_succeeded() { return _gc_succeeded; }
 };
 
+/**
+ * Tag : The way to trigger a GC Operation.
+ * Both of the STW Young GC and  Concurrent GC are triggered by this operation with different parameters. 
+ * 
+ * [?] How to trigger the concurrent GC from here ??
+ * 
+ */
 class VM_G1CollectForAllocation : public VM_CollectForAllocation {
   bool _gc_succeeded;
 

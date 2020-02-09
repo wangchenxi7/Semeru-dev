@@ -417,8 +417,8 @@ void G1ConcurrentMarkThread::run_service() {
                                 TimeHelper::counter_to_millis(mark_end - mark_start));
           mark_manager.set_phase(G1ConcurrentPhase::REMARK, false);
           CMRemark cl(_cm);
-          VM_G1Concurrent op(&cl, "Pause Remark");
-          VMThread::execute(&op);
+          VM_G1Concurrent op(&cl, "Pause Remark");    // If want to suspend the mutator, build VM_Operation.
+          VMThread::execute(&op); 
           if (_cm->has_aborted()) {
             break;
           } else if (!_cm->restart_for_overflow()) {
@@ -482,14 +482,20 @@ void G1ConcurrentMarkThread::run_service() {
 /**
  * Semeru Memory Server
  *  
- *  Run the Semeru concurrent marking. 
+ *  Run the Semeru concurrent marking, STW Remark , STW compaction in background. 
  *  [?] Which thread is executing this service ?
- *  
+ *    => a special concurrent thread
+ * 
  *  [?] This service keeps running in background ?
  * 
  *  [?] Is this a deamon thread, running in the background ??
  *        => So it needs to check if new Regions are assigned to it.
- *    
+ *  
+ *  [?] In the original design, we need to switch the STW, Concurrent mode for different phases.  
+ *      But for Semeru, we don't have such a requirements. 
+ *      After the CPU server informs Memory server, it's in GC or not,
+ *      memory server can switch between different work sharply by just switching a function.
+ * 
  */
 void G1ConcurrentMarkThread::run_semeru_service() {
   _vtime_start = os::elapsedVTime();
@@ -508,9 +514,14 @@ void G1ConcurrentMarkThread::run_semeru_service() {
   // Semeru phase manager
   G1SemeruConcPhaseManager cpmanager(G1ConcurrentPhase::IDLE, this);      // [?] rewrite the phase manager for semeru
 
+
+  // [?] Just an infinit loop ? Should not. 
+  //     CPU server should have a way to change the order of the phase.
+  //     Every time, CPU server send some memory server cset, trigger the Remark phase.
+  //      How ???
   while (!should_terminate()) {
     // wait until started is set.
-    sleep_before_next_cycle();
+    sleep_before_next_cycle();    // [?] waiting for the trigger ??
     if (should_terminate()) {
       break;
     }
@@ -533,6 +544,39 @@ void G1ConcurrentMarkThread::run_semeru_service() {
       double cycle_start = os::elapsedVTime();
 
       {
+        // 1) Dispatch the received CSets from Memory Server
+        // Check if we received new CSet from CPU server.
+        // CPU server keeps pushing new CSet to Memory server.
+        // [X] This procedure has to by the main thread. This is NOT MT safe.
+        //
+        //  The CSet is transferred from CPU Server,
+        //  G1SemeruConcurrentMark->_finger points to the start of the memory server CSet.
+        //  the scanning sequence is controlled by G1SemeruCMTask->_curr_region.
+        //  
+        //  a. Divide the received Regions to 2 sets, Scanned, Freshly evicted.
+        //  b. Apply STW Remark to the Scanned Regions, and try to compact them during the STW window.
+        //  c. And then do concurrent marking for the Freshly evicted Regions.
+
+
+        #ifdef ASSERT
+        if(Thread::current() != NULL && Thread::current()->is_Named_thread()){
+          tty->print("%s, Named Thread %s, id[%u] is running here. \n", __func__, 
+                                                ((NamedThread*)Thread::current())->name(), 
+                                                ((NamedThread*)Thread::current())->gc_id() );
+        }else{
+          tty->print("%s, Unknown thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
+        }
+        #endif
+
+        received_memory_server_cset* recv_mem_server_cset = semeru_heap->recv_mem_server_cset();
+
+        // Enqueue the received Regions to _cm_scanned_region, _freshly_evicetd_regions.
+        dispatch_received_regions(recv_mem_server_cset);
+
+      }
+
+
+      {
         //
         // [?] What's this for ?
         //     
@@ -543,24 +587,50 @@ void G1ConcurrentMarkThread::run_semeru_service() {
         ClassLoaderDataGraph::clear_claimed_marks();
       }
 
+      // 2) Utilize the STW window to compact the alrady scanned Regions in CSet.
+      //    Try to do Remark and Compact first every time a CPU Server GC send a signal here ??
+      //    [?] How to implement this ??
+      //    ==> Seems that we don't need a sperate PHASE for the Remark and Compact.
+      //        After receiving the signal from CPU server, switch to cliam a cm_scanned Region and Remark-Compact it.
       //
-      // 1) Resolve the received Memory Collection Set from CPU server
-      //
-      //  The CSet is transferred from CPU Server,
-      //  G1SemeruConcurrentMark->_finger points to the start of the memory server CSet.
-      //  the scanning sequence is controlled by G1SemeruCMTask->_curr_region.
-
-      // pop up a Region from the Memory server CSet.
-      //size_t region_index_to_scan = 0;
-
-      // The memory server should know if the assigned HeapRegions are under its management. 
-      //HeapRegion* regions_index_to_scan  = semeru_heap->hrm()->at(region_index_to_scan);
+      // {
+      // //  If the Regions are already traces, do the Remark in STW.
+      // //
+      // //    [?] Because the Remark is STW, so here  have to build a STW operation ?
+      // //        For the concurrent operation, e.g. Semeru CM GC phase, just implement it as a function
+      // //        and invoke it in current function ?
 
 
-      // [?] Send the index of memory server CSet here.
-      //     a set of Region index ?
-      //     Let G1SemeruCMTask to check the Region Index Set during concurrent GC phase.
-      //     Here only  triggers the CM GC phase.
+
+      //     // Pause Remark.
+      //     // [?] How to pause the mutators ??
+      //     //  => The mutators should be paused by GC Task the scheduler 
+      //     log_info(gc, marking)("%s (%.3fs, %.3fs) %.3fms",
+      //                           cm_title,
+      //                           TimeHelper::counter_to_seconds(mark_start),
+      //                           TimeHelper::counter_to_seconds(mark_end),
+      //                           TimeHelper::counter_to_millis(mark_end - mark_start));
+
+      //     mark_manager.set_phase(G1ConcurrentPhase::REMARK, false);   // [?] purpose of this action ?
+      //     CMRemark cl(_semeru_cm);
+      //     VM_G1Concurrent op(&cl, "Pause Remark and Compact");
+      //     VMThread::execute(&op);     // Suspend the mutators here ?? This is required by the VM_G1Concurrent ??
+      //     if (_semeru_cm->has_aborted()) {
+      //       break;
+      //     } else if (!_semeru_cm->restart_for_overflow()) {
+            
+      //       // [?] What's the logic here ? if task_queue is overflow, restart the CM totally ???
+
+      //       break;              // Exit loop if no restart requested.
+      //     } else {
+      //       // Loop to restart for overflow.
+      //       mark_manager.set_phase(G1ConcurrentPhase::CONCURRENT_MARK, false);
+      //       log_info(gc, marking)("%s Restart for Mark Stack Overflow (iteration #%u)",
+      //                             cm_title, iter);
+
+      //     }
+
+      // } // End of Remark and Compact phase, STW 
   
       //
       // Abandon this phase.
@@ -578,18 +648,16 @@ void G1ConcurrentMarkThread::run_semeru_service() {
       //   _semeru_cm->scan_root_regions();
       // }
 
+
+      //
+      // 3) Concurrent Phase :  Concurrently trace the fresh evicted Regions.
+      //
       // It would be nice to use the G1ConcPhase class here but
       // the "end" logging is inside the loop and not at the end of
       // a scope. Also, the timer doesn't support nesting.
       // Mimicking the same log output instead.
+      
       {
-
-
-      //
-      // 2) Trace the fresh evicted Regions.
-      //
-  
-
 
         G1ConcPhaseManager mark_manager(G1ConcurrentPhase::CONCURRENT_MARK, this);
         jlong mark_start = os::elapsed_counter();
@@ -598,6 +666,8 @@ void G1ConcurrentMarkThread::run_semeru_service() {
                               cm_title,
                               TimeHelper::counter_to_seconds(mark_start));
 
+        // [?] A dead loop, is this correct ??
+        //  Or we should also put the Remark && Compact within this loop ?
         for (uint iter = 1; !_semeru_cm->has_aborted(); ++iter) {
       //     // Concurrent marking.
       //     //
@@ -645,40 +715,11 @@ void G1ConcurrentMarkThread::run_semeru_service() {
 
 
 
-      //
-      // 3) If the Regions are already traces, do the Remark in STW.
-      //
-      //    [?] Because the Remark is STW, so here  have to build a STW operation ?
-      //        For the concurrent operation, e.g. Semeru CM GC phase, just implement it as a function
-      //        and invoke it in current function ?
 
 
-
-      //     // Pause Remark.
-      //     // [?] How to pause the mutators ??
-      //     log_info(gc, marking)("%s (%.3fs, %.3fs) %.3fms",
-      //                           cm_title,
-      //                           TimeHelper::counter_to_seconds(mark_start),
-      //                           TimeHelper::counter_to_seconds(mark_end),
-      //                           TimeHelper::counter_to_millis(mark_end - mark_start));
-      //     mark_manager.set_phase(G1ConcurrentPhase::REMARK, false);   // [?] purpose of this action ?
-      //     CMRemark cl(_semeru_cm);
-      //     VM_G1Concurrent op(&cl, "Pause Remark");
-      //     VMThread::execute(&op);     // Suspend the 
-      //     if (_semeru_cm->has_aborted()) {
-      //       break;
-      //     } else if (!_semeru_cm->restart_for_overflow()) {
-      //       break;              // Exit loop if no restart requested.
-      //     } else {
-      //       // Loop to restart for overflow.
-      //       mark_manager.set_phase(G1ConcurrentPhase::CONCURRENT_MARK, false);
-      //       log_info(gc, marking)("%s Restart for Mark Stack Overflow (iteration #%u)",
-      //                             cm_title, iter);
-      //     }
-
-        } // The for loop of concurrent marking.
+        } // The for loop of concurrent marking(tracing).
       
-      } // the concurrent operation phases ? 
+      } // End of Concurrent tracing phases 
 
 
 
@@ -721,7 +762,7 @@ void G1ConcurrentMarkThread::run_semeru_service() {
       //   _semeru_cm->cleanup_for_next_mark();
       // }
 
-    }  // End of all the concurrent marking phases
+    }  // End of all the concurrent  Cycles
 
 
     // Update the number of full collections that have been
@@ -738,7 +779,47 @@ void G1ConcurrentMarkThread::run_semeru_service() {
     cpmanager.set_phase(G1ConcurrentPhase::IDLE, _semeru_cm->has_aborted() /* force */);
   } // End of the while loop
 
-  _semeru_cm->root_regions()->cancel_scan();
+
+  // [?] Is this correct to cancel all these regions ?
+
+  //_semeru_cm->root_regions()->cancel_scan();
+  _semeru_cm->mem_server_cset()->cancel_compact();
+  _semeru_cm->mem_server_cset()->cancel_scan();
+
+}
+
+
+/**
+ * Semeru Memory Server - Dispatch the received Regions CSet into scanned/freshly_evicted queues.
+ * 
+ * Warning : 
+ *  1) this function isn't MT safe. 
+ *  2) May add one Region multiple times.
+ *      => It should be OK. because the first scavenge will process the region's Target_obj_queue.
+ */
+void G1ConcurrentMarkThread::dispatch_received_regions(received_memory_server_cset* recv_mem_server_cset){
+
+  assert(recv_mem_server_cset!= NULL, "%s, must initiate the G1SemeruCollectHeap->_mem_server_cset \n", __func__);
+
+  G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
+  //size_t* received_num = mem_server_cset->num_received_regions();
+  int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
+   HeapRegion* region_received = NULL;
+
+  while(received_region_ind != -1){
+    region_received = semeru_heap->hrm()->at(received_region_ind);
+    assert(region_received != NULL, "%s, received Region is invalid.", __func__);   // [?] how to confirm if this region is available ?
+
+    if(region_received->is_region_cm_scanned()){
+      // add region into _cm_scanned_regions[] queue
+      // The add operation may add one Region mutiple times. 
+      semeru_cm()->mem_server_cset()->add_cm_scanned_regions(region_received);
+    }else{
+      // add region into _freshly_evicted_regions[] queue
+      semeru_cm()->mem_server_cset()->add_freshly_evicted_regions(region_received);
+    }
+
+  }// Received CSet isn't emtpy.
 
 
 }

@@ -225,6 +225,11 @@ class G1ContiguousSpace: public CompactibleSpace {
  * Tag: HeapRegion management handler.
  *      HeapRegion is also a CHeapObj, allocated into native memory. 
  * 
+ * 
+ * [?] Values of some fields are fixed, no need to update between CPU and memory server.
+ *     But some fields' value may be only setted by one server and needed by another server.
+ *     How to handle this case ??
+ * 
  */
 class HeapRegion: public G1ContiguousSpace {
   friend class VMStructs;
@@ -232,13 +237,34 @@ class HeapRegion: public G1ContiguousSpace {
   // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
   template <typename SpaceType>
   friend void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp);
- private:
+ 
+ // Upgrade the protection from private to protected. 
+ // Becasue we need to merge them together for update purpose.
+ //private:
+ protected: 
 
-  // The remembered set for this region.
-  // (Might want to make this "inline" later, to avoid some alloc failure
-  // issues.)
-  // 
-  HeapRegionRemSet* _rem_set;  //[x] Region Local RemSet
+  /**
+   * Fields need to be updated between CPU srever and Memory server
+   * 
+   * The current solution is to allocate these fields at fixed address at page granularity.
+   * And then let  RDMA to transfer these pages at necessary site.
+   * 
+   */
+
+
+
+  //
+  // 1) Fields stted by CPU server and needed by Memory server.
+  //    CPU server needs to push (explicitly send) these data to Memory server proactivly. 
+  //
+
+  // The index of this region in the heap region sequence.
+  uint  _hrm_index;
+
+  HeapRegionType _type;     // Free(Reserved, but not commited), Eden, Survivor, Old, Humonguous 
+
+  // For a humongous region, region in which it starts.
+  HeapRegion* _humongous_start_region;
 
   // Target object queue. Contains all the target objects of the cross-region references into current Region.
   // This queue is built by the CPU sever GC.
@@ -262,6 +288,42 @@ class HeapRegion: public G1ContiguousSpace {
   //  The corresponding destination bitmap.
   G1CMBitMap             _dest_bitmap;    
   
+  // Fields used by the HeapRegionSetBase class and subclasses.
+  // [?] what's these 2 fields used for ??
+  HeapRegion*           _next;
+  HeapRegion*           _prev;
+
+
+  //
+  // Do some padding here  ? Confirm the fields upper is page aligned.
+  //
+
+
+  //
+  // 2) Fields setted by Memory server and needed by CPU server.
+  //    CPU server will swap in these pages on demand.
+
+  // this field identify this Region is already traced by the concurrent threads.
+  // This value is setted by Semeru memory srver BUT also accessed by the CPU server.
+  bool _cm_scanned;    
+
+
+
+  //
+  // ############################# End of update fields section #############################
+  //
+
+
+
+  // The remembered set for this region.
+  // (Might want to make this "inline" later, to avoid some alloc failure
+  // issues.)
+  // 
+  // [??] Not needed by the Semeru memory server. 
+  //
+  HeapRegionRemSet* _rem_set;  //[x] Region Local RemSet
+
+
 
   // Auxiliary functions for scan_and_forward support.
   // See comments for CompactibleSpace for more information.
@@ -287,20 +349,11 @@ class HeapRegion: public G1ContiguousSpace {
   inline bool is_obj_dead_with_size(const oop obj, const G1CMBitMap* const prev_bitmap, size_t* size) const;
 
  protected:
-  // The index of this region in the heap region sequence.
-  uint  _hrm_index;
 
-  HeapRegionType _type;     // Free(Reserved, but not commited), Eden, Survivor, Old, Humonguous 
-
-  // For a humongous region, region in which it starts.
-  HeapRegion* _humongous_start_region;
 
   // True iff an attempt to evacuate an object in the region failed.
   bool _evacuation_failed;
 
-  // Fields used by the HeapRegionSetBase class and subclasses.
-  HeapRegion* _next;
-  HeapRegion* _prev;
 
   // Semeru Pointer
   HeapRegion* _mem_server_cset_next;
@@ -802,7 +855,9 @@ class HeapRegion: public G1ContiguousSpace {
   // The Semeru section
   //
 
-
+  void set_region_cm_scanned()    { _cm_scanned = true;  }
+  void reset_region_cm_scanned()  {  _cm_scanned = false;  }
+  bool is_region_cm_scanned()     { return _cm_scanned; }
 
 
 
@@ -851,6 +906,8 @@ class HeapRegionClosure : public StackObj {
   HeapRegionClosure(): _is_complete(true) {}
 
   // Typically called on each region until it returns true.
+  // [?] Let the sub-class to define its own operations on a HeapRegion ? 
+  //
   virtual bool do_heap_region(HeapRegion* r) = 0;
 
   // True after iteration if the closure was applied to all heap regions

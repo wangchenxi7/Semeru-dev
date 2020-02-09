@@ -140,6 +140,8 @@ jint init_globals() {
   }
   VMRegImpl::set_regName();
 
+  // Both the original and Semeru heap need post-initialization processing
+  //
   if (!universe_post_init()) {
     return JNI_ERR;
   }

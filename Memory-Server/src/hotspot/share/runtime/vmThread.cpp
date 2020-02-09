@@ -661,6 +661,11 @@ class SkipGCALot : public StackObj {
 #endif
 };
 
+/**
+ * Schedule a VM_operation to run,
+ *  based on its configuration, it can be STW or Concurrent.
+ *  
+ */
 void VMThread::execute(VM_Operation* op) {
   Thread* t = Thread::current();
 
