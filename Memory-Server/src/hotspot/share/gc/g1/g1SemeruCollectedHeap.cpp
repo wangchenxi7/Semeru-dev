@@ -101,6 +101,11 @@
 #include "gc/g1/g1SemeruCollectedHeap.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
 
+#ifdef ASSERT
+// debug
+#include <sys/types.h>
+#include <sys/syscall.h>
+#endif
 
 size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 
@@ -1591,6 +1596,8 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 	_verifier(NULL),
 	_summary_bytes_used(0),
 	_collector_state(),
+	_old_marking_cycles_started(0),
+	_old_marking_cycles_completed(0),
  	_eden(),
  	_survivor(),
 	_gc_timer_stw(new (ResourceObj::C_HEAP, mtGC) STWGCTimer()),
@@ -1791,12 +1798,21 @@ jint G1SemeruCollectedHeap::initialize() {
  * 2) Split the Heap into Regions.
  * 3) Build RemSet for the Java heap.
  * 
- * 
+ * [?] Do we build the Java Mutator threads here ??
  */
 jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	os::enable_vtime();
 
 	log_debug(heap)("Enter function %s \n", __func__);
+	
+	#ifdef ASSERT
+	pid_t curr_id = syscall(__NR_gettid);
+	log_debug(workgang)("%s, Running thread, %s , 0x%lx , p_thread_id 0x%lx \n", __func__,
+																			((VMThread*)Thread::current())->name(), 
+																			(size_t)Thread::current(),
+																			(size_t)curr_id);
+	#endif
+
 
 	// Necessary to satisfy locking discipline assertions.
 	MutexLocker x(Memory_Pool_lock);
@@ -2048,20 +2064,25 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	//	_humongous_reclaim_candidates.initialize(start, end, granularity);
 	}
 
-	//
+	// Thread 1) Build the ParallelThreads 
 	// [x] Initialize the GC threads,
 	//			Both Parallel and Concurrent GC threads.
 	//  		Semeru memory server only needs the Concurrent Thread ?
 	//			But these Concurrent Thread only can do tracing. We need add compact support for them.
 	//
-	_workers = new WorkGang("GC Thread", ParallelGCThreads,
+	// [?] We don't need any STW parallel GC threads for Semeru memory server.
+	//		
+	_workers = new WorkGang("ParallelGC GC Thread for Semeru", ParallelGCThreads,
 													true /* are_GC_task_threads */,
 													false /* are_ConcurrentGC_threads */);
 	if (_workers == NULL) {
 		return JNI_ENOMEM;
 	}
-	_workers->initialize_workers();
+	_workers->initialize_workers();		// Add the newly created workers to ??
 
+
+	// Thread 2) Build the Semeru Memory Server Concurrent Threads
+	//
 	// Create the G1ConcurrentMark data structure and thread.
 	// (Must do this late, so that "max_regions" is defined.)
 	//_semeru_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
@@ -2139,8 +2160,9 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 	// debug
+	// This call may 
 	// Wake up the concurrent threads waiting on SemeruCGC_lock
-	wake_up_semeru_mem_server_concurrent_gc();
+	 wake_up_semeru_mem_server_concurrent_gc();
 
  	return JNI_OK;
 }
@@ -2154,21 +2176,26 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 
-
+/**
+ * Semeru Memory Server - Stop all the concurrent threads.
+ * 
+ * 	[?] each concurrent thread is a workerGang which may have multiple tasks ??
+ *  
+ */
 void G1SemeruCollectedHeap::stop() {
 
 	//debug
 	tty->print("%s, Should not reach here. \n", __func__);
 
-	// // Stop all concurrent threads. We do this to make sure these threads
-	// // do not continue to execute and access resources (e.g. logging)
-	// // that are destroyed during shutdown.
-	// _cr->stop();
-	// _young_gen_sampling_thread->stop();
-	// _semeru_cm_thread->stop();
-	// if (G1StringDedup::is_enabled()) {
-	// 	G1StringDedup::stop();
-	// }
+	// Stop all concurrent threads. We do this to make sure these threads
+	// do not continue to execute and access resources (e.g. logging)
+	// that are destroyed during shutdown.
+	//_cr->stop();			// Semeru Memory Server doesn't have Concurrent Refine thread.
+	//_young_gen_sampling_thread->stop();	// Not in Semeru Memory Server
+	_semeru_cm_thread->stop();
+	if (G1StringDedup::is_enabled()) {
+		G1StringDedup::stop();
+	}
 }
 
 void G1SemeruCollectedHeap::safepoint_synchronize_begin() {
@@ -2235,8 +2262,8 @@ void G1SemeruCollectedHeap::ref_processing_init() {
 		new ReferenceProcessor(&_is_subject_to_discovery_cm,
 													 mt_processing,                                  // mt processing
 													 ParallelGCThreads,                              // degree of mt processing
-													 (ParallelGCThreads > 1) || (ConcGCThreads > 1), // mt discovery
-													 MAX2(ParallelGCThreads, ConcGCThreads),         // degree of mt discovery
+													 (ParallelGCThreads > 1) || (SemeruConcGCThreads > 1), // mt discovery
+													 MAX2(ParallelGCThreads, SemeruConcGCThreads),         // degree of mt discovery
 													 false,                                          // Reference discovery is not atomic
 													 &_is_alive_closure_cm,                          // is alive closure
 													 true);                                          // allow changes to number of processing threads
@@ -2384,67 +2411,98 @@ size_t G1SemeruCollectedHeap::used_unlocked() const {
 // }
 // #endif // !PRODUCT
 
-// void G1SemeruCollectedHeap::increment_old_marking_cycles_started() {
-// 	assert(_old_marking_cycles_started == _old_marking_cycles_completed ||
-// 				 _old_marking_cycles_started == _old_marking_cycles_completed + 1,
-// 				 "Wrong marking cycle count (started: %d, completed: %d)",
-// 				 _old_marking_cycles_started, _old_marking_cycles_completed);
+/**
+ * Tag : 1) Invoke this function when WAKE UP the G1SemeruConcurrentMarkThread.
+ * 			  	The waken up thread will go to execute the G1SemeruConcurrentMarkThread->run_service()
+ * 			 2) At the same time, invoke  increment_old_marking_cycles_completed() before put the thread to sleep.
+ * 
+ */
+void G1SemeruCollectedHeap::increment_old_marking_cycles_started() {
+	assert(_old_marking_cycles_started == _old_marking_cycles_completed ||
+				 _old_marking_cycles_started == _old_marking_cycles_completed + 1,
+				 "Wrong marking cycle count (started: %d, completed: %d)",
+				 _old_marking_cycles_started, _old_marking_cycles_completed);
 
-// 	_old_marking_cycles_started++;
-// }
+	#ifdef ASSERT
+	tty->print("%s, Start (Wake up) Semeru Memory Server GC. \n", __func__);
+	#endif
 
-// void G1SemeruCollectedHeap::increment_old_marking_cycles_completed(bool concurrent) {
-// 	MonitorLockerEx x(FullGCCount_lock, Mutex::_no_safepoint_check_flag);
+	_old_marking_cycles_started++;
+}
 
-// 	// We assume that if concurrent == true, then the caller is a
-// 	// concurrent thread that was joined the Suspendible Thread
-// 	// Set. If there's ever a cheap way to check this, we should add an
-// 	// assert here.
 
-// 	// Given that this method is called at the end of a Full GC or of a
-// 	// concurrent cycle, and those can be nested (i.e., a Full GC can
-// 	// interrupt a concurrent cycle), the number of full collections
-// 	// completed should be either one (in the case where there was no
-// 	// nesting) or two (when a Full GC interrupted a concurrent cycle)
-// 	// behind the number of full collections started.
+/**
+ * Tag : Invoke this function before put the G1SemeruConcurrentMarkThread to sleep. 
+ * 			Mark the concurrent GC end && wake up other threads waiting on FullGCCount_lock to do full GC.
+ *  
+ */
+void G1SemeruCollectedHeap::increment_old_marking_cycles_completed(bool concurrent) {
+	MonitorLockerEx x(FullGCCount_lock, Mutex::_no_safepoint_check_flag);
 
-// 	// This is the case for the inner caller, i.e. a Full GC.
-// 	assert(concurrent ||
-// 				 (_old_marking_cycles_started == _old_marking_cycles_completed + 1) ||
-// 				 (_old_marking_cycles_started == _old_marking_cycles_completed + 2),
-// 				 "for inner caller (Full GC): _old_marking_cycles_started = %u "
-// 				 "is inconsistent with _old_marking_cycles_completed = %u",
-// 				 _old_marking_cycles_started, _old_marking_cycles_completed);
+	// We assume that if concurrent == true, then the caller is a
+	// concurrent thread that was joined the Suspendible Thread
+	// Set. If there's ever a cheap way to check this, we should add an
+	// assert here.
 
-// 	// This is the case for the outer caller, i.e. the concurrent cycle.
-// 	assert(!concurrent ||
-// 				 (_old_marking_cycles_started == _old_marking_cycles_completed + 1),
-// 				 "for outer caller (concurrent cycle): "
-// 				 "_old_marking_cycles_started = %u "
-// 				 "is inconsistent with _old_marking_cycles_completed = %u",
-// 				 _old_marking_cycles_started, _old_marking_cycles_completed);
+	// Given that this method is called at the end of a Full GC or of a
+	// concurrent cycle, and those can be nested (i.e., a Full GC can
+	// interrupt a concurrent cycle), the number of full collections
+	// completed should be either one (in the case where there was no
+	// nesting) or two (when a Full GC interrupted a concurrent cycle)
+	// behind the number of full collections started.
 
-// 	_old_marking_cycles_completed += 1;
+	// This is the case for the inner caller, i.e. a Full GC.
+	assert(concurrent ||
+				 (_old_marking_cycles_started == _old_marking_cycles_completed + 1) ||
+				 (_old_marking_cycles_started == _old_marking_cycles_completed + 2),
+				 "for inner caller (Full GC): _old_marking_cycles_started = %u "
+				 "is inconsistent with _old_marking_cycles_completed = %u",
+				 _old_marking_cycles_started, _old_marking_cycles_completed);
 
-// 	// We need to clear the "in_progress" flag in the CM thread before
-// 	// we wake up any waiters (especially when ExplicitInvokesConcurrent
-// 	// is set) so that if a waiter requests another System.gc() it doesn't
-// 	// incorrectly see that a marking cycle is still in progress.
-// 	if (concurrent) {
-// 		_semeru_cm_thread->set_idle();
-// 	}
+	// This is the case for the outer caller, i.e. the concurrent cycle.
+	assert(!concurrent ||
+				 (_old_marking_cycles_started == _old_marking_cycles_completed + 1),
+				 "for outer caller (concurrent cycle): "
+				 "_old_marking_cycles_started = %u "
+				 "is inconsistent with _old_marking_cycles_completed = %u",
+				 _old_marking_cycles_started, _old_marking_cycles_completed);
 
-// 	// This notify_all() will ensure that a thread that called
-// 	// System.gc() with (with ExplicitGCInvokesConcurrent set or not)
-// 	// and it's waiting for a full GC to finish will be woken up. It is
-// 	// waiting in VM_G1CollectForAllocation::doit_epilogue().
-// 	FullGCCount_lock->notify_all();
-// }
 
+	#ifdef ASSERT
+		tty->print("%s, Stop (Suspend) Semeru Memory Server GC. \n", __func__);
+	#endif
+
+
+	_old_marking_cycles_completed += 1;
+
+	// We need to clear the "in_progress" flag in the CM thread before
+	// we wake up any waiters (especially when ExplicitInvokesConcurrent
+	// is set) so that if a waiter requests another System.gc() it doesn't
+	// incorrectly see that a marking cycle is still in progress.
+	if (concurrent) {
+		_semeru_cm_thread->set_idle();
+	}
+
+	// This notify_all() will ensure that a thread that called
+	// System.gc() with (with ExplicitGCInvokesConcurrent set or not)
+	// and it's waiting for a full GC to finish will be woken up. It is
+	// waiting in VM_G1CollectForAllocation::doit_epilogue().
+	FullGCCount_lock->notify_all();
+}
+
+
+/**
+ * The trigger of GC.
+ * 	It can trigger all of the three types of GC
+ * 		Young STW GC,
+ * 		Concurrent Full GC,
+ * 		STW Full GC.
+ *  
+ */
 void G1SemeruCollectedHeap::collect(GCCause::Cause cause) {
 
 	//debug
-	tty->print("%s, Wait to be completed.\n", __func__);
+	tty->print("%s, Wait to be implemented.\n", __func__);
 
 	//try_collect(cause, true);
 }
@@ -2958,11 +3016,19 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
  * 
  * 1）Let VM Thread acquire the SemeruCGC_lock  // [?] Only VM Thread's can invoke this ??
  * 2) Wake up all the Semeru concurrent threads waiting on the SemeruCGC_lock.
+ * 3) The concurrent GC threads are user-level thread, belong to same workerGang,
+ * 		so they wait, run yield at the same time. 
+ * 		The workerGang is controlled by G1SemeruConcurrentMarkThread, _semeru_cm_thread.
  * 
  */
 void G1SemeruCollectedHeap::do_concurrent_mark() {
 	MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
+
 	if (!_semeru_cm_thread->in_progress()) {
+
+		// Set some information here
+		increment_old_marking_cycles_started(); 
+
 		_semeru_cm_thread->set_started();
 		SemeruCGC_lock->notify();
 	}

@@ -66,6 +66,13 @@ class WorkerManager : public AllStatic {
                                   bool initializing);
 };
 
+/**
+ * Tag : Create new WorkerThread and schedule it run.
+ *  
+ *  [?] Schedule the Worker thread to run directly ?
+ *      not put it to sleep and then schedule it to run agian ?
+ * 
+ */
 template <class WorkerType>
 uint WorkerManager::add_workers(WorkerType* holder,
                                 uint active_workers,
@@ -78,7 +85,7 @@ uint WorkerManager::add_workers(WorkerType* holder,
   for (uint worker_id = start; worker_id < end; worker_id += 1) {
     WorkerThread* new_worker = NULL;
     if (initializing || !InjectGCWorkerCreationFailure) {
-      new_worker = holder->install_worker(worker_id);
+      new_worker = holder->install_worker(worker_id);     // [?] Find a WorkerThread ?
     }
     if (new_worker == NULL || !os::create_thread(new_worker, worker_type)) {
       log_trace(gc, task)("WorkerManager::add_workers() : "

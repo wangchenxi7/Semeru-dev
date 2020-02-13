@@ -110,6 +110,10 @@ class G1SemeruConcurrentMarkThread: public ConcurrentGCThread {
   // Semeru
   G1SemeruConcurrentMark* semeru_cm()   { return _semeru_cm; }
 
+  /**
+   * [?] What's the difference between Started  and InProgress ??
+   *  
+   */
   void set_idle()          { assert(_state != Started, "must not be starting a new cycle"); _state = Idle; }
   bool idle()              { return _state == Idle; }
   void set_started()       { assert(_state == Idle, "cycle in progress"); _state = Started; }

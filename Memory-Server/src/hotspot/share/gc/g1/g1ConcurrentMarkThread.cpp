@@ -315,6 +315,12 @@ bool G1ConcurrentMarkThread::request_concurrent_phase(const char* phase_name) {
 /**
  * Tag : The main entry of G1 Concurrent Marking.
  *  
+ *  [?] How to stop the G1ConcurrentMarkThread running this service ?
+ *        if aborted(),
+ *            just return from this function ?
+ *            But this killed the process ? And then we have to restart it later ?
+ * 
+ * 
  */
 void G1ConcurrentMarkThread::run_service() {
   _vtime_start = os::elapsedVTime();

@@ -736,7 +736,14 @@
                                                                             \
   product(size_t, SemeruMemPoolAlignment, 0,                                \
           "Semeru collected heap's Region/Alignment size (in bytes)")       \
-          range(0, max_uintx)                                         \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(uint, SemeruConcGCThreads, 0,                                   \
+          "Number of threads Semeru concurrent gc will use")                \
+          range(0, 128)                                               \
+          /*constraint(SemeruConcGCThreadsConstraintFunc,AfterErgo) */      \
+                                                                            \
+                                                                            \
   /* Semeru end */                                                          \
                                                                             \
   product(size_t, OldSize, ScaleForWordSize(4*M),                           \

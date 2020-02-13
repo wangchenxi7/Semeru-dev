@@ -159,7 +159,7 @@ class STWGCTimer : public GCTimer {
 
 
 /**
- * Tag : 
+ * Tag : Timer for the Concurrent GC Phase.
  * 
  * [?] Pause phase ? the STW Young Phase ?
  *      Or the STW Concurrent Phase ? e.g. Remark ?

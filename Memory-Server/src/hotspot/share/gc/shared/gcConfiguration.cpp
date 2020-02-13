@@ -169,3 +169,16 @@ uintx GCYoungGenerationConfiguration::min_size() const {
 intx GCYoungGenerationConfiguration::new_ratio() const {
   return NewRatio;
 }
+
+
+/**
+ * Semeru Memory Server
+ *  
+ */
+
+
+
+
+uint GCConfiguration::num_semeru_concurrent_gc_threads() const {
+  return SemeruConcGCThreads;
+}

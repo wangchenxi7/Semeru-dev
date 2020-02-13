@@ -74,4 +74,15 @@ JVMFlag::Error SurvivorAlignmentInBytesConstraintFunc(intx value, bool verbose);
 // Internal
 JVMFlag::Error MaxPLABSizeBounds(const char* name, size_t value, bool verbose);
 
+
+
+
+/**
+ * Semeru Memory Server
+ *  
+ */
+JVMFlag::Error SemeruConcGCThreadsConstraintFunc(uint value, bool verbose);
+
+
+
 #endif // SHARE_GC_SHARED_COMMANDLINEFLAGCONSTRAINTSGC_HPP

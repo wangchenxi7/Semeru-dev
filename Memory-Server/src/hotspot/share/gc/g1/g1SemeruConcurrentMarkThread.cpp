@@ -115,11 +115,13 @@ G1SemeruConcurrentMarkThread::G1SemeruConcurrentMarkThread(G1SemeruConcurrentMar
   _state(Idle),
   _phase_manager_stack() {
 
-  set_name("Semeru CM Marker");
+  set_name("Semeru Memory Server Concurrent Thread");
   create_and_start();     // [?] This will invoke the G1SemeruConcurrentThread->run_service()
 
   // debug
-  //printf("ERROR in %s, Please fix me.\n", __func__);
+  #ifdef ASSERT
+  tty->print("%s, Create thread %s, %lx.\n", __func__, name(), (size_t)this);
+  #endif
 }
 
 
@@ -349,6 +351,8 @@ void G1SemeruConcurrentMarkThread::run_service() {
   //     These Semeru Concurrent threads will be waken up by the RDMA driver via CPU server. 
   while (!should_terminate()) {
     // wait until started is set.
+    // Before invoke sleep_before_next_cycle(), MUST set G1SemeruConcurrentMarkThread->_state to Idle or Started.
+    //
     sleep_before_next_cycle();    // [XX]Concurrent thread is waiting for the RDMA signal from CPU server.
     if (should_terminate()) {
       break;
@@ -367,7 +371,7 @@ void G1SemeruConcurrentMarkThread::run_service() {
     //
     // [?] What operations have been done before GC ??
     //
-    _semeru_cm->concurrent_cycle_start();     // tag logs 
+    _semeru_cm->concurrent_cycle_start();     // Set timer, tracer
 
     GCTraceConcTime(Info, gc) tt("Semeru Concurrent Cycle");
     {
@@ -392,11 +396,12 @@ void G1SemeruConcurrentMarkThread::run_service() {
 
         #ifdef ASSERT
         if(Thread::current() != NULL && Thread::current()->is_Named_thread()){
-          tty->print("%s, Named Thread %s, id[%u] is running here. \n", __func__, 
-                                                ((NamedThread*)Thread::current())->name(), 
-                                                ((NamedThread*)Thread::current())->gc_id() );
+          tty->print("%s, Runnting Thread, %s, gc_id[%u], 0x%lx is running here. \n", __func__, 
+                                                ((G1SemeruConcurrentMarkThread*)Thread::current())->name(), 
+                                                ((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
+                                                (size_t)Thread::current());
         }else{
-          tty->print("%s, Unknown thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
+          tty->print("%s, Unknown Runnting thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
         }
         #endif
 
@@ -548,8 +553,19 @@ void G1SemeruConcurrentMarkThread::run_service() {
       //     }
 
 
-
-
+          //
+          // Check if we can exit the for{} loop now.
+          //
+          if (_semeru_cm->has_aborted()) {
+            break;
+          } else if (!_semeru_cm->restart_for_overflow()) {
+            break;              // Exit loop if no restart requested.
+          } else {
+            // Loop to restart for overflow.
+          //  mark_manager.set_phase(G1SemeruConcurrentPhase::SEMERU_MEM_SERVER_CONCURRENT, false);
+            log_info(gc, marking)("%s Restart for Mark Stack Overflow (iteration #%u)",
+                                  cm_title, iter);
+          }
 
         } // The for loop of concurrent marking(tracing).
       
@@ -605,12 +621,32 @@ void G1SemeruConcurrentMarkThread::run_service() {
     // called System.gc() with +ExplicitGCInvokesConcurrent).
     {
       SuspendibleThreadSetJoiner sts_join;
-     // semeru_heap->increment_old_marking_cycles_completed(true /* concurrent */);
 
+      // Set thread state to IDLE.
+      // We have to reset the current concurrent thread as IDLE or STAETED, to rerun the srvice.
+      semeru_heap->increment_old_marking_cycles_completed(true /* concurrent */);
+
+      //[?] Update some timer information 
       _semeru_cm->concurrent_cycle_end();
     }
 
     cpmanager.set_phase(G1SemeruConcurrentPhase::IDLE, _semeru_cm->has_aborted() /* force */);
+
+
+    // // debug - break the while(){} loop
+    // // put G1SemeruConcurrentMarkThread to sleep.
+    // // Semeru Threads need to rewrite the stop() function ?
+    // // Because when the Semeru concurrent threads try to wait the mutex,  we can't let it check the safepoint.
+    // //
+    // _semeru_cm->set_concurrentmark_aborted();
+
+    // //debug - abort current run_service()
+    // if (_semeru_cm->has_aborted()) {
+    //   //stop(); // stop the  service of the concurrent thread. Then we can stop the thread.
+    //   break;
+    // }
+
+
   } // End of the while loop
 
 
@@ -619,15 +655,6 @@ void G1SemeruConcurrentMarkThread::run_service() {
   //_semeru_cm->root_regions()->cancel_scan();
   _semeru_cm->mem_server_cset()->cancel_compact();
   _semeru_cm->mem_server_cset()->cancel_scan();
-
-  // Debug
-  // Suspend this thread agian.
-  // Suspend in G1SemeruConcurrentMark->do_marking_step()
-  //
-  //set_idle();
-  //sleep_before_next_cycle();
-  //
-  //
 
 }
 
@@ -688,8 +715,14 @@ void G1SemeruConcurrentMarkThread::stop_service() {
 
 
 /**
- * Suspend all the concurrent threads, waiting on SemeruCGC_lock.
- *  
+ * Suspend all the current G1SemeruConcurrentMarkThread [?], waiting on SemeruCGC_lock.
+ * 
+ * [?] Not to stop the G1SemeruConcurrentMarkThread->G1SemeruConcurrentMark->workGang ? 
+ * 
+ * [?] if the G1SemeruConcurrentMarkThread is just started,
+ *     This function will set its state to InProgress, not sleep on the SemeruCGC_lock ??
+ * 
+ * 
  */
 void G1SemeruConcurrentMarkThread::sleep_before_next_cycle() {
   // We join here because we don't want to do the "shouldConcurrentMark()"
@@ -712,9 +745,14 @@ void G1SemeruConcurrentMarkThread::sleep_before_next_cycle() {
  * [?] the problem is that, the mutator also suspend here ? WHY ?
  * The VM Thread is also suspend some where ??
  *  
+ * The sate setting of the G1ConcurrentMarkThread has to be:
+ * 1) Started
+ * 2) InProgres
+ * 3) Idle.
+ * 
  */
 void G1SemeruConcurrentMarkThread::sleep_on_semerucgc_lock(){
-  set_idle();
+  set_idle();        // 2) Then we can set it to Idle.
 
   assert(!in_progress(), "should have been cleared");
 

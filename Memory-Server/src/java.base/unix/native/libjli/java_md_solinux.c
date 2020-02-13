@@ -728,7 +728,9 @@ void SplashFreeLibrary() {
 }
 
 /*
- * Block current thread and continue execution in a new thread
+ * Block current thread and continue execution in a new thread.
+ * 
+ * [?] The newly created Java threads is pthread ?? it's not user thread ??
  */
 int
 ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void * args) {
@@ -746,7 +748,7 @@ ContinueInNewThread0(int (JNICALL *continuation)(void *), jlong stack_size, void
 
     if (pthread_create(&tid, &attr, (void *(*)(void*))continuation, (void*)args) == 0) {
       void * tmp;
-      pthread_join(tid, &tmp);
+      pthread_join(tid, &tmp);  // Create new threads successfully, wait for its finish here.
       rslt = (int)(intptr_t)tmp;
     } else {
      /*

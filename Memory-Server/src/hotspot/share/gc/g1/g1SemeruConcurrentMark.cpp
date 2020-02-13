@@ -67,7 +67,7 @@
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
-
+#include <unistd.h>
 
 
 
@@ -510,7 +510,7 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 	// _finger set in set_non_marking_state
 
 	_worker_id_offset(DirtyCardQueueSet::num_par_ids() + G1ConcRefinementThreads),
-	_max_num_tasks(ParallelGCThreads),				//[?] _max_num_tasks is decided by  the parameter ParallelGCThreads ??
+	_max_num_tasks(SemeruConcGCThreads),				// For Semeru Memory Server, concurrent tasks are more than ParallelGCThreads
 	// _num_active_tasks set in set_non_marking_state()
 	// _tasks set inside the constructor
 
@@ -539,7 +539,7 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 	_accum_task_vtime(NULL),
 
 	_concurrent_workers(NULL),
-	_num_concurrent_workers(0),
+	_num_concurrent_workers(0), // [x] Should SemeruConcGCThreads. assign the value in the {}.
 	_max_concurrent_workers(0),
 
 	_region_mark_stats(NEW_C_HEAP_ARRAY(G1RegionMarkStats, _semeru_h->max_regions(), mtGC)),
@@ -551,6 +551,8 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 	//_mark_bitmap_2.initialize(g1h->reserved_region(), next_bitmap_storage);
 
 	// Create & start ConcurrentMark thread.
+	// [?] Every g1SemeruConcurrentMark only builds one G1SemeruConcurrentMarkThread ??
+	//			Or , the G1SemeruConcurrentMarkThread manages multiple concurent threads ??
 	_semeru_cm_thread = new G1SemeruConcurrentMarkThread(this);  //[?] Only created a single, specific concurrent mark thread ? not use the CT pool?
 	if (_semeru_cm_thread->osthread() == NULL) {
 		vm_shutdown_during_initialization("Could not create ConcurrentMarkThread");
@@ -562,31 +564,37 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 
 	// [?] if NOT set the parameter ConcGCThreads, calculated it by ParallelGCThreads
 	//		 Set separate options for the Semeru Concurrent GC Threads 
-	if (FLAG_IS_DEFAULT(ConcGCThreads) || ConcGCThreads == 0) {   
+	if (FLAG_IS_DEFAULT(SemeruConcGCThreads) || SemeruConcGCThreads == 0) {   
 		// Calculate the number of concurrent worker threads by scaling
 		// the number of parallel GC threads.
 		uint marking_thread_num = scale_concurrent_worker_threads(ParallelGCThreads);
-		FLAG_SET_ERGO(uint, ConcGCThreads, marking_thread_num);
+		//FLAG_SET_ERGO(uint, SemeruConcGCThreads, marking_thread_num);			// change ergo parameters to cmdline parameter.
+		FLAG_SET_CMDLINE(uint, SemeruConcGCThreads, marking_thread_num);		// assign marking_thread_num to SemeruConcGCThreads
 	}
 
 	// [?] This should be OK for Semeru Memory Server
-	assert(ConcGCThreads > 0, "ConcGCThreads have been set.");
-	if (ConcGCThreads > ParallelGCThreads) {
-		log_warning(gc)("More ConcGCThreads (%u) than ParallelGCThreads (%u).",
-										ConcGCThreads, ParallelGCThreads);
-		return;
+	assert(SemeruConcGCThreads > 0, "SemeruConcGCThreads have been set.");
+	#ifdef ASSERT
+	if (SemeruConcGCThreads > ParallelGCThreads) {
+		log_info(gc)("More SemeruConcGCThreads (%u) than CPU server ParallelGCThreads (%u).",
+										SemeruConcGCThreads, ParallelGCThreads);
+		//return;
 	}
+	#endif
 
-	log_debug(gc)("ConcGCThreads: %u offset %u", ConcGCThreads, _worker_id_offset);
+	log_debug(gc)("SemeruConcGCThreads: %u offset %u", SemeruConcGCThreads, _worker_id_offset);
 	log_debug(gc)("ParallelGCThreads: %u", ParallelGCThreads);
 
-	_num_concurrent_workers = ConcGCThreads;
+	_num_concurrent_workers = SemeruConcGCThreads;
 	_max_concurrent_workers = _num_concurrent_workers;
 
 	//
 	// [?] What's the connection between Concurrent Workers and G1SemeruConcurrentMarkThread ?
-	//
-	_concurrent_workers = new WorkGang("G1 Conc", _max_concurrent_workers, false, true);
+	//			[?] Is this the real concurrent thread worker ?
+	//	const char* name,	 uint workers, bool  are_GC_task_threads, bool  are_ConcurrentGC_threads)
+	//	Why is the are_GC_task_threads false ?? But they are ConcurrentGC_threads ??
+	//  [?] What's the WordGang used for ? thread schedule ??
+	_concurrent_workers = new WorkGang("Semeru Memory Server Conc", _max_concurrent_workers, false, true);
 	_concurrent_workers->initialize_workers();
 
 	// The global mark stack size, g1SemeruConcurrentMark->_global_mark_stack.
@@ -629,9 +637,9 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 		vm_exit_during_initialization("Failed to allocate initial concurrent mark overflow mark stack.");
 	}
 
-	// Why not use the ConcGCThreads ??
+	// Build the tasks executed by each worker.
 	// Does the _tasks[] also include the ParallelThread ?
-	// 
+	// Seems no. This _tasks is only for SemeruConcurrentGC worker.
 	_tasks = NEW_C_HEAP_ARRAY(G1SemeruCMTask*, _max_num_tasks, mtGC);			
 	_accum_task_vtime = NEW_C_HEAP_ARRAY(double, _max_num_tasks, mtGC);
 
@@ -651,9 +659,6 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 
 	reset_at_marking_complete();
 	_completed_initialization = true;
-
-	// debug
-	// Wake up the Semeru Concurrent Threads
 
 }
 
@@ -754,14 +759,19 @@ void G1SemeruConcurrentMark::reset_marking_for_restart() {
  * Semeru Memory Server
  * 	Control the concurrency ? 
  * 
+ * [?] Can this stop the concurrent workers ?
+ * 
  */
 void G1SemeruConcurrentMark::set_concurrency(uint active_tasks) {
 	assert(active_tasks <= _max_num_tasks, "we should not have more");
 
 	_num_active_tasks = active_tasks;
+
 	// Need to update the three data structures below according to the
 	// number of active threads for this phase.
-	_terminator = TaskTerminator((int) active_tasks, _task_queues);  // [?] What's the connection between active_task and _task_queus ?
+	// [?] What's the connection between active_task and _task_queus ?
+	_terminator = TaskTerminator((int) active_tasks, _task_queues); 
+	
 	_first_overflow_barrier_sync.set_n_workers((int) active_tasks);
 	_second_overflow_barrier_sync.set_n_workers((int) active_tasks);
 }
@@ -1011,8 +1021,12 @@ void G1SemeruConcurrentMark::enter_second_sync_barrier(uint worker_id) {
  * 
  * [?] This task can be excuted in both Concurrent and STW mode.
  * 
- * [?] Only concurrent tasks can execute this task.
+ * [?] Only concurrent threads can execute this task.
  * 
+ * [?] How to stop this work ??
+ * 	=> This worker is scheduled to run by G1SemeruConcurrentMarkThread.
+ * 		 After finish the executing of function G1SemeruCMConcurrentMarkingTask::work(),
+ * 		 this thread will finished automaticaly.
  */
 class G1SemeruCMConcurrentMarkingTask : public AbstractGangTask {
 	G1SemeruConcurrentMark*     _semeru_cm;
@@ -1025,7 +1039,7 @@ public:
 		double start_vtime = os::elapsedVTime();
 
 		{
-			SuspendibleThreadSetJoiner sts_join;		// [?] Design the Semeru marking thread's suspendible thread ?
+			SuspendibleThreadSetJoiner sts_join;		// [?] How can this local variable join all the concurrent workers ??
 
 			assert(worker_id < _semeru_cm->active_tasks(), "invariant");
 
@@ -1055,6 +1069,10 @@ public:
 
 		double end_vtime = os::elapsedVTime();
 		_semeru_cm->update_accum_task_vtime(worker_id, end_vtime - start_vtime);
+
+		// [?] After finish the executin of current work,
+		// will this worker exeit automatically ?
+
 	}
 
 	G1SemeruCMConcurrentMarkingTask(G1SemeruConcurrentMark* semeru_cm) :
@@ -1231,6 +1249,11 @@ void G1SemeruConcurrentMark::semeru_stw_compact_a_region( HeapRegion* region_to_
 // 	}
 // }
 
+
+/**
+ * Tag : set the timer and tracer, concurrent GC is started ?
+ *  
+ */
 void G1SemeruConcurrentMark::concurrent_cycle_start() {
 	_gc_timer_cm->register_gc_start();
 
@@ -1239,9 +1262,18 @@ void G1SemeruConcurrentMark::concurrent_cycle_start() {
 	_semeru_h->trace_heap_before_gc(_gc_tracer_cm);  // [?] What does this mean ??
 }
 
+
+/**
+ * Semeru Memory Server - the end of Semeru memory servet concurrent GC.
+ *  
+ * 	[?] is this function only about timer ?
+ * 				
+ * 
+ */
 void G1SemeruConcurrentMark::concurrent_cycle_end() {
 	_semeru_h->collector_state()->set_clearing_next_bitmap(false);
 
+	// [?] What's the purpose of this ?
 	_semeru_h->trace_heap_after_gc(_gc_tracer_cm);
 
 	if (has_aborted()) {
@@ -1282,11 +1314,23 @@ void G1SemeruConcurrentMark::mark_from_roots() {
  * 		 Because the Semeru doesn't need to suspend any application threads.
  * 		 Just let CPU server tell the memory server which state it's in, GC or Mutator, 
  * 		 then Memory server can switch to any phase it wants by switch a function.
+ * 
+ * 2) [?] How to stop the running G1SemeruCMCOncurrentMarkingTask ??
+ * 		
+ * 3) [x] What's the connection between the Concurrent Thread and the Concurrent Workers ?
+ * 		G1SemeruConcurrentMarkThread is a handler.
+ * 		Its related workers are stored in G1SemeruConcurrentMark,
+ * 		WorkGang is the real user threads to execute the concurrent GC work.
+ * 		Current function is to schedule the workers to run.
+ * 
  */ 
 void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 
 	//debug
-	tty->print("%s, this is the main concurrent marking phase for Semeru memory server. NOT mark_from_too. \n", __func__);
+	tty->print("%s, Runnting Thread, %s, gc_id %u ,  0x%lx \n", __func__, 
+																									((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
+																									((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
+																									(size_t)Thread::current());
 
 	_restart_for_overflow = false;
 
@@ -1298,7 +1342,8 @@ void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 	// worker threads may currently exist and more may not be
 	// available.
 	active_workers = _concurrent_workers->update_active_workers(active_workers);
-	log_info(gc, task)("Using %u workers of %u for CM marking", active_workers, _concurrent_workers->total_workers());
+	log_info(gc, task)("Using %u workers of %u for Semeru Memory Server Concurrent work", 
+																							active_workers, _concurrent_workers->total_workers());
 
 	// Parallel task terminator is set in "set_concurrency_and_phase()"
 	set_concurrency_and_phase(active_workers, true /* concurrent */);
@@ -1307,8 +1352,10 @@ void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 	mem_server_cset()->prepare_for_scan();
 	mem_server_cset()->prepare_for_compact();
 
+	// Schedule the multiple concurrent workers to run.
+	//
 	G1SemeruCMConcurrentMarkingTask marking_task(this);
-	_concurrent_workers->run_task(&marking_task);			// Concurrent or STW is determined here ??
+	_concurrent_workers->run_task(&marking_task);			// The G1SemeruConcurrentMarkThread will wait here until all workers finished.
 	print_stats();
 }
 
@@ -3931,8 +3978,19 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	//
 
 	// Debug
+	#ifdef ASSERT
+	unsigned int microseconds = 10000000; //10s.
+	usleep(microseconds);
+
 	// Let this thread wait on the SemeruCGC_lock agian.
-	((G1SemeruConcurrentMarkThread*)Thread::current())->sleep_on_semerucgc_lock();
+	// [?] is the Workers of Concurrent Thread also a Concurrent Thread ??
+	tty->print("%s, Running thread(worker), %s, gc_id %d, 0x%lx finished work. \n", __func__,
+																													((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
+																													((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
+																													(size_t)Thread::current());
+	//((G1SemeruConcurrentMarkThread*)Thread::current())->sleep_on_semerucgc_lock();
+	#endif
+
 } // end of do_marking_step.
 
 

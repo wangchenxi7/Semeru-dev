@@ -2628,6 +2628,21 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
         return JNI_EINVAL;
       }
 
+    // SemeruConcGCThreads
+    }else if(match_option(option, "-XX:SemeruConcGCThreads=", &tail)){
+      julong max_semeru_concurrent_threaeds = 0;
+      ArgsRange errcode = parse_memory_size(tail, &max_semeru_concurrent_threaeds, 0);  // String, value, min, max= num of core number.
+      if (errcode != arg_in_range) {
+        jio_fprintf(defaultStream::error_stream(),
+                    "Invalid SemeruConcGCThreads number: %s\n", option->optionString);
+        describe_range_error(errcode);
+        return JNI_EINVAL;
+      }
+
+      if (FLAG_SET_CMDLINE(uint, SemeruConcGCThreads, (uint)max_semeru_concurrent_threaeds) != JVMFlag::SUCCESS) {
+        return JNI_EINVAL;
+      }
+
     // Xmaxf
     } else if (match_option(option, "-Xmaxf", &tail)) {
       char* err;

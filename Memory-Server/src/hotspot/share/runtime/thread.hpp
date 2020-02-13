@@ -739,7 +739,7 @@ protected:
  public:
   volatile intptr_t _Stalled;
   volatile int _TypeTag;
-  ParkEvent * _ParkEvent;                     // for synchronized()
+  ParkEvent * _ParkEvent;                     // for synchronized().  What's the difference between synchronized() and Mutex ?
   ParkEvent * _SleepEvent;                    // for Thread.sleep
   ParkEvent * _MutexEvent;                    // for native internal Mutex/Monitor
   ParkEvent * _MuxEvent;                      // for low-level muxAcquire-muxRelease
@@ -1158,6 +1158,9 @@ class JavaThread: public Thread {
 
  public:
   // Constructor
+  // [?] What's the difference of these 2 kinds of JavaThread ?
+  // Main JavaThread, JNI attached ?  Attach the current running  pthread to the newly createdly JavaThread ?
+  // Pthread based JavaThread ?
   JavaThread(bool is_attaching_via_jni = false); // for main thread and JNI attached threads
   JavaThread(ThreadFunction entry_point, size_t stack_size = 0);
   ~JavaThread();

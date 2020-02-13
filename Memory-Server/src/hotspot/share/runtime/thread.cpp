@@ -1629,6 +1629,11 @@ void JavaThread::initialize() {
 	pd_initialize();
 }
 
+/**
+ * Tag : Entry #1, create an user-level JavaThread.
+ * 
+ * 
+ */
 JavaThread::JavaThread(bool is_attaching_via_jni) :
 											 Thread() {
 	initialize();
@@ -1691,6 +1696,11 @@ void JavaThread::block_if_vm_exited() {
 static void compiler_thread_entry(JavaThread* thread, TRAPS);
 static void sweeper_thread_entry(JavaThread* thread, TRAPS);
 
+
+/**
+ * Tag : Entry 2, Create a PThread based Java thread based .
+ *  		
+ */
 JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
 											 Thread() {
 	initialize();
@@ -2537,6 +2547,13 @@ size_t JavaThread::_stack_yellow_zone_size = 0;
 size_t JavaThread::_stack_reserved_zone_size = 0;
 size_t JavaThread::_stack_shadow_zone_size = 0;
 
+
+/**
+ *  Tag : Create stack guard_pages for the JavaThread.
+ * 				[?] is this guard_page for stack overflow ??
+ * 				
+ *  
+ */
 void JavaThread::create_stack_guard_pages() {
 	if (!os::uses_stack_guard_pages() ||
 			_stack_guard_state != stack_guard_unused ||
@@ -3592,6 +3609,13 @@ void Threads::initialize_jsr292_core_classes(TRAPS) {
 	initialize_class(vmSymbols::java_lang_invoke_MethodHandleNatives(), CHECK);
 }
 
+/**
+ * Tag : Create both Main JavaThread and VMThread for the VM.
+ * 		
+ *  1) 2 kinds of JavaThread, user-level, and pthread based thread.
+ * 	2) VMThread is a pthread.
+ *  
+ */
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 	extern void JDK_Version_init();
 
@@ -3709,7 +3733,7 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 #endif // INCLUDE_JVMCI
 
 	// Attach the main thread to this os thread
-	JavaThread* main_thread = new JavaThread();
+	JavaThread* main_thread = new JavaThread();          // Mian thread should be VMThread ?? not a JavaThread ??
 	main_thread->set_thread_state(_thread_in_vm);
 	main_thread->initialize_thread_current();
 	// must do this before set_active_handles
@@ -3759,9 +3783,9 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 	{ TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
 
 	VMThread::create();
-		Thread* vmthread = VMThread::vm_thread();
+		Thread* vmthread = VMThread::vm_thread();						 // Create a VMThrad handler.
 
-		if (!os::create_thread(vmthread, os::vm_thread)) {
+		if (!os::create_thread(vmthread, os::vm_thread)) {   // [x] Create a pthread for VMThrad.
 			vm_exit_during_initialization("Cannot create VM thread. "
 																		"Out of system resources.");
 		}

@@ -131,7 +131,7 @@ class Monitor : public CHeapObj<mtInternal> {
   ParkEvent * volatile _EntryList ;      // List of threads waiting for entry
   ParkEvent * volatile _OnDeck ;         // heir-presumptive
   volatile intptr_t _WaitLock [1] ;      // Protects _WaitSet
-  ParkEvent * volatile  _WaitSet ;       // LL of ParkEvents
+  ParkEvent * volatile  _WaitSet ;       // LL of ParkEvents. Points to the ParkEvent of the Threads waiting on the Mutex.
   volatile bool     _snuck;              // Used for sneaky locking (evil).
   char _name[MONITOR_NAME_LEN];          // Name of mutex
 

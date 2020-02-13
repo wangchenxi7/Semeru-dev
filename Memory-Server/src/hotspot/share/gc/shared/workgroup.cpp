@@ -58,6 +58,10 @@ void AbstractWorkGang::add_workers(bool initializing) {
 	add_workers(_active_workers, initializing);
 }
 
+/**
+ * Tag : Create a WorkerThread and schedule it to run.
+ *  
+ */
 void AbstractWorkGang::add_workers(uint active_workers, bool initializing) {
 
 	os::ThreadType worker_type;
@@ -206,11 +210,12 @@ class MutexGangTaskDispatcher : public GangTaskDispatcher {
 		_num_workers = num_workers;
 
 		// Tell the workers to get to work.
+		// [?] This assume that all the created Workers are waiting on MutexGangTaskDispatcher->_monitor
 		_monitor->notify_all();
 
 		// Wait for them to finish.
 		while (_finished < _num_workers) {
-			_monitor->wait(/* no_safepoint_check */ true);
+			_monitor->wait(/* no_safepoint_check */ true);  // [?] the wait() is invoked by Monitor ? not by the Worker ?
 		}
 
 		_task        = NULL;
@@ -254,9 +259,14 @@ static GangTaskDispatcher* create_dispatcher() {
 	return new MutexGangTaskDispatcher();
 }
 
+
 /**
- * [?] What's the conenction between WorkGang and Thrad ?
- *  
+ * [?] What's the conenction between WorkGang and Thread ?
+ *  e.g.
+ * 		G1SemeruConcurrentThread also has a handler, WorkGang* _concurrent_workers
+ * 		Then, G1SemeruConcurrentThread is just a handler.
+ * 		The real tasks are stored in _concurrent_workers.
+ * 
  */
 WorkGang::WorkGang(const char* name,
 									 uint  workers,
@@ -274,6 +284,18 @@ AbstractGangWorker* WorkGang::allocate_worker(uint worker_id) {
 	return new GangWorker(this, worker_id);
 }
 
+/**
+ * Tag : Schedule _active_workers to run.
+ *  		 There is no need to distinguish them, just find the right number to run.
+ * 
+ * 	[?] The OS can only see the WorkGang, can NOT see the workers within it ? Because they are user-level threads ??
+ * 
+ * 	[?] How to wake up them to run ?
+ * 			=> [GUESS] Each WorkGang is attached to a handler thread, e.g. G1SemeruConcurrentMarkThread.
+ * 				 The handler thread can assign work to the WorkGang and schedule them to run ? 
+ * 	
+ * 
+ */
 void WorkGang::run_task(AbstractGangTask* task) {
 	run_task(task, active_workers());
 }
@@ -285,7 +307,7 @@ void WorkGang::run_task(AbstractGangTask* task, uint num_workers) {
 	guarantee(num_workers > 0, "Trying to execute task %s with zero workers", task->name());
 	uint old_num_workers = _active_workers;
 	update_active_workers(num_workers);
-	_dispatcher->coordinator_execute_on_workers(task, num_workers);
+	_dispatcher->coordinator_execute_on_workers(task, num_workers);  // Schedule the active workers to run.
 	update_active_workers(old_num_workers);
 }
 

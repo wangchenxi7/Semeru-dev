@@ -477,3 +477,27 @@ JVMFlag::Error SurvivorAlignmentInBytesConstraintFunc(intx value, bool verbose) 
   }
   return JVMFlag::SUCCESS;
 }
+
+
+/**
+ * Semeru Memory Server
+ *  
+ */
+// As SemeruConcGCThreads has nothing to do with CPU server's  ParallelGCThreads,
+// It's number should smaller than Memory server's cores.
+//  [?] How to get hte number of Memory server's core number ??
+#define MEM_SERVER_CORE_NUM 8   // Debug
+
+JVMFlag::Error SemeruConcGCThreadsConstraintFunc(uint value, bool verbose) {
+  // CMS and G1 GCs use ConcGCThreads.
+  if ((GCConfig::is_gc_selected(CollectedHeap::CMS) ||
+       GCConfig::is_gc_selected(CollectedHeap::G1)) && (value > MEM_SERVER_CORE_NUM)) {
+    JVMFlag::printError(verbose,
+                        " Semeru ConcGCThreads (" UINT32_FORMAT ") must be "
+                        "less than or equal to ParallelGCThreads (" UINT32_FORMAT ")\n",
+                        value, MEM_SERVER_CORE_NUM);
+    return JVMFlag::VIOLATES_CONSTRAINT;
+  }
+
+  return JVMFlag::SUCCESS;
+}

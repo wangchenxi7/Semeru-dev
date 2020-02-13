@@ -89,12 +89,28 @@ void SuspendibleThreadSet::yield() {
   }
 }
 
+
+/**
+ * Tag : Semeru - VM Thread sets environments to suspend mutators for STW GC.
+ *  
+ *  The mutators need to check some Semaphore or (protected) page to see 
+ *  if they need to yield to GC Threads at their safepoints.
+ *  1) For here, seems VM_thread uses a Mutex, _suspend_all, to protect a bool variable, _suspend_all ?
+ *  2) And then it uses the semaphore, _synchronize_wakeup, to suspend, wakeup other mutator threads.
+ *  
+ * 
+ *  [?] The check instructions are inserted by compiler, e.g. JIT or interpreter ?
+ * 
+ */
 void SuspendibleThreadSet::synchronize() {
   assert(Thread::current()->is_VM_thread(), "Must be the VM thread");
   if (ConcGCYieldTimeout > 0) {
     _suspend_all_start = os::elapsedTime();
   }
+
   {
+    // Prepare to suspend the mutators in their safepoint.
+    // Mutators need to proactively check this signal and yied yo the GC threads at their safepoint.
     MonitorLockerEx ml(STS_lock, Mutex::_no_safepoint_check_flag);
     assert(!_suspend_all, "Only one at a time");
     _suspend_all = true;

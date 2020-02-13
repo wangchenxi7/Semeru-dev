@@ -62,6 +62,12 @@ void ConcurrentGCThread::wait_for_universe_init() {
   }
 }
 
+/**
+ * Terminate a Concurrent Thread,
+ *  [?] exit it ? or Let it wait on a Mutex ? 
+ * 
+ * 
+ */
 void ConcurrentGCThread::terminate() {
   assert(_should_terminate, "Should only be called on terminate request.");
   // Signal that it is terminated
@@ -83,9 +89,21 @@ void ConcurrentGCThread::run() {
 
   run_service();
 
-  terminate();
+  terminate();  // If exit from the ConcurrentGCThread's service, terminate this thread ?
 }
 
+
+/**
+ * [?] ConcurrentThread can't invoke this function ??
+ *  
+ *  Because the default paramter of Mutex->wait() is going to "check_the_safepoint" :
+ *  bool wait(bool no_safepoint_check = !_no_safepoint_check_flag,
+ *           long timeout = 0,
+ *           bool as_suspend_equivalent = !_as_suspend_equivalent_flag);
+ * 
+ *  Only JavaThread can check the safepoint ??
+ * 
+ */
 void ConcurrentGCThread::stop() {
   // it is ok to take late safepoints here, if needed
   {
@@ -100,7 +118,7 @@ void ConcurrentGCThread::stop() {
   {
     MutexLockerEx mu(Terminator_lock);
     while (!_has_terminated) {
-      Terminator_lock->wait();
+      Terminator_lock->wait();     // the default parameter :  safepoint_check, timeout = 0, not_as_suspended_equivalent.
     }
   }
 }

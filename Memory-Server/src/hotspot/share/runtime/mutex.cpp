@@ -323,8 +323,8 @@ int Monitor::TryFast() {
 }
 
 int Monitor::ILocked() {
-  const intptr_t w = _LockWord.FullWord & 0xFF;
-  assert(w == 0 || w == _LBIT, "invariant");
+  const intptr_t w = _LockWord.FullWord & 0xFF;   // [?] Check the lowest 8 bits to see if thread acquired the lock ?
+  assert(w == 0 || w == _LBIT, "invariant");      // _LBIT is 1 ? why do we need 8 bits ?
   return w == _LBIT;
 }
 
@@ -693,7 +693,10 @@ bool Monitor::notify() {
 // Beware too, that we invert the order of the waiters.  Lets say that the
 // waitset is "ABCD" and the cxq is "XYZ".  After a notifyAll() the waitset
 // will be empty and the cxq will be "DCBAXYZ".  This is benign, of course.
-
+//
+// [?] Wake all the threads waiting on the Mutex to run ?
+//     => Empty the Mutex->_WaitSet.
+//
 bool Monitor::notify_all() {
   assert(_owner == Thread::current(), "invariant");
   assert(ILocked(), "invariant");
@@ -702,8 +705,20 @@ bool Monitor::notify_all() {
 }
 
 /**
- * [?] What's the Enqueue Self on WaitSet ?
- *    => not successfully wait on the Mutex ?? 
+ * Tag : Let thread wait on Mutex/Monitor.
+ * 
+ * [?] What's the connection between the ParkEvent and Mutex ?
+ *     => The ParkEvent is used to describe the status between Mutex and the Threads ?
+ * 
+ * [x] Every Mutex has a WaitSet to store the threads waiting on it ?
+ *     => Yup. Threads can wait on the Mutex->_WaitSet to be notified.
+ *        Waken one by one ? OR waken at the same time ?
+ * 
+ * [?] Where is the check for Safepoint ?
+ * 
+ * [?] ILocked(), IUnlock() are the outer lock of the Mutex ?? 
+ *     => Mutex->_LockWord, contention queue ?
+ *        One Thread has to acquire the Outer lock first, and then it can try to enqueue the Mutex->_WaitSet ?
  * 
  */
 int Monitor::IWait(Thread * Self, jlong timo) {
@@ -748,9 +763,9 @@ int Monitor::IWait(Thread * Self, jlong timo) {
   // In that case we could have one ListElement on the WaitSet and another
   // on the EntryList, with both referring to the same pure Event.
 
-  Thread::muxAcquire(_WaitLock, "wait:WaitLock:Add");
-  ESelf->ListNext = _WaitSet;
-  _WaitSet = ESelf;
+  Thread::muxAcquire(_WaitLock, "wait:WaitLock:Add");   // [?] If we already acquired  the outer lock, ILocked(), why do we need to acquire this lock agian ?
+  ESelf->ListNext = _WaitSet;     // Add current Thread->ParkEvent into Mutex->_WaitSet.
+  _WaitSet = ESelf;               // [?] Threads waiting the Mutex are waken one by one ? or are waken at the same time ?
   Thread::muxRelease(_WaitLock);
 
   // Release the outer lock
@@ -770,9 +785,9 @@ int Monitor::IWait(Thread * Self, jlong timo) {
   // spurious wakeups back to the caller.
 
   for (;;) {
-    if (ESelf->Notified) break;
+    if (ESelf->Notified) break;           // if the thread waiting here is notified, exit the lock and prepare to execute ?
     int err = ParkCommon(ESelf, timo);
-    if (err == OS_TIMEOUT) break;         // OS_TIMEOUT means this thread should be dead ?
+    if (err == OS_TIMEOUT) break;         // OS_TIMEOUT means this thread should stop waiting on the mutex ?
   }
 
   // Prepare for reentry - if necessary, remove ESelf from WaitSet
@@ -783,7 +798,7 @@ int Monitor::IWait(Thread * Self, jlong timo) {
 
   OrderAccess::fence();
   int WasOnWaitSet = 0;
-  if (ESelf->Notified == 0) {
+  if (ESelf->Notified == 0) {     // 1) OS_TIMEOUT, exit the WaitSet, try to reentry it.
     Thread::muxAcquire(_WaitLock, "wait:WaitLock:remove");
     if (ESelf->Notified == 0) {     // DCL idiom
       assert(_OnDeck != ESelf, "invariant");   // can't be both OnDeck and on WaitSet
@@ -1067,6 +1082,15 @@ void Monitor::jvm_raw_unlock() {
 }
 
 
+/**
+ * Tag : Let a thread wait on the Mutex.
+ *  
+ *  [?] Only JavaThread needs to check the safepoint.
+ *      => Safepoint zone is only designed for Mutator Threads.
+ *         To confirm they are in good status when GC Threads are triggered.
+ *         Good status mean safe to do GC ?
+ * 
+ */
 bool Monitor::wait(bool no_safepoint_check, long timeout,
                    bool as_suspend_equivalent) {
   // Make sure safepoint checking is used properly.
@@ -1092,6 +1116,10 @@ bool Monitor::wait(bool no_safepoint_check, long timeout,
                  " lock %s/%d -- possible deadlock",
                  name(), rank(), least->name(), least->rank());
     assert(false, "Shouldn't block(wait) while holding a lock of rank special");
+  
+    //debug
+    ::tty->print("Thread 0x%lx wait on lock, %s \n",(size_t)Thread::current(), name() );
+
   }
   #endif // ASSERT
 
@@ -1100,9 +1128,9 @@ bool Monitor::wait(bool no_safepoint_check, long timeout,
   // abdicating the lock in wait
   set_owner(NULL);          // [?] Why set the owner of Monitor to NULL ?
   if (no_safepoint_check) {
-    wait_status = IWait(Self, timeout);
+    wait_status = IWait(Self, timeout);           // 1) No safepoint check, wait on the Mutex directly.
   } else {
-    assert(Self->is_Java_thread(), "invariant");
+    assert(Self->is_Java_thread(), "invariant");  // 2) Do safepoint. Only JavaThread/Mutator threads need to do the check.
     JavaThread *jt = (JavaThread *)Self;
 
     // Enter safepoint region - ornate and Rococo ...

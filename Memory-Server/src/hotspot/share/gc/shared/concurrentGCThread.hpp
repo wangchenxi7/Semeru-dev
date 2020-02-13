@@ -31,7 +31,7 @@
 class ConcurrentGCThread: public NamedThread {
   friend class VMStructs;
 
-  bool volatile _should_terminate;      // [?] Meaning ??
+  bool volatile _should_terminate;      // [?] Exit this concurrentGCThread ? difference with G1SemeruConcurrentMarkThread->_has_aborted ?
   bool _has_terminated;
 
   // Do initialization steps in the thread: record stack base and size,

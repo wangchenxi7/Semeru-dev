@@ -343,13 +343,13 @@ private:
   // indicates whether we are in young or mixed GC mode
   G1CollectorState _collector_state;
 
-//   // Keeps track of how many "old marking cycles" (i.e., Full GCs or
-//   // concurrent cycles) we have started.
-//   volatile uint _old_marking_cycles_started;
+  // Keeps track of how many "old marking cycles" (i.e., Full GCs or
+  // concurrent cycles) we have started.
+  volatile uint _old_marking_cycles_started;
 
-//   // Keeps track of how many "old marking cycles" (i.e., Full GCs or
-//   // concurrent cycles) we have completed.
-//   volatile uint _old_marking_cycles_completed;
+  // Keeps track of how many "old marking cycles" (i.e., Full GCs or
+  // concurrent cycles) we have completed.
+  volatile uint _old_marking_cycles_completed;
 
 //   // This is a non-product method that is helpful for testing. It is
 //   // called at the end of a GC and artificially expands the heap by
@@ -681,29 +681,29 @@ private:
 
 //   bool is_user_requested_concurrent_full_gc(GCCause::Cause cause);
 
-//   // This is called at the start of either a concurrent cycle or a Full
-//   // GC to update the number of old marking cycles started.
-//   void increment_old_marking_cycles_started();
+  // This is called at the start of either a concurrent cycle or a Full
+  // GC to update the number of old marking cycles started.
+  void increment_old_marking_cycles_started();
 
-//   // This is called at the end of either a concurrent cycle or a Full
-//   // GC to update the number of old marking cycles completed. Those two
-//   // can happen in a nested fashion, i.e., we start a concurrent
-//   // cycle, a Full GC happens half-way through it which ends first,
-//   // and then the cycle notices that a Full GC happened and ends
-//   // too. The concurrent parameter is a boolean to help us do a bit
-//   // tighter consistency checking in the method. If concurrent is
-//   // false, the caller is the inner caller in the nesting (i.e., the
-//   // Full GC). If concurrent is true, the caller is the outer caller
-//   // in this nesting (i.e., the concurrent cycle). Further nesting is
-//   // not currently supported. The end of this call also notifies
-//   // the FullGCCount_lock in case a Java thread is waiting for a full
-//   // GC to happen (e.g., it called System.gc() with
-//   // +ExplicitGCInvokesConcurrent).
-//   void increment_old_marking_cycles_completed(bool concurrent);
+  // This is called at the end of either a concurrent cycle or a Full
+  // GC to update the number of old marking cycles completed. Those two
+  // can happen in a nested fashion, i.e., we start a concurrent
+  // cycle, a Full GC happens half-way through it which ends first,
+  // and then the cycle notices that a Full GC happened and ends
+  // too. The concurrent parameter is a boolean to help us do a bit
+  // tighter consistency checking in the method. If concurrent is
+  // false, the caller is the inner caller in the nesting (i.e., the
+  // Full GC). If concurrent is true, the caller is the outer caller
+  // in this nesting (i.e., the concurrent cycle). Further nesting is
+  // not currently supported. The end of this call also notifies
+  // the FullGCCount_lock in case a Java thread is waiting for a full
+  // GC to happen (e.g., it called System.gc() with
+  // +ExplicitGCInvokesConcurrent).
+  void increment_old_marking_cycles_completed(bool concurrent);
 
-//   uint old_marking_cycles_completed() {
-//     return _old_marking_cycles_completed;
-//   }
+  uint old_marking_cycles_completed() {
+    return _old_marking_cycles_completed;
+  }
 
   G1HRPrinter* hr_printer() { return &_hr_printer; }
 
@@ -1047,7 +1047,7 @@ public:
   jint initialize_memory_pool();
 
   virtual void stop();
-  virtual void safepoint_synchronize_begin();
+  virtual void safepoint_synchronize_begin();     // [?] What's this thread for ??
   virtual void safepoint_synchronize_end();
 
 //   // Return the (conservative) maximum heap alignment for any G1 heap

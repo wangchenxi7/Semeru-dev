@@ -104,6 +104,9 @@ class GangTaskDispatcher : public CHeapObj<mtGC> {
 // The work gang is the collection of workers to execute tasks.
 // The number of workers run for a task is "_active_workers"
 // while "_total_workers" is the number of available of workers.
+//  
+//  [?] What's the connection between Threads class and current WorkdGang ?
+//      e.g. All the concurrent GC threads belong a same work gang ?
 class AbstractWorkGang : public CHeapObj<mtInternal> {
  protected:
   // The array of worker threads for this gang.
@@ -142,7 +145,7 @@ class AbstractWorkGang : public CHeapObj<mtInternal> {
   // Initialize workers in the gang.  Return true if initialization succeeded.
   void initialize_workers();
 
-  bool are_GC_task_threads()      const { return _are_GC_task_threads; }
+  bool are_GC_task_threads()      const { return _are_GC_task_threads; }      // for Concurrent GC thread, this can be false.
   bool are_ConcurrentGC_threads() const { return _are_ConcurrentGC_threads; }
 
   uint total_workers() const { return _total_workers; }

@@ -403,22 +403,22 @@ public:
  *
  */
 class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
-  friend class G1ConcurrentMarkThread;            // [?] Change to Semeru thread
+  friend class G1SemeruConcurrentMarkThread;          // [?] Change to Semeru thread
   friend class G1SemeruCMRefProcTaskProxy;
-  friend class G1SemeruCMRefProcTaskExecutor;  // To access the pricate field.
+  friend class G1SemeruCMRefProcTaskExecutor;         // To access the pricate field.
   friend class G1SemeruCMKeepAliveAndDrainClosure;
   friend class G1SemeruCMDrainMarkingStackClosure;
-  friend class G1CMBitMapClosure;                 // [?] Create a Semeru version ?     
+  friend class G1CMBitMapClosure;                     // [?] Create a Semeru version ?     
   friend class G1SemeruCMConcurrentMarkingTask;
   friend class G1SemeruCMRemarkTask;
   friend class G1SemeruCMTask;
 
-  // [?] How many concurrent marking threads ??
-  //
-  G1SemeruConcurrentMarkThread*     _semeru_cm_thread;       // The thread doing the work
-  G1SemeruCollectedHeap*      _semeru_h;       // The heap
+  // [?] Seems that G1SemeruConcurrentMarkThread is only a manager of all the concurrent threads.
+  //     The real concurrent threads are stored in _concurrent_workers.
+  G1SemeruConcurrentMarkThread*     _semeru_cm_thread;    // The manager of all the concurrent threads
+  G1SemeruCollectedHeap*            _semeru_h;            // The heap
   
-  bool                    _completed_initialization; // Set to true when initialization is complete
+  bool                              _completed_initialization; // Set to true when initialization is complete
 
   // [xx] Semeru abandons these bitmao now. [xx]
   // Concurrent marking support structures
@@ -458,8 +458,8 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
                                               // always pointing to the end of the
                                               // last claimed region
 
-  uint                    _worker_id_offset;
-  uint                    _max_num_tasks;    // Maximum number of marking tasks
+  uint                    _worker_id_offset;  // [?] which worker's offset ?
+  uint                    _max_num_tasks;    // Maximum number of semeru concurrent tasks
   uint                    _num_active_tasks; // Number of tasks currently active
 
   // Semeru CM Tasks,
@@ -501,7 +501,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // another concurrent marking phase should start
   volatile bool           _restart_for_overflow;
 
-  ConcurrentGCTimer*      _gc_timer_cm;
+  ConcurrentGCTimer*      _gc_timer_cm;     // A timer to record the elapsed time for each concurrent phase.
 
   G1OldTracer*            _gc_tracer_cm;    // [?] G1 Old space logging systems
 
@@ -515,7 +515,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   double*   _accum_task_vtime;   // Accumulated task vtime
 
-  WorkGang* _concurrent_workers;     // [?] Manage the concurrent GC threads. Execute the G1SemeruCMTask.
+  WorkGang* _concurrent_workers;     // [x] The real threads to execute the workload. Execute the G1SemeruCMTask.
   uint      _num_concurrent_workers; // The number of marking worker threads we're using
   uint      _max_concurrent_workers; // Maximum number of marking worker threads
 
@@ -769,6 +769,8 @@ public:
   inline bool do_yield_check();
 
   bool has_aborted()      { return _has_aborted; }
+  // debug
+  void set_concurrentmark_aborted() { _has_aborted = true; }
 
   void print_summary_info();
 
@@ -1021,6 +1023,15 @@ public:
 
   HeapWord* finger()            { return _finger; }
 
+  /**
+   * [x] What's the difference between _has_aborted and _should_terminated
+   *    G1SemeruCMTask->_has_aborted, abort a CMTask, which is executed by a worker.
+   *        => abort the G1SemeruCMTask::do_semeru_marking_step()
+   *    G1SemeruConcurrentMark->_has_aborted, abort the current mark's all tasks ?
+   *      
+   *    ConcurrentMarkThread->_should_terminated, abort the thread handler.
+   *        => terminate the G1SemeruConcurrentMarkThread::run_service().
+   */
   bool has_aborted()            { return _has_aborted; }
   void set_has_aborted()        { _has_aborted = true; }
   void clear_has_aborted()      { _has_aborted = false; }

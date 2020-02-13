@@ -42,6 +42,14 @@ class GCConfiguration {
 
   bool has_pause_target_default_value() const;
   uintx pause_target() const;
+
+  /**
+   * Semeru Memory Server
+   *  
+   */
+
+  uint num_semeru_concurrent_gc_threads() const;
+
 };
 
 class GCTLABConfiguration {

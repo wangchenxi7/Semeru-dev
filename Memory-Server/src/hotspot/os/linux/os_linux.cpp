@@ -885,12 +885,19 @@ bool os::create_attached_thread(JavaThread* thread) {
 	return true;
 }
 
+
+/** 
+ * Tag : Schedule a pthread based thread to run ?  
+ * 
+ * 	e.g. Schedule a JavaThread to run ?
+ *   
+ */
 void os::pd_start_thread(Thread* thread) {
 	OSThread * osthread = thread->osthread();
 	assert(osthread->get_state() != INITIALIZED, "just checking");
 	Monitor* sync_with_child = osthread->startThread_lock();
 	MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
-	sync_with_child->notify();
+	sync_with_child->notify();		// does current thread wait on its osthread->startThread_lock() ?
 }
 
 // Free Linux resources related to the OSThread

@@ -2511,7 +2511,7 @@ bool os::protect_memory(char* addr, size_t size, ProtType prot, bool is_committe
 }
 
 bool os::guard_memory(char* addr, size_t size) {
-  return checked_mprotect(addr, size, PROT_NONE);
+  return checked_mprotect(addr, size, PROT_NONE);   // Protect this page by setting it without any read/write property?
 }
 
 bool os::unguard_memory(char* addr, size_t size) {
