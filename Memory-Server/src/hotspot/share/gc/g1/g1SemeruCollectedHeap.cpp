@@ -1748,7 +1748,7 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper_from_rs(c
 																					rs.size());
 
 	#ifdef ASSERT
-		tty->print("%s, create reserve space [0x%lx, 0x%lx) for %s \n", __func__, (unsigned long)rs.base(),
+		log_debug(semeru)("%s, create reserve space [0x%lx, 0x%lx) for %s \n", __func__, (unsigned long)rs.base(),
 																																							(unsigned long)(rs.base() + rs.size()),
 																																							description);
 	#endif
@@ -1922,6 +1922,10 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 		tty->print("%s, Reserve space for RDMA data structure, [0x%lx, 0x%lx) \n", __func__, 
 																																	(size_t)rdma_rs.base() , 
 																																	(size_t)(rdma_rs.base() + rdma_rs.size()) );
+		tty->print("%s, current thread is VMThread ? %d, %s, 0x%lx \n", __func__,
+																										(int)(Thread::current()->is_VM_thread()),
+																										((VMThread*)Thread::current())->name(),
+																										(size_t)Thread::current() );
 	#endif
 
 	//
@@ -2160,9 +2164,10 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 	// debug
-	// This call may 
-	// Wake up the concurrent threads waiting on SemeruCGC_lock
-	 wake_up_semeru_mem_server_concurrent_gc();
+	// The Semeru heap and related Concurrent Threads are built. 
+	// TOO EARLY TOO WAKEUP HERE.
+	// Should after setting the variable, _init_completed.
+	// wake_up_semeru_mem_server_concurrent_gc();  // maybe here is too early ? there is no thread waiting on the SemeruCGC_lock now. How can this be possible ??
 
  	return JNI_OK;
 }
@@ -2424,7 +2429,7 @@ void G1SemeruCollectedHeap::increment_old_marking_cycles_started() {
 				 _old_marking_cycles_started, _old_marking_cycles_completed);
 
 	#ifdef ASSERT
-	tty->print("%s, Start (Wake up) Semeru Memory Server GC. \n", __func__);
+	log_debug(gc,thread)("%s, Start (Wake up) Semeru Memory Server GC. \n", __func__);
 	#endif
 
 	_old_marking_cycles_started++;
@@ -3683,6 +3688,9 @@ void G1SemeruCollectedHeap::wake_up_semeru_mem_server_concurrent_gc(){
 		do_concurrent_mark();
 	}
 
+	#ifdef ASSERT
+		log_debug(gc,thread)("%s, Wake up G1SemeruConcurrentMarkThread->run_srvice() done. \n", __func__);
+	#endif
 }
 
 

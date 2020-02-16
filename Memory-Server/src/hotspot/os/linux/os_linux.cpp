@@ -679,8 +679,8 @@ static void *thread_native_entry(Thread *thread) {
 
 	osthread->set_thread_id(os::current_thread_id());
 
-	log_info(os, thread)("Thread is alive (tid: " UINTX_FORMAT ", pthread id: " UINTX_FORMAT ").",
-		os::current_thread_id(), (uintx) pthread_self());
+	log_info(os, thread)("Thread is alive (tid: " UINTX_FORMAT ", pthread id: 0x%lx).",
+		os::current_thread_id(), (size_t) pthread_self());
 
 	if (UseNUMA) {
 		int lgrp_id = os::numa_get_group_id();
@@ -698,18 +698,26 @@ static void *thread_native_entry(Thread *thread) {
 	{
 		MutexLockerEx ml(sync, Mutex::_no_safepoint_check_flag);
 
+		#ifdef ASSERT
+		log_debug(gc,thread)("thread_native_entry, notify parent thread, thread 0x%lx is INITIALIZED.\n", (size_t)thread);
+		#endif
+
 		// notify parent thread
 		osthread->set_state(INITIALIZED);
 		sync->notify_all();
 
 		// wait until os::start_thread()
-		while (osthread->get_state() == INITIALIZED) {
-			sync->wait(Mutex::_no_safepoint_check_flag);
+		while (osthread->get_state() == INITIALIZED) {  // if osthread->_state keeps INITIALIZED, keeps waiting on Mutex, sync.
+			sync->wait(Mutex::_no_safepoint_check_flag);	// os::start_thread() will wake up this thread.
 		}
 	}
 
+	#ifdef ASSERT
+	log_debug(gc,thread)("thread_native_entry,  thread 0x%lx is waken up to run.\n", (size_t)thread);
+	#endif
+
 	// call one more level start routine
-	thread->call_run();
+	thread->call_run();	 // [?] how to know which function to run ? e.g. G1SemeruConcurrentMarkThread should execute  run_service()
 
 	// Note: at this point the thread object may already have deleted itself.
 	// Prevent dereferencing it from here on out.
@@ -721,6 +729,11 @@ static void *thread_native_entry(Thread *thread) {
 	return 0;
 }
 
+/**
+ * Tag : Create a pthread based thread.
+ * 			 It can be Java Thread or ConcurrentThread etc.
+ *  
+ */
 bool os::create_thread(Thread* thread, ThreadType thr_type,
 											 size_t req_stack_size) {
 	assert(thread->osthread() == NULL, "caller responsible");
@@ -765,16 +778,25 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 	// Configure glibc guard page.
 	pthread_attr_setguardsize(&attr, os::Linux::default_guard_size(thr_type));
 
+	#ifdef ASSERT
+    log_debug(gc, thread)(" linux os::create_thread, trying to create Thread instance: 0x%lx ", (size_t)thread);
+  #endif
+
 	ThreadState state;
 
 	{
 		pthread_t tid;
 		int ret = pthread_create(&tid, &attr, (void* (*)(void*)) thread_native_entry, thread);
 
+		#ifdef ASSERT
+		log_debug(gc, thread)("linux os::create_thread : Executing Thread (tid: 0x%lx, pthread id: 0x%lx) for building thread instance 0x%lx.",
+																								(size_t)os::current_thread_id(), (size_t) pthread_self(),(size_t)thread );
+		#endif
+
 		char buf[64];
 		if (ret == 0) {
-			log_info(os, thread)("Thread started (pthread id: " UINTX_FORMAT ", attributes: %s). ",
-				(uintx) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
+			log_info(os, thread)("Thread started (pthread id: 0x%lx , attributes: %s). ",
+				(size_t) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
 		} else {
 			log_warning(os, thread)("Failed to start thread - pthread_create failed (%s) for attributes: %s.",
 				os::errno_name(ret), os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
@@ -794,9 +816,9 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 
 		// Wait until child thread is either initialized or aborted
 		{
-			Monitor* sync_with_child = osthread->startThread_lock();
+			Monitor* sync_with_child = osthread->startThread_lock();   // [?] osthread->startThread_lock() should  the lock, sync ?
 			MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
-			while ((state = osthread->get_state()) == ALLOCATED) {
+			while ((state = osthread->get_state()) == ALLOCATED) {		// next state is INITIALIZED
 				sync_with_child->wait(Mutex::_no_safepoint_check_flag);
 			}
 		}
@@ -887,16 +909,21 @@ bool os::create_attached_thread(JavaThread* thread) {
 
 
 /** 
- * Tag : Schedule a pthread based thread to run ?  
+ * Tag : Schedule a (child) pthread based thread to run.
  * 
- * 	e.g. Schedule a JavaThread to run ?
+ * e.g. Schedule a JavaThread/ConcurrentThred handler to run
  *   
  */
 void os::pd_start_thread(Thread* thread) {
 	OSThread * osthread = thread->osthread();
 	assert(osthread->get_state() != INITIALIZED, "just checking");
-	Monitor* sync_with_child = osthread->startThread_lock();
+	Monitor* sync_with_child = osthread->startThread_lock();		// chiled thread use the mutex, sync, to communicate with parent thread.
 	MutexLockerEx ml(sync_with_child, Mutex::_no_safepoint_check_flag);
+	      
+	#ifdef ASSERT
+    log_debug(gc,thread)("os::pd_start_thread, go to wake up initialized thread 0x%lx, waiting on Mutex, sync. \n", (size_t)thread);
+  #endif
+
 	sync_with_child->notify();		// does current thread wait on its osthread->startThread_lock() ?
 }
 

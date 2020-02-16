@@ -745,6 +745,10 @@ jint universe_init() {
 
 	ResolvedMethodTable::create_table();
 
+	#ifdef ASSERT
+	log_debug(gc,thread)("Exit %s. Thread 0x%lx \n", __func__, (size_t)Thread::current());
+	#endif
+
 	return JNI_OK;
 }
 
@@ -866,6 +870,11 @@ jint Universe::initialize_heap() {
 					 "Should support thread-local allocation buffers");
 		ThreadLocalAllocBuffer::startup_initialization();
 	}
+
+	#ifdef ASSERT
+	log_debug(gc,thread)("Exit %s. Thread 0x%lx \n", __func__, (size_t)Thread::current());
+	#endif
+
 	return JNI_OK;
 }
 

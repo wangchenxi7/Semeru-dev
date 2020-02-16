@@ -558,6 +558,10 @@ G1SemeruConcurrentMark::G1SemeruConcurrentMark(G1SemeruCollectedHeap* g1h,
 		vm_shutdown_during_initialization("Could not create ConcurrentMarkThread");
 	}
 
+	#ifdef ASSERT
+		log_debug(gc,thread)("%s, Build _semeru_cm_thread(0x%lx) successfully. \n", __func__, (size_t)_semeru_cm_thread );
+	#endif
+
 	// [x] All the Semeru Concurrent threads wait on the SemeruCGC_lock.
 	//   	 The Semeru Concurrent threads should be waken up by VM Thread.
 	assert(SemeruCGC_lock != NULL, "SemeruCGC_lock must be initialized");
@@ -3658,6 +3662,11 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	//
 	do {
 
+		//debug
+		//unsigned int microseconds = 20000000; //20s.
+		//tty->print("%s, Thread 0x%lx sleep %u seconds. \n", __func__ , (size_t)Thread::current(), microseconds/1000000 );
+		//usleep(microseconds);
+
 		//
 		// 1.1 Trace or Remark & Compact the Region pointed by _curr_region.
 		//	
@@ -3979,8 +3988,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 	// Debug
 	#ifdef ASSERT
-	unsigned int microseconds = 10000000; //10s.
-	usleep(microseconds);
+	//unsigned int microseconds = 10000000; //10s.
+	//usleep(microseconds);
 
 	// Let this thread wait on the SemeruCGC_lock agian.
 	// [?] is the Workers of Concurrent Thread also a Concurrent Thread ??

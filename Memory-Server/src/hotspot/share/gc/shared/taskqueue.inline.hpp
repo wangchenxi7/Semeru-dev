@@ -161,7 +161,7 @@ inline void OverflowTargetObjQueue<E, F, N>::initialize( size_t q_index) {
   this->_elems = SemeruArrayAllocator<E>::allocate_target_oop_q(N, F, requested_addr);           // Allocate the space for the queue.
 
   #ifdef ASSERT
-    printf("%s, Allocate OverflowTargetObjQueue for HeapRegion[%lu] at 0x%lx, size 0x%lx \n", __func__,
+    log_debug(semeru)("%s, Allocate OverflowTargetObjQueue for HeapRegion[%lu] at 0x%lx, size 0x%lx \n", __func__,
                                                             q_index, (size_t)requested_addr, (size_t)N);
   #endif
 

@@ -777,7 +777,13 @@ bool os::Aix::get_meminfo(meminfo_t* pmi) {
 //////////////////////////////////////////////////////////////////////////////
 // create new thread
 
-// Thread start routine for all newly created threads
+/** 
+ * Thread start routine for all newly created threads
+ *
+ * [?] the first parameter, thread, is the parent thread which crated this child thread by pthread_create()
+ * 
+ * 
+ */
 static void *thread_native_entry(Thread *thread) {
 
   thread->record_stack_base_and_size();
@@ -895,7 +901,7 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
   // guard pages might not fit on the tiny stack created.
   int ret = pthread_attr_setstacksize(&attr, stack_size);
   if (ret != 0) {
-    log_warning(os, thread)("The %sthread stack size specified is invalid: " SIZE_FORMAT "k",
+    log_warning(os, thread)("The %s thread stack size specified is invalid: " SIZE_FORMAT "k",
                             (thr_type == compiler_thread) ? "compiler " : ((thr_type == java_thread) ? "" : "VM "),
                             stack_size / K);
     thread->set_osthread(NULL);
@@ -913,11 +919,13 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
   pthread_t tid = 0;
   if (ret == 0) {
     ret = pthread_create(&tid, &attr, (void* (*)(void*)) thread_native_entry, thread);
+    // After the invokation of pthread_create, goto execute entrance function, thread_native_entry, immediately ?
+    // [?] pass the parent thread, thread, as args to the newly created thread ??
   }
 
   if (ret == 0) {
     char buf[64];
-    log_info(os, thread)("Thread started (pthread id: " UINTX_FORMAT ", attributes: %s). ",
+    log_info(os, thread)("Thread started (pthread id: " UINTX_FORMAT ", attributes: %s).",
       (uintx) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
   } else {
     char buf[64];

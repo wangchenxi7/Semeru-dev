@@ -116,11 +116,11 @@ G1SemeruConcurrentMarkThread::G1SemeruConcurrentMarkThread(G1SemeruConcurrentMar
   _phase_manager_stack() {
 
   set_name("Semeru Memory Server Concurrent Thread");
-  create_and_start();     // [?] This will invoke the G1SemeruConcurrentThread->run_service()
+  create_and_start();     // [x] This will 1) create pthread based CT. 2) Execute the G1SemeruConcurrentThread->run_service() by the newly created pthread based CT.
 
   // debug
   #ifdef ASSERT
-  tty->print("%s, Create thread %s, %lx.\n", __func__, name(), (size_t)this);
+  log_debug(gc,thread)("%s, Created thread %s, 0x%lx successfully.\n", __func__, name(), (size_t)this);
   #endif
 }
 
@@ -313,6 +313,48 @@ bool G1SemeruConcurrentMarkThread::request_concurrent_phase(const char* phase_na
 /**
  * Semeru Memory Server
  *  
+ * Confirm all the enviorments are initialized well.
+ * And then trigger the G1SemeruConcurrentMarkThread->run_service() to run.
+ * 
+ */
+void G1SemeruConcurrentMarkThread::wait_for_universe_init() {
+  MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
+  
+  #ifdef ASSERT
+    log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, waiting for is_init_completed, %d and  _should_terminate, %d.",
+                                                              __func__, (size_t)this, (int)is_init_completed(),(int)_should_terminate);
+  #endif
+
+  while (!is_init_completed() && !_should_terminate) {
+    SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag, 1);
+  }
+
+  #ifdef ASSERT
+    log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, is prepared well to run. \n",__func__, (size_t)this);
+  #endif
+}
+
+
+
+void G1SemeruConcurrentMarkThread::run() {
+
+  #ifdef ASSERT
+	log_debug(semeru,thread)("G1SemeruConcurrentMarkThread:%s, Execute Concurrent thread 0x%lx 's service.\n", __func__, (size_t)this);
+	#endif
+
+  ConcurrentGCThread::initialize_in_thread();
+  wait_for_universe_init();  // Confirm the heap is initialized. Wait on lock CGC_lock  and init->_init_completed.
+
+  run_service();
+
+  ConcurrentGCThread::terminate();  // If exit from the ConcurrentGCThread's service, terminate this thread ?
+}
+
+
+
+/**
+ * Semeru Memory Server
+ *  
  *  Run the Semeru concurrent marking, STW Remark , STW compaction in background. 
  *  [?] Which thread is executing this service ?
  *    => a special concurrent thread
@@ -353,10 +395,20 @@ void G1SemeruConcurrentMarkThread::run_service() {
     // wait until started is set.
     // Before invoke sleep_before_next_cycle(), MUST set G1SemeruConcurrentMarkThread->_state to Idle or Started.
     //
+    #ifdef ASSERT
+      log_debug(semeru,thread)("%s, entering G1SemeruConcurrentMarkThread(0x%lx)->run_service(), and wait on SemeruGC_lock. \n", 
+                                                                  __func__, (size_t)Thread::current());
+    #endif
+
     sleep_before_next_cycle();    // [XX]Concurrent thread is waiting for the RDMA signal from CPU server.
     if (should_terminate()) {
       break;
     }
+
+    #ifdef ASSERT
+      log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread(0x%lx)->run_service() is waken up. \n", 
+                                                                  __func__, (size_t)Thread::current());
+    #endif
 
     // [?] What's  the purpose of these phase ?
     //    Just for Log ? Can also synchronize some thing?
@@ -396,12 +448,12 @@ void G1SemeruConcurrentMarkThread::run_service() {
 
         #ifdef ASSERT
         if(Thread::current() != NULL && Thread::current()->is_Named_thread()){
-          tty->print("%s, Runnting Thread, %s, gc_id[%u], 0x%lx is running here. \n", __func__, 
+         log_debug(semeru,thread)("%s, Runnting Thread, %s, gc_id[%u], 0x%lx is running here. \n", __func__, 
                                                 ((G1SemeruConcurrentMarkThread*)Thread::current())->name(), 
                                                 ((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
                                                 (size_t)Thread::current());
         }else{
-          tty->print("%s, Unknown Runnting thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
+          log_debug(semeru,thread)("%s, Unknown Runnting thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
         }
         #endif
 
@@ -656,6 +708,10 @@ void G1SemeruConcurrentMarkThread::run_service() {
   _semeru_cm->mem_server_cset()->cancel_compact();
   _semeru_cm->mem_server_cset()->cancel_scan();
 
+
+  #ifdef ASSERT
+    log_debug(semeru,thread)("%s, End of G1SemeruConcurrentMarkThread's service.",__func__);
+  #endif
 }
 
 

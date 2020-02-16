@@ -92,6 +92,10 @@ DEBUG_ONLY(class ResourceMark;)
 
 class WorkerThread;
 
+// Semeru
+class G1SemeruCollectedHeap;
+
+
 // Class hierarchy
 // - Thread
 //   - JavaThread
@@ -117,7 +121,7 @@ class Thread: public ThreadShadow {
 
 #ifndef USE_LIBRARY_BASED_TLS_ONLY
   // Current thread is maintained as a thread-local variable
-  static THREAD_LOCAL_DECL Thread* _thr_current;
+  static THREAD_LOCAL_DECL Thread* _thr_current;        // [?] What's this ?? pthread ?
 #endif
 
  private:
@@ -764,6 +768,8 @@ protected:
 };
 
 // Inline implementation of Thread::current()
+//  [?] return the Thread structure's start address ?
+//  
 inline Thread* Thread::current() {
   Thread* current = current_or_null();
   assert(current != NULL, "Thread::current() called on detached thread");

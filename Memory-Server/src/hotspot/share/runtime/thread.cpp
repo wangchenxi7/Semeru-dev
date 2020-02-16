@@ -134,6 +134,12 @@
 #include "jfr/jfr.hpp"
 #endif
 
+
+// Semeru header
+
+// debug
+#include "gc/g1/g1SemeruCollectedHeap.hpp"
+
 // Initialization after module runtime initialization
 void universe_post_module_init();  // must happen after call_initPhase2
 
@@ -379,6 +385,10 @@ void Thread::call_run() {
 		PTR_FORMAT "-" PTR_FORMAT " (" SIZE_FORMAT "k).",
 		os::current_thread_id(), p2i(stack_base() - stack_size()),
 		p2i(stack_base()), stack_size()/1024);
+
+	#ifdef ASSERT
+	log_debug(gc,thread)("%s, Execute  thread 0x%lx 's service.\n",__func__, (size_t)this);
+	#endif
 
 	// Invoke <ChildClass>::run()
 	this->run();
@@ -3757,7 +3767,10 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 	ObjectMonitor::Initialize();
 
 	// Initialize global modules
-	jint status = init_globals();
+	//
+	// Semeru Heap and Concurrent GC threads is initialzied in the init_globals()
+	//
+	jint status = init_globals();  // [??] After build all the Concurrent Threads, still not build the VMhread ???
 	if (status != JNI_OK) {
 		main_thread->smr_delete();
 		*canTryAgain = false; // don't let caller call JNI_CreateJavaVM again
@@ -3771,7 +3784,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
 	HandleMark hm;
 
-	{ MutexLocker mu(Threads_lock);
+	{ 
+		MutexLocker mu(Threads_lock);
 		Threads::add(main_thread);
 	}
 
@@ -3834,7 +3848,14 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
 	// Set flag that basic initialization has completed. Used by exceptions and various
 	// debug stuff, that does not work until all basic classes have been initialized.
+	//
+	// [x] Since here, all the Semeru & Concurrent threads's service can execute.
+	//
 	set_init_completed();
+
+	#ifdef ASSERT
+		log_debug(semeru,thread)("create_vm : VM initialization is done. \n");
+	#endif
 
 	LogConfiguration::post_initialize();
 	Metaspace::post_initialize();
@@ -3996,6 +4017,18 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 		MetaspaceShared::preload_and_dump(CHECK_JNI_ERR);
 		ShouldNotReachHere();
 	}
+
+
+	// Semeru
+	// Debug
+	#ifdef ASSERT
+	if(SemeruEnableMemPool){
+		log_debug(semeru,thread)("%s, Goto wake up the Semeru Memory Server Conc GC.",__func__);
+		((G1SemeruCollectedHeap*)Universe::semeru_heap())->wake_up_semeru_mem_server_concurrent_gc();
+	}
+	log_debug(semeru,thread)("Exit %s.",__func__);
+	#endif
+
 
 	return JNI_OK;
 }

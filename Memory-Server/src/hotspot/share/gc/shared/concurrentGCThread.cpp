@@ -36,14 +36,32 @@ ConcurrentGCThread::ConcurrentGCThread() :
   _should_terminate(false), _has_terminated(false) {
 };
 
+/**
+ * Tag : 1) Create a pthread based ConcurrentThread.
+ *       2) Wake up the created child thread, when it's initialized.     
+ *     [?] The first parameter of os::create_thread, pass "this thread" to the function ? What's the purpose ?
+ */
 void ConcurrentGCThread::create_and_start(ThreadPriority prio) {
-  if (os::create_thread(this, os::cgc_thread)) {
-    // XXX: need to set this to low priority
+
+    #ifdef ASSERT
+      log_debug(gc,thread)("%s,Try to create pthrad based concurrent thread 0x%lx \n", __func__, (size_t)this);
+    #endif
+
+  if (os::create_thread(this, os::cgc_thread)) {   // 1) Create a pthread for this JVM ConcurrentThread (handler)
+    // XXX: need to set this to low priority       //     The created pthread waits on metex, sync.
     // unless "aggressive mode" set; priority
     // should be just less than that of VMThread.
     os::set_priority(this, prio);
+
+    #ifdef ASSERT
+      log_debug(gc,thread)("%s, create pthrad based concurrent thread 0x%lx done \n", __func__, (size_t)this);
+    #endif
+
     if (!_should_terminate) {
-      os::start_thread(this);
+      #ifdef ASSERT
+        log_debug(gc,thread)("%s, go to wake up concurrent thread 0x%lx \n", __func__, (size_t)this);
+      #endif
+      os::start_thread(this);                      // 2) Schedule the created pthread to run.
     }
   }
 }
@@ -61,6 +79,8 @@ void ConcurrentGCThread::wait_for_universe_init() {
     CGC_lock->wait(Mutex::_no_safepoint_check_flag, 1);
   }
 }
+
+
 
 /**
  * Terminate a Concurrent Thread,
@@ -84,8 +104,13 @@ void ConcurrentGCThread::terminate() {
  * The main entry of the concurrent marking component. 
  */
 void ConcurrentGCThread::run() {
+
+  #ifdef ASSERT
+	log_debug(gc,thread)("%s, Execute Concurrent thread 0x%lx 's service.\n",__func__, (size_t)this);
+	#endif
+
   initialize_in_thread();
-  wait_for_universe_init();
+  wait_for_universe_init();  // Confirm the heap is initialized. Wait on lock CGC_lock  and init->_init_completed.
 
   run_service();
 

@@ -30,6 +30,7 @@
 
 class ConcurrentGCThread: public NamedThread {
   friend class VMStructs;
+  friend class G1SemeruConcurrentMarkThread;
 
   bool volatile _should_terminate;      // [?] Exit this concurrentGCThread ? difference with G1SemeruConcurrentMarkThread->_has_aborted ?
   bool _has_terminated;

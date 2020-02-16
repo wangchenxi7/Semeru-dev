@@ -160,6 +160,10 @@ jint init_globals() {
     JVMFlag::printFlags(tty, false, PrintFlagsRanges);
   }
 
+  #ifdef ASSERT
+	log_debug(gc,thread)("Exit %s. Thread 0x%lx \n", __func__, (size_t)Thread::current());
+	#endif
+
   return JNI_OK;
 }
 

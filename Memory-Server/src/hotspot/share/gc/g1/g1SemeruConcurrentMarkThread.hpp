@@ -30,6 +30,7 @@
 
 // Semeru
 #include "gc/shared/rdmaStructure.hpp"
+#include "runtime/init.hpp"
 
 //class G1ConcurrentMark;
 class G1Policy;
@@ -94,11 +95,16 @@ class G1SemeruConcurrentMarkThread: public ConcurrentGCThread {
   void run_service();
   void stop_service();
 
+  // Override the ConcurrentGCThread
+  void wait_for_universe_init();
+
  public:
   // Constructor
 
   // Semeru
   G1SemeruConcurrentMarkThread(G1SemeruConcurrentMark* cm);
+
+  void run(); 
 
   // Total virtual time so far for this thread and concurrent marking tasks.
   double vtime_accum();

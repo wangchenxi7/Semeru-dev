@@ -866,6 +866,11 @@ void os::start_thread(Thread* thread) {
   MutexLockerEx ml(thread->SR_lock(), Mutex::_no_safepoint_check_flag);
   OSThread* osthread = thread->osthread();
   osthread->set_state(RUNNABLE);
+
+  #ifdef ASSERT
+    log_debug(gc,thread)("os::start_thread, go to wake up concurrent thread 0x%lx \n", (size_t)thread);
+  #endif
+
   pd_start_thread(thread);
 }
 

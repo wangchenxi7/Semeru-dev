@@ -36,7 +36,9 @@ class Thread;
 // safe in theory, is and has-been for a long time, in practice).
 // Platforms without compiler-based TLS (i.e. __thread storage-class modifier)
 // will use this implementation for all TLS access - see thread.hpp/cpp
-
+//
+// Tag : Thread::current() return this instance's start address.
+//       [?] What's the connection between this instance and the pthread ??
 class ThreadLocalStorage : AllStatic {
 
  // Exported API

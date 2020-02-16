@@ -635,6 +635,11 @@ static uint64_t locate_unique_thread_id(mach_port_t mach_thread_port) {
 // Thread start routine for all newly created threads
 static void *thread_native_entry(Thread *thread) {
 
+  #ifdef ASSERT
+    log_debug(gc,thread)("thread_native_entry, enter the newly created pthread's main function intializing thread 0x%lx.\n",
+                                                                          (size_t)thread);
+  #endif
+
   thread->record_stack_base_and_size();
 
   // Try to randomize the cache line index of hot stack frames.
@@ -682,11 +687,21 @@ static void *thread_native_entry(Thread *thread) {
     osthread->set_state(INITIALIZED);
     sync->notify_all();
 
+    #ifdef ASSERT
+    log_debug(gc,thread)("thread_native_entry, thread 0x%lx are initialized, waiting to be waken up.\n",
+                                                                          (size_t)thread);
+    #endif
+
     // wait until os::start_thread()
     while (osthread->get_state() == INITIALIZED) {
       sync->wait(Mutex::_no_safepoint_check_flag);
     }
   }
+
+    #ifdef ASSERT
+    log_debug(gc,thread)("thread_native_entry, pthread are waken up, go to execute service of intialized thread 0x%lx.\n",
+                                                                          (size_t)thread);
+    #endif
 
   // call one more level start routine
   thread->call_run();
@@ -729,6 +744,11 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
   int status = pthread_attr_setstacksize(&attr, stack_size);
   assert_status(status == 0, status, "pthread_attr_setstacksize");
 
+  #ifdef ASSERT
+    log_debug(gc, thread)(" bsd os::create_thread, trying to create Thread instance: 0x%lx ", (size_t)thread);
+  #endif
+
+
   ThreadState state;
 
   {
@@ -737,8 +757,8 @@ bool os::create_thread(Thread* thread, ThreadType thr_type,
 
     char buf[64];
     if (ret == 0) {
-      log_info(os, thread)("Thread started (pthread id: " UINTX_FORMAT ", attributes: %s). ",
-        (uintx) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
+      log_info(os, thread)("Thread started (pthread id: " UINTX_FORMAT ", attributes: %s). Build for Thread instance 0x%lx ",
+        (uintx) tid, os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr), (size_t)thread );
     } else {
       log_warning(os, thread)("Failed to start thread - pthread_create failed (%s) for attributes: %s.",
         os::errno_name(ret), os::Posix::describe_pthread_attr(buf, sizeof(buf), &attr));
