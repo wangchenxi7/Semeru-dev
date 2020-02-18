@@ -45,9 +45,7 @@
 //
 // RDMA related macros  
 //
-#define PAGE_SIZE						4096
-#define ONE_GB							1024*1024*1024	// byte size of ONE GB
-#define CHUNK_SIZE_GB									1		// Must be a number of 2 to power N.
+#define CHUNK_SIZE_GB									4		// Must be a number of 2 to power N.
 #define MAX_REMOTE_MEMORY_SIZE_GB 		32 		// The max remote memory size of current client. For 1 remote memory server, this value eaquals to the remote memory size.
 #define RDMA_READ_WRITE_QUEUE_DEPTH		16		// [?] connection with the Disk dispatch queue depth ??
 extern uint64_t RMEM_SIZE_IN_PHY_SECT;
@@ -55,8 +53,125 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 // 1-sieded RDMA Macros
 
 // Each request can have multiple bio, but each bio can only have 1  pages ??
-#define MAX_REQUEST_SGL								64 		// !! Not sure about this, debug.  
+//#define MAX_REQUEST_SGL								64 		// !! Not sure about this, debug.  
+//#define ONE_SIEDED_RDMA_BUF_SIZE			MAX_REQUEST_SGL * PAGE_SIZE
+
+
+
+
+
+
+
+//
+// Basic Macro
+//
+
+#define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
+#define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
+
+
+//
+// RDMA Related
+//
+#define PAGE_SIZE		      ((size_t)4096)	// bytes
+#define REGION_SIZE_GB    ((size_t)4)   	// RDMA manage granularity, not the Heap Region.
+#define RDMA_DATA_REGION_NUM     8
+
+
+#define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
 #define ONE_SIEDED_RDMA_BUF_SIZE			MAX_REQUEST_SGL * PAGE_SIZE
+
+
+
+//
+// JVM Related.
+//
+
+
+
+#define SEMERU_START_ADDR   ((size_t)0x400000000000)
+
+// RDMA structure space
+// [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
+#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *4)
+
+// 1) First part is for the Target Object queue, 128M
+
+// [0, 1GB), small meta data space
+
+// 1.1 Target object queue , 128MB
+#define TARGET_OBJ_OFFSET     (size_t)0
+#define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
+
+// 1.2 Memory server CSet
+#define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB
+#define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
+
+// 1.3 Flags setted by CPU srver
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET  (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE) // 129MB
+#define FLAGS_OF_CPU_SERVER_STATE_SIZE    (size_t)0x1000    // 4KB
+
+// 1.x Padding for debug
+//     Make it easier to register RDMA buffer.
+//     Commit a contiguous space for RDMA Meta Space.
+//     Points to the last item.
+#define RDMA_PADDING_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)
+#define RDMA_PADDING_SIZE       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
+
+
+//2.  [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
+#define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // offset to semeru start addr, 1GB
+#define ALIVE_BITMAP_SIZE        (size_t)ONE_GB
+
+#define DEST_BITMAP_OFFSET       (size_t)0x80000000     // 2GB
+#define DEST_BITMAP_SIZE         (size_t)ONE_GB
+
+
+//
+// x. End of RDMA structure commit size
+//
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + DEST_BITMAP_OFFSET + DEST_BITMAP_SIZE)
+
+
+// properties for the whole Semeru heap.
+// [ RDMA meta data sapce] [RDMA data space]
+
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE/ONE_GB)    //for local memory management
+#define MAX_REGION_NUM    ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
+
+
+
+
+
+
+
+
+
+
+
+/**
+ * Bit operations 
+ * 
+ */
+#define GB_SHIFT 				30 
+#define CHUNK_SHIFT			(GB_SHIFT + ilog2(CHUNK_SIZE_GB))	 // Used to calculate the chunk index in Client (File chunk). Initialize it before using.
+#define	CHUNK_MASK			((1 << CHUNK_SHIFT)-1)
+
+#define RMEM_LOGICAL_SECT_SHIFT		(ilog2(RMEM_LOGICAL_SECT_SIZE))  // the power to 2, shift bits.
+
+//
+// File address to Remote virtual memory address translation
+//
+
+
+//
+// Enable debug information printing 
+//
+#define DEBUG_RDMA_CLIENT 1 
+//#define DEBUG_RDMA_CLIENT_DETAIL 1
+//#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
+//#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
+
 
 
 
@@ -82,28 +197,10 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 
 
 
-/**
- * Bit operations 
- * 
- */
-#define GB_SHIFT 			30 
-#define CHUNK_SHIFT			(GB_SHIFT + ilog2(CHUNK_SIZE_GB))	 // Used to calculate the chunk index in Client (File chunk). Initialize it before using.
-#define	CHUNK_MASK			((1 << CHUNK_SHIFT)-1)
-
-#define RMEM_LOGICAL_SECT_SHIFT		(ilog2(RMEM_LOGICAL_SECT_SIZE))  // the power to 2, shift bits.
-
-//
-// File address to Remote virtual memory address translation
-//
 
 
-//
-// Enable debug information printing 
-//
-#define DEBUG_RDMA_CLIENT 1 
-//#define DEBUG_RDMA_CLIENT_DETAIL 1
-//#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
-//#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
+
+
 
 // from kernel 
 /*  host to network long long
@@ -191,9 +288,10 @@ enum mem_type {
 struct message {
   	
 	// Information of the chunk to be mapped to remote memory server.
-	uint64_t buf[MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB];		// Remote addr.
-  uint32_t rkey[MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB];   	// remote key
-  int size_gb;						// Size of the chunk ?
+	uint64_t buf[MAX_REGION_NUM];					// Remote addr.
+	uint64_t mapped_size[MAX_REGION_NUM];	// Maybe not fully mapped. 
+  uint32_t rkey[MAX_REGION_NUM];   			// remote key
+  int size_gb;													// totally mapped size.
 
 	enum message_type type;
 };
@@ -221,8 +319,9 @@ enum region_status{
 // Default size is CHUNK_SIZE_GB, 1 GB default.
 //
 struct remote_mapping_chunk {
-	uint32_t 					remote_rkey;		/* RKEY of the remote mapped chunk */
-	uint64_t 					remote_addr;		/* Virtual address of remote mapped chunk */
+	uint32_t 					remote_rkey;		// RKEY of the remote mapped chunk
+	uint64_t 					remote_addr;		// Virtual address of remote mapped chunk
+	uint64_t					mapped_size;		// For some specific Chunk, we may only map a contigunous range.
 	enum chunk_mapping_state 	chunk_state;
 };
 
@@ -238,10 +337,9 @@ struct remote_mapping_chunk {
  */
 struct remote_mapping_chunk_list {
 	struct remote_mapping_chunk *remote_chunk;		
-	//uint32_t chunk_size_gb;  		// defined in macro
-	uint32_t remote_free_size_gb;
-	uint32_t chunk_num;				// length of remote_chunk list
-	uint32_t chunk_ptr;				// points to first empty chunk. 
+	uint32_t remote_free_size_gb;		// total mapped size. Accumulated each remote_mapping_chunk[i]->mapped_size
+	uint32_t chunk_num;							// length of remote_chunk list
+	uint32_t chunk_ptr;							// points to first empty chunk. 
 
 };
 
@@ -439,7 +537,7 @@ struct rdma_session_context {
 	struct rmem_rdma_queue		*rmem_rdma_queue_list; 		// one rdma_queue per dispatch queue.
 
 
-	// 5) manage the CHUNK mapping.
+	// 5) manage the CHUNK mapping between CPU server and Memory server.
 	struct remote_mapping_chunk_list remote_chunk_list;
 
 
