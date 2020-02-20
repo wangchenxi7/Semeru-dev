@@ -702,12 +702,12 @@ err:
  * 
  * 
  */
-int send_message_to_remote(struct rdma_session_context *rdma_session, int messge_type  , int size_gb)
+int send_message_to_remote(struct rdma_session_context *rdma_session, int messge_type  , int chunk_num)
 {
 	int ret = 0;
 	struct ib_send_wr * bad_wr;
 	rdma_session->send_buf->type = messge_type;
-	rdma_session->send_buf->size_gb = size_gb; 		// chunk_num = size_gb/chunk_size
+	rdma_session->send_buf->mapped_chunk = chunk_num; 		// 1 Meta , N-1 Data Regions
 
 	#ifdef DEBUG_RDMA_CLIENT
 	printk("Send a Message to Remote memory server. cb->send_buf->type : %d, %s \n", messge_type, rdma_message_print(messge_type) );
@@ -768,10 +768,10 @@ int handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc){
 			// Step 1), get the Free Regions. 
 			//
 			#ifdef DEBUG_RDMA_CLIENT
-			printk( "%s, avaible size : %d GB \n ", __func__,	rdma_session->recv_buf->size_gb );
+			printk( "%s, avaible chunk number : %d \n ", __func__,	rdma_session->recv_buf->mapped_chunk );
 			#endif
 
-			rdma_session->remote_chunk_list.remote_free_size_gb = rdma_session->recv_buf->size_gb;
+			rdma_session->remote_chunk_list.chunk_num = rdma_session->recv_buf->mapped_chunk;
 			rdma_session->state = FREE_MEM_RECV;	
 			
 			ret = init_remote_chunk_list(rdma_session);
@@ -812,7 +812,7 @@ int handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc){
 			#ifdef DEBUG_RDMA_CLIENT 
 			// Check the received data
 			// All the rkey[] are reset to 0 before sending to client.
-			for(i=0; i< MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB; i++){
+			for(i=0; i< MAX_REGION_NUM; i++){
 				if(rdma_session->recv_buf->rkey[i]){
 					printk("%s, received remote chunk[%d] addr : 0x%llx, rkey : 0x%x \n", __func__, i,
 																		ntohll(rdma_session->recv_buf->buf[i]), 
@@ -878,8 +878,7 @@ int octupos_requset_for_chunk(struct rdma_session_context* rdma_session, int num
 	#endif
 
 	// Post the send WR
-//	ret = send_message_to_remote(rdma_session, num_chunk == 1 ? REQUEST_SINGLE_CHUNK : REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
-	ret = send_message_to_remote(rdma_session, REQUEST_CHUNKS, num_chunk * CHUNK_SIZE_GB );
+	ret = send_message_to_remote(rdma_session, REQUEST_CHUNKS, num_chunk );
 	if(ret) {
 		printk(KERN_ERR "%s, Post 2-sided message to remote server failed.\n", __func__);
 		goto err;
@@ -935,9 +934,9 @@ int octupos_requset_for_chunk(struct rdma_session_context* rdma_session, int num
 
 int init_rdma_command_list(struct rdma_session_context *rdma_session, uint32_t queue_ind){
 	int ret = 0;
-	uint32_t i;
+	//uint32_t i;
 	struct rmem_rdma_queue		*rdma_q_ptr;
-	struct rmem_rdma_command 	*rdma_cmd_ptr;  // rmem_rdma_command iterator.
+	//struct rmem_rdma_command 	*rdma_cmd_ptr;  // rmem_rdma_command iterator.
 
 
 	rdma_q_ptr = &(rdma_session->rmem_rdma_queue_list[queue_ind]);
@@ -1205,7 +1204,9 @@ int build_rdma_wr(struct rmem_rdma_queue* rdma_q_ptr, struct rmem_rdma_command *
 		// We can limit the max number of segments in each bio by setting parameter,  request_queue->limits.max_segments
 		// The support max scatter-gather numbers is limited by InfiniBand hardware.
 	if(dma_entry >= MAX_REQUEST_SGL){
-		printk(KERN_ERR "%s : Too many segments in this i/o request. Limit and reset the number to %d \n", __func__, MAX_REQUEST_SGL);
+		printk(KERN_ERR "%s : Too many(%d) segments in this i/o request. Limit and reset the number to %d \n", __func__, 
+																																																					dma_entry,
+																																																					MAX_REQUEST_SGL);
 		dma_entry = MAX_REQUEST_SGL - 2;   // 32 leads to error, reserver 2 slots.
 	}
 
@@ -1338,8 +1339,8 @@ int post_rdma_read(struct rdma_session_context *rdma_session, struct request* io
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offset_within_chunk, uint64_t len ){
 
 	int ret = 0;
-	int i;
-	int dma_entry = 0;
+	//int i;
+	//int dma_entry = 0;
 	struct rmem_rdma_command 	*rdma_cmd_ptr	= blk_mq_rq_to_pdu(io_rq);  // Convert.
 	// flexible array, sgl,points to the next memory automatically.
 	// rdma_cmd_ptr->sgl					=  rdma_cmd_ptr + sizeof(struct rmem_rdma_command);  
@@ -1505,22 +1506,24 @@ int init_remote_chunk_list(struct rdma_session_context *rdma_session ){
 
 	int ret = 0;
 	uint32_t i;
-	uint32_t tmp_chunk_num; 
 	
 	// 1) initialize chunk related variables
-	//CHUNK_INDEX_OFSSET = GB_OFFSET + power_of_2(CHUNK_SIZE_GB);
-	tmp_chunk_num = rdma_session->remote_chunk_list.remote_free_size_gb/CHUNK_SIZE_GB; // number of chunks in remote memory.
+	//		The first Region may not be fullly mapped. Not clear for now.
+	//		The 2nd -> rest are fully mapped at REGION_SIZE_GB size.
 	rdma_session->remote_chunk_list.chunk_ptr = 0;	// Points to the first empty chunk.
+	rdma_session->remote_chunk_list.remote_free_size = 0; // not clear the exactly free size now.
+	rdma_session->remote_chunk_list.remote_chunk = (struct remote_mapping_chunk*)kzalloc(  \
+																									sizeof(struct remote_mapping_chunk) * rdma_session->remote_chunk_list.chunk_num,\
+																									GFP_KERNEL);
 
-
-	rdma_session->remote_chunk_list.chunk_num = tmp_chunk_num;
-	rdma_session->remote_chunk_list.remote_chunk = (struct remote_mapping_chunk*)kzalloc(sizeof(struct remote_mapping_chunk) * tmp_chunk_num, GFP_KERNEL);
-
-	for(i=0; i < tmp_chunk_num; i++){
+	for(i=0; i < rdma_session->remote_chunk_list.chunk_num; i++){
 		rdma_session->remote_chunk_list.remote_chunk[i].chunk_state = EMPTY;
 		rdma_session->remote_chunk_list.remote_chunk[i].remote_addr = 0x0;
+		rdma_session->remote_chunk_list.remote_chunk[i].mapped_size	= 0x0;
 		rdma_session->remote_chunk_list.remote_chunk[i].remote_rkey = 0x0;
 	}
+
+
 
 	return ret;
 }
@@ -1546,7 +1549,7 @@ void bind_remote_memory_chunks(struct rdma_session_context *rdma_session ){
 
 	chunk_ptr = &(rdma_session->remote_chunk_list.chunk_ptr);
 	// Traverse the receive WR to find all the got chunks.
-	for(i = 0; i < MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB; i++ ){
+	for(i = 0; i < MAX_REGION_NUM; i++ ){
 		
 		#ifdef DEBUG_RDMA_CLIENT
 		if( *chunk_ptr >= rdma_session->remote_chunk_list.chunk_num){
@@ -1559,12 +1562,17 @@ void bind_remote_memory_chunks(struct rdma_session_context *rdma_session ){
 			// Sent chunk, attach to current chunk_list's tail.
 			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey = rdma_session->recv_buf->rkey[i];
 			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr = rdma_session->recv_buf->buf[i];
+			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].mapped_size = rdma_session->recv_buf->mapped_size[i];
 			rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].chunk_state = MAPPED;
 			
+			rdma_session->remote_chunk_list.remote_free_size += rdma_session->recv_buf->mapped_size[i]; // byte size, 4KB alignment
+
 
 			#ifdef DEBUG_RDMA_CLIENT
-			printk("Got chunk[%d] : remote_addr : 0x%llx, remote_rkey: 0x%x \n", i, rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr,
-																						rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey);
+				printk(KERN_INFO "Got chunk[%d] : remote_addr : 0x%llx, remote_rkey: 0x%x, mapped_size: 0x%llx \n", i, 
+																						rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_addr,
+																						rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].remote_rkey,
+																						rdma_session->remote_chunk_list.remote_chunk[*chunk_ptr].mapped_size);
 			#endif
 
 			(*chunk_ptr)++;
@@ -1781,10 +1789,15 @@ int octopus_RDMA_connect(struct rdma_session_context *rdma_session){
 	// 		rdma_session_context : driver data
 	//		number of requeted chunks
 	#ifdef DEBUG_RDMA_CLIENT
-	printk("%s: Got free memory size from remote memory server. Request for Chunks : %llu \n",
-																												__func__, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);
+	printk("%s: Got %d free memory chunks from remote memory server. Request for Chunks \n",
+																																	__func__, 
+																																	rdma_session->remote_chunk_list.chunk_num);
 	#endif
-	ret = octupos_requset_for_chunk(rdma_session, MAX_REMOTE_MEMORY_SIZE_GB/CHUNK_SIZE_GB);  // 8 chunk, 1 GB/chunk.
+
+	// Request free memory from Semeru Memory Server
+	// 1st Region is the Meta Region,
+	// Next are serveral Data Regions.
+	ret = octupos_requset_for_chunk(rdma_session, rdma_session->remote_chunk_list.chunk_num);
 	if(unlikely(ret)){
 		printk("%s, request for chunk failed.\n", __func__);
 		goto err;

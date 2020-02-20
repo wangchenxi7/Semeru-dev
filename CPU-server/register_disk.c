@@ -35,7 +35,11 @@
 
 int rmem_major_num;
 struct rmem_device_control      rmem_dev_ctrl_global;
-u64 RMEM_SIZE_IN_PHY_SECT =     ONE_GB / RMEM_PHY_SECT_SIZE * MAX_REMOTE_MEMORY_SIZE_GB;    // 16M physical sector, 8GB.
+
+// RMEM_PHY_SECT_SIZE is 512 bytes
+// NOT register RDMA Meta Region as SWAP disk.
+// The RDMA Meta Region is managed by JVM explicitly.
+u64 RMEM_SIZE_IN_PHY_SECT =     ONE_GB / RMEM_PHY_SECT_SIZE * MAX_SWAP_MEM_GB;
 
 #ifdef DEBUG_LATENCY_CLIENT
 #define NUM_OF_CORES    32
@@ -310,7 +314,7 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
 
   
   struct remote_mapping_chunk   *remote_chunk_ptr;
-  u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;    // 1GB/chunk in default.
+  u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;    // REGION_SIZE_GB/chunk in default.
   //uint32_t  end_chunk_index     = (start_addr + bytes_len - PAGE_SIZE) >> CHUNK_SHIFT;  // Assume start_chunk_index == end_chunk_index.
   u64  end_chunk_index          = (start_addr + bytes_len - 1) >> CHUNK_SHIFT;
   u64  offset_within_chunk      = start_addr & CHUNK_MASK;     // get the file address offset within chunk.
@@ -366,6 +370,11 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
 
 
   //Get the remote_chunk information
+  // [x] There are 2 kinds of Region
+  //     1) First Region is Meta Region. It's managed by JVM explicitly.
+  //     2) the rest, Data Regions. Fully mapped. Managed by Swap.
+  //     So, we skip the first Region.
+  start_chunk_index += 1; 
   remote_chunk_ptr  = &(rmda_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
   #ifdef DEBUG_RDMA_CLIENT
@@ -373,9 +382,13 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
   // printk("%s: TRANSFER TO RDMA MSG:  I/O request start_addr : 0x%llx, byte_length 0x%llx  --> \n ",__func__, start_addr, bytes_len);
 
   printk("%s: TO RDMA MSG[%llu], remote chunk[%llu], chunk_addr 0x%llx, rkey 0x%x offset 0x%llx, byte_len : 0x%llx  \n",  
-                                                      __func__ ,rmda_ops_count,  start_chunk_index,  
-                                                      remote_chunk_ptr->remote_addr, remote_chunk_ptr->remote_rkey,    
-                                                      offset_within_chunk, bytes_len);
+                                                                __func__ ,
+                                                                rmda_ops_count,  
+                                                                start_chunk_index,  
+                                                                remote_chunk_ptr->remote_addr, 
+                                                                remote_chunk_ptr->remote_rkey,    
+                                                                offset_within_chunk, 
+                                                                bytes_len);
   rmda_ops_count++;
   #endif
 
@@ -384,6 +397,8 @@ int transfer_requet_to_rdma_message(struct rmem_rdma_queue* rdma_q_ptr, struct r
   // start i/o request timeout counting ?
   blk_mq_start_request(rq);
 
+  //debug
+  //blk_mq_end_request(rq,rq->errors);
 
   // Build the 1-sided RDMA read/write.
   if(write_or_not){
@@ -639,7 +654,7 @@ static struct block_device_operations rmem_device_ops = {
 int init_gendisk(struct rmem_device_control* rmem_dev_ctrl ){
 
   int ret = 0;
-  sector_t remote_mem_sector_num = RMEM_SIZE_IN_PHY_SECT; // number of physical sector
+  sector_t remote_mem_sector_num = RMEM_SIZE_IN_PHY_SECT; // size of the disk. number of physical sector
 
   rmem_dev_ctrl->disk = alloc_disk_node(1, NUMA_NO_NODE); // minors =1, at most have one partition.
   if(unlikely(!rmem_dev_ctrl->disk)){

@@ -130,7 +130,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 //
 // x. End of RDMA structure commit size
 //
-#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + DEST_BITMAP_OFFSET + DEST_BITMAP_SIZE)
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE)
 
 
 // properties for the whole Semeru heap.
@@ -284,6 +284,11 @@ enum mem_type {
  * Two-sided RDMA message structure.
  * We use 2-sieded RDMA communication to exchange information between Client and Server.
  * Both Client and Server have the same message structure. 
+ * 
+ * 2 kinds of mapped chunk,
+ * 	1) Meta Data Region. REGION_SIZE_GB alignment, partial mapped.
+ *  2) Data Region. REGION_SIZE_GB alignment, fully mapped.
+ * 	Assume both CPU and Memory server use the same Chunk size.
  */
 struct message {
   	
@@ -291,7 +296,7 @@ struct message {
 	uint64_t buf[MAX_REGION_NUM];					// Remote addr.
 	uint64_t mapped_size[MAX_REGION_NUM];	// Maybe not fully mapped. 
   uint32_t rkey[MAX_REGION_NUM];   			// remote key
-  int size_gb;													// totally mapped size.
+  int mapped_chunk;											// Chunk number in current message. 
 
 	enum message_type type;
 };
@@ -337,7 +342,7 @@ struct remote_mapping_chunk {
  */
 struct remote_mapping_chunk_list {
 	struct remote_mapping_chunk *remote_chunk;		
-	uint32_t remote_free_size_gb;		// total mapped size. Accumulated each remote_mapping_chunk[i]->mapped_size
+	uint64_t remote_free_size;			// total mapped byte size. Accumulated each remote_mapping_chunk[i]->mapped_size
 	uint32_t chunk_num;							// length of remote_chunk list
 	uint32_t chunk_ptr;							// points to first empty chunk. 
 

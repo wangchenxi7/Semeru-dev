@@ -18,6 +18,7 @@ kernel_rdma_module_dir=/lib/modules/$(shell uname -r)/extra/semeru_cpu
 #ccflags-y := -v
 #NOSTDINC_FLAGS += -I/usr/src/ofa_kernel/default/include
 
+
 # The Modules.sysvers listed here will be copy to bulding directory
 #KSYMVERS = /mnt/ssd/wcx/testcase/IB-test-case/RDMA_kernel_post_send_recv/Module.symvers /usr/src/ofa_kernel/default/Module.symvers
 
