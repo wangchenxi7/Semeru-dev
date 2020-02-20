@@ -108,6 +108,14 @@ void* Build_rdma_to_cpu_server(void* _args ){
 /**
  * Utilize Java heap information to initialize RDMA memory pool information.
  * Delay the RDMA buffer registration untile RDMA connection is built.
+ * 
+ * For the Semeru Memory Server, its Heap are divided into 2 parts
+ *  1) Meta data Region. Maybe not commit all the available size. Not exceed the REGION_SIZE_GB.
+ *     Only commited space can be registered as RDMA buffer.
+ *  2) Data Region. Aligned at REGION_SIZE_GB.
+ * 
+ *  |-- Meta Data Region --| --- Data Regions --- |
+ * 
  */
 void init_memory_pool(char* heap_start, size_t heap_size, struct context* rdma_ctx ){
 
@@ -132,27 +140,39 @@ void init_memory_pool(char* heap_start, size_t heap_size, struct context* rdma_c
 	rdma_ctx->mem_pool->region_num = heap_size/ONE_GB/REGION_SIZE_GB;
 
   // The fist part is used for RDMA meta data transfering.
-  // And it may not be 4GB alignment.
+  // Its reserved size is REGION_SIZE_GB aligned.
+  // BUT it may not commit all its size. 
+  // Only commited size can be registered as RDMA buffer.
   rdma_ctx->mem_pool->region_list[0]  = heap_start;
-  #ifdef DEBUG_RDMA_SERVER
+  rdma_ctx->mem_pool->region_mapped_size[0]  = (size_t)(END_OF_RDMA_COMMIT_ADDR - SEMERU_START_ADDR); // not fully used Region.
+  // debug
+  //rdma_ctx->mem_pool->region_mapped_size[0]  = 4096;  // count at bytes
+  rdma_ctx->mem_pool->cache_status[0] = -1;
+
+  #ifdef ASSERT
     // the first Chunk.
-    printf("%s, Record memory Region[%d]( Meata DATA)  : 0x%llx \n", __func__, 0, 
-                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[0] );
+    log_debug(semeru,rdma)("%s, Prepare to register memory Region[%d]( Meata DATA)  : 0x%llx, size 0x%lx ", __func__, 
+                                                              0, 
+                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[0], 
+                                                              (size_t)rdma_ctx->mem_pool->region_mapped_size[0]);
   #endif
 
 	for(i=1;i<rdma_ctx->mem_pool->region_num ;i++){
 		rdma_ctx->mem_pool->region_list[i]  = rdma_ctx->mem_pool->region_list[i-1] + (size_t)REGION_SIZE_GB*ONE_GB;  // Not exceed the int limitation.
-		rdma_ctx->mem_pool->cache_status[i] = -1;  // -1 means not bind  to CPU server.
+		rdma_ctx->mem_pool->region_mapped_size[i]  = (size_t)(REGION_SIZE_GB*ONE_GB);  // count at bytes.
+    rdma_ctx->mem_pool->cache_status[i] = -1;  // -1 means not bind  to CPU server.
 
-    #ifdef DEBUG_RDMA_SERVER
-      printf("%s, Record memory Region[%d] (Object DATA) : 0x%llx \n", __func__, i, 
-                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[i] );
+    #ifdef ASSERT
+      log_debug(semeru,rdma)("%s, Prepare to register memory Region[%d] (Object DATA) : 0x%llx, size 0x%lx ", __func__, 
+                                                              i, 
+                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[i],
+                                                              (size_t)rdma_ctx->mem_pool->region_mapped_size[i]);
     #endif
 	}
 
 
-	#ifdef DEBUG_RDMA_SERVER
-	  tty->print("Registered %llu GB (whole head) as RDMA Buffer \n", (unsigned long long)heap_size/ONE_GB);
+	#ifdef ASSERT
+	  log_debug(semeru,rdma)("Registered %llu GB (whole head) as RDMA Buffer ", (unsigned long long)heap_size/ONE_GB);
 	#endif
 
 	// Register the whole Java heap as RDMA buffer.
@@ -566,16 +586,30 @@ void handle_cqe(struct ibv_wc *wc){
  */
 int rdma_connected(struct rdma_cm_id *id){
 	int i;
+  bool succ = true;
 
   // RDMA connection is build.
 	struct context* rdma_ctx = (struct context*)id->context;
 	rdma_ctx->connected = 1;
-	tty->print("%s, connection build\n", __func__);
+	tty->print("%s, connection build. Register heap as RDMA buffer.\n", __func__);
 
 	// Register the RDMA buffer here
 	// We need to send the registered virtual address to CPU server in "send_free_mem_size"
 	// [?] Can we just register the whole heap once ?
 	// Or we have to register the Java heap in a Region granularity. 
+
+
+
+
+
+  // Waiting for all the RDMA buffer are COMMITED by the JVM initialization procerue. 
+  // WARNING : if notify_all() is earlier than the wait, will this thread continue directly
+  // {
+  //   MutexLockerEx x(SemeruRDMA_lock, Mutex::_no_safepoint_check_flag);
+  //   log_debug(semeru,rdma)("%s, waiting for committing all the RDMA buffer by the JVM initializaiton procesure..",__func__);
+  //   SemeruRDMA_lock->wait(Mutex::_no_safepoint_check_flag);
+  //   log_debug(semeru,rdma)("%s, Waken up, continure registering RDMA buffer..",__func__);
+  // }
 
 	// Choice #1, register the whole Java heap.
 	// rdma_ctx->mem_pool->Java_heap_mr = ibv_reg_mr(rdma_ctx->pd, rdma_ctx->mem_pool->Java_start,rdma_ctx->mem_pool->size_gb*ONE_GB,
@@ -585,50 +619,78 @@ int rdma_connected(struct rdma_cm_id *id){
 
 	// Choice #2, register the Region one by one.
   //  This design is easy to handle the Memory pool scale. 
+  // [XX] We need to COMMIT the whole space first, and then resiter them as RDMA buffer.
+  //      Or we will get BAD_ADDRESS error.
 	for(i=0; i< rdma_ctx->mem_pool->region_num; i++){
     
-		rdma_ctx->mem_pool->Java_heap_mr[i] = ibv_reg_mr(rdma_ctx->pd, rdma_ctx->mem_pool->region_list[i], REGION_SIZE_GB*ONE_GB,
-	 																																															IBV_ACCESS_LOCAL_WRITE | 
-                                                                                               IBV_ACCESS_REMOTE_WRITE | 
-                                                                                               IBV_ACCESS_REMOTE_READ);
+		rdma_ctx->mem_pool->Java_heap_mr[i] = ibv_reg_mr(rdma_ctx->pd, 
+                                                    rdma_ctx->mem_pool->region_list[i], 
+                                                    (size_t)rdma_ctx->mem_pool->region_mapped_size[i],
+	 																									IBV_ACCESS_LOCAL_WRITE  | 
+                                                    IBV_ACCESS_REMOTE_WRITE | 
+                                                    IBV_ACCESS_REMOTE_READ);
   
     #ifdef DEBUG_RDMA_SERVER
-    tty->print("Register Region[%d] : 0x%llx to RDMA Buffer[%d] : 0x%llx, rkey: 0x%llx  done \n", i, 
-                                                                              (unsigned long long)rdma_ctx->mem_pool->region_list[i],
-                                                                              i, 
-                                                                              (unsigned long long)rdma_ctx->mem_pool->Java_heap_mr[i],
-                                                                              (unsigned long long)rdma_ctx->mem_pool->Java_heap_mr[i]->rkey);
+    if (rdma_ctx->mem_pool->Java_heap_mr[i]!= NULL){
+      tty->print("Register Region[%d] : 0x%llx to RDMA Buffer[%d] : 0x%llx, rkey: 0x%llx, mapped_size 0x%lx done \n", i, 
+                                                            (unsigned long long)rdma_ctx->mem_pool->region_list[i],
+                                                            i, 
+                                                            (unsigned long long)rdma_ctx->mem_pool->Java_heap_mr[i],
+                                                            (unsigned long long)rdma_ctx->mem_pool->Java_heap_mr[i]->rkey,
+                                                            (unsigned long)rdma_ctx->mem_pool->region_mapped_size[i]);
+    }else{
+      tty->print("%s, region[%d], 0x%lx is registered wrongly, with NULL. \n",__func__, 
+                                                                              i,
+                                                                              (size_t)rdma_ctx->mem_pool->region_list[i]);
+      tty->print("ERROR in %s, %s\n",__func__, strerror(errno));
+      succ = false;  // For debug.
+    }
     #endif
-  
+
   }
+
+  if(succ == false)
+    goto err;
 
 
   // Send the available free size to CPU server to let it prepare necessary meta data.
   //
   send_free_mem_size(rdma_ctx);
 
+
   return 0;
+
+err:
+  tty->print("ERROR in %s.\n",__func__);
+
+  return -1;
 }
 
 
 /**
- * Post a two-sided RDMA message to client to inform the free memory size in server.
+ * Post a two-sided RDMA message to client to inform the free memory size, GB, in server.
  * 	
- * 	1) Inform CPU server the available memory size at present.
- * 	
+ * 	1) Inform CPU server the Committed memory size at present.
+ * 	2) Warning : for Semeru Memory pool. There are 2 parts,
+ *      1st, Control Region path. Commit at page granularity.
+ *      2nd, Data Region path. Commit at REGION_SIZE_GB granularity.
+ *     So, we need to calculate these 2 part's committed memory separately.
+ * 
  */
 void send_free_mem_size(struct context* rdma_ctx){
 	int i;
 
-	rdma_ctx->send_msg->size_gb = rdma_ctx->mem_pool->region_num * REGION_SIZE_GB;  // Total heap size in GB.
-	
+  // 1 Meta Region, N-1 Data Region
+  rdma_ctx->send_msg->mapped_chunk = rdma_ctx->mem_pool->region_num; // 1 meta data Region, N data Region
+  
+  // Only send the free Region number.
 	for(i=0; i<rdma_ctx->mem_pool->region_num; i++ ){
 		rdma_ctx->send_msg->buf[i]	= 0x0;
 		rdma_ctx->send_msg->rkey[i]	=	0x0;  // The contend tag of the RDMA message.
 	}
 
   rdma_ctx->send_msg->type = FREE_SIZE;			// Need to modify the CPU server behavior.
-  tty->print("%s , Send free memory information to CPU server, %d GB \n", __func__, rdma_ctx->send_msg->size_gb);
+  tty->print("%s , Send free memory information to CPU server, %d Chunks \n", __func__, rdma_ctx->send_msg->mapped_chunk);
   send_message(rdma_ctx);
 }
 
@@ -637,18 +699,21 @@ void send_free_mem_size(struct context* rdma_ctx){
  * Bind the available Regions as RDMA buffer to CPU server
  * 
  * 1) Send the registered RDMA buffer, ie the whole Jave heap for FREE_SIZE, to CPU server.
+ * 2) [xx] No matter how many size is requested, send all the available spece to CPU server.
  */
 void send_regions(struct context* rdma_ctx){
 	int i;
-	rdma_ctx->send_msg->size_gb = rdma_ctx->mem_pool->region_num * REGION_SIZE_GB;  // Total heap size in GB.
+	// 1 meta Data Region, N-1 Data Regions.
+	rdma_ctx->send_msg->mapped_chunk = rdma_ctx->mem_pool->region_num; 
 	
 	for(i=0; i<rdma_ctx->mem_pool->region_num; i++ ){
 		rdma_ctx->send_msg->buf[i]	= (uint64_t)rdma_ctx->mem_pool->Java_heap_mr[i]->addr;
+    rdma_ctx->send_msg->mapped_size[i]  = (uint64_t)rdma_ctx->mem_pool->region_mapped_size[i]; // count at bytes.
 		rdma_ctx->send_msg->rkey[i]	=	rdma_ctx->mem_pool->Java_heap_mr[i]->rkey;
 	}
 
   rdma_ctx->send_msg->type = SEND_CHUNKS;			// Need to modify the CPU server behavior.
-  tty->print("%s , Send registered Java heap to CPU server, %d GB \n", __func__, rdma_ctx->send_msg->size_gb);
+  tty->print("%s , Send registered Java heap to CPU server, %d chunks \n", __func__, rdma_ctx->send_msg->mapped_chunk);
   send_message(rdma_ctx);
 }
 

@@ -376,6 +376,18 @@ uint SemeruHeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* 
 		cur = idx_last_found + num_last_found + 1;
 	}
 
+	//
+	// Debug. Commit the rest of TargetObjQueue space for RDMA buffer registration purpose.
+	// 				The space needed to be padded is [ num_regions * TASKQUEUE_SIZE * , TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE]
+	// Get the static pointer of the specific instantiation, CHeapRDMAObj<StarTask, ALLOC_TARGET_OBJ_QUEUE>
+	char* start_addr_to_padding	=	CHeapRDMAObj<StarTask, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr ;
+	size_t size_to_be_padded	=	(size_t)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE) -	(size_t)start_addr_to_padding;
+	G1SemeruCollectedHeap::heap()->_debug_rdma_padding = new(size_to_be_padded, start_addr_to_padding) rdma_padding();
+	tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for debug. \n",__func__,
+																																			(size_t)start_addr_to_padding,
+																																			(size_t)(start_addr_to_padding + size_to_be_padded));
+
+
 	verify_optional();
 	return expanded;
 }

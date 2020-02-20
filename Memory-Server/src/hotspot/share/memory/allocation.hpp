@@ -628,53 +628,58 @@ class SemeruArrayAllocator : public AllStatic {
 };
 
 
-/**
- * This allocator is used to allocate objects into fixed address for RDMA communications between CPU and memory server.
- * 
- * [?] CHeapObj allocates object into C-Heap by malloc().
- *     We commit space from reserved space.
- *    
- * [x] We only need to use the operator new to invoke class's constructor.
- * 
- * [x] The RDMA class should use flexible array to store data.
- * 
- * [x] Its subclass may have non-static fields, so do NOT inherit from AllStatic class.
- * 
- */
-template <class E> 
-class CHeapRDMAObj{
-  friend class MmapArrayAllocator<E>;
+// /**
+//  * This allocator is used to allocate objects into fixed address for RDMA communications between CPU and memory server.
+//  * 
+//  * [?] CHeapObj allocates object into C-Heap by malloc().
+//  *     We commit space from reserved space.
+//  *    
+//  * [x] We only need to use the operator new to invoke class's constructor.
+//  * 
+//  * [x] The RDMA class should use flexible array to store data.
+//  * 
+//  * [x] Its subclass may have non-static fields, so do NOT inherit from AllStatic class.
+//  * 
+//  */
+// template <class E> 
+// class CHeapRDMAObj{
+//   friend class MmapArrayAllocator<E>;
 
- public:
-
-
-
-  // add a new allocation function
-  // 1) this function is only used to commit space on reserved space
-  // 2) the new operation first, invoke this override function to allocate space
-  //    second, it invokes the constructor to do initialization.
-  //    BUT the return value of operator new, has to be void*.
-  // 3) The override operator always work like static, 
-  //     It can only invoke static functions.
-  //
-  ALWAYSINLINE void* operator new(size_t size, size_t commit_size , char* requested_addr) throw() {
-    //  return (void*)test_new_operator(size, commit_size, requested_addr);
-
-    // discard the parameter, size, which is defined by sizeof(clas)
-    return (void*)commit_at(commit_size, mtGC, requested_addr);
-  }
+//  public:
 
 
-  // commit space on reserved space
- // static char* commit_at(size_t length, MEMFLAGS flags, char* requested_addr)
 
-  static E* commit_at(size_t commit_byte_size, MEMFLAGS flags, char* requested_addr);
+//   // add a new allocation function
+//   // 1) this function is only used to commit space on reserved space.
+//   // 2) the new operation first, invoke this override function to allocate space
+//   //    second, it invokes the constructor to do initialization.
+//   //    BUT the return value of operator new, has to be void*.
+//   // 3) The override operator always work like static, 
+//   //     It can only invoke static functions.
+//   // 4) The first parameter, size, is assigned by Operator new. It's the size of the class.
+//   //    We ignore it here.
+//   ALWAYSINLINE void* operator new(size_t size, size_t commit_size , char* requested_addr) throw() {
+//     //  return (void*)test_new_operator(size, commit_size, requested_addr);
 
-  // debug
-  static E* test_new_operator( size_t size, size_t commit_size, char* requested_addr);
+//     // discard the parameter, size, which is defined by sizeof(clas)
+//     return (void*)commit_at(commit_size, mtGC, requested_addr);
+//   }
 
 
-};
+//   // commit space on reserved space
+//  // static char* commit_at(size_t length, MEMFLAGS flags, char* requested_addr)
+
+//   static E* commit_at(size_t commit_byte_size, MEMFLAGS flags, char* requested_addr);
+
+//   // debug
+//   static E* test_new_operator( size_t size, size_t commit_size, char* requested_addr);
+
+
+// };
+
+
+
+
 
 
 

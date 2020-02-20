@@ -117,13 +117,24 @@
 #define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
 #define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
 
+
+//
+// RDMA Related
+//
 #define PAGE_SIZE		      ((size_t)4096)	// bytes
-#define REGION_SIZE_GB    ((size_t)4)   	// Habe to be 1GB at current ! or will cause inconsistence problems. 
+#define REGION_SIZE_GB    ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
 #define RDMA_DATA_REGION_NUM     8
 
 
-
 #define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
+
+
+
+//
+// JVM Related.
+//
+// [Warning] : need to compact the RDMA meta data usage to save space.
+//
 
 
 #define SEMERU_START_ADDR   ((size_t)0x400000000000)
@@ -138,26 +149,43 @@
 
 // 1.1 Target object queue , 128MB
 #define TARGET_OBJ_OFFSET     (size_t)0
-#define TARGET_OBJ_SIZE_BYTE  (size_t)0x8000000   // 128M bytes
+#define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
 
 // 1.2 Memory server CSet
-#define MEMORY_SERVER_CSET_OFFSET     (size_t)0x8000000   // +128MB
+#define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB
 #define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
 
 // 1.3 Flags setted by CPU srver
-#define FLAGS_OF_CPU_SERVER_STATE_OFFSET  (size_t)0x8100000 // 129MB
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET  (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE) // 129MB
 #define FLAGS_OF_CPU_SERVER_STATE_SIZE    (size_t)0x1000    // 4KB
+
+// 1.x Padding for debug
+//     Make it easier to register RDMA buffer.
+//     Commit a contiguous space for RDMA Meta Space.
+//     Points to the last item.
+#define RDMA_PADDING_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)
+#define RDMA_PADDING_SIZE       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
+
 
 //2.  [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
 #define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // offset to semeru start addr, 1GB
+#define ALIVE_BITMAP_SIZE        (size_t)ONE_GB
+
 #define DEST_BITMAP_OFFSET       (size_t)0x80000000     // 2GB
+#define DEST_BITMAP_SIZE         (size_t)ONE_GB
+
+
+//
+// x. End of RDMA structure commit size
+//
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE)
 
 
 // properties for the whole Semeru heap.
 // [ RDMA meta data sapce] [RDMA data space]
 
-#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE)    //for local memory management
-#define MAX_MR_NUM_GB     ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE/ONE_GB)    //for local memory management
+#define MAX_REGION_NUM    ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
 
 
 //----------------------------------------------------------------------------------------------------

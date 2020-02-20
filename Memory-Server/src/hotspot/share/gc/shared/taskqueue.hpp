@@ -319,7 +319,7 @@ public:
   template<typename Fn> void iterate(Fn fn);
 
   // Promote to public
-  volatile E* _elems;       // [x] The real content, buffer, of the GenericTaskQueue. 
+  volatile E* _elems;       // [x] The real content, class pointer buffer, of the GenericTaskQueue. 
   
 private:
   DEFINE_PAD_MINUS_SIZE(0, DEFAULT_CACHE_LINE_SIZE, 0);
@@ -367,8 +367,8 @@ template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
 class OverflowTaskQueue: public GenericTaskQueue<E, F, N>
 {
 public:
-  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size limitation.
-  typedef GenericTaskQueue<E, F, N> taskqueue_t;    // size is N.
+  typedef Stack<E, F>               overflow_t;     // Where does this structure allocate ??
+  typedef GenericTaskQueue<E, F, N> taskqueue_t;    // length is N, size is N * sizeof(Class E)
 
   TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)
 
@@ -398,39 +398,43 @@ private:
  *  This strcuture is transfered by RDMA.
  *  
  */
-template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
-class OverflowTargetObjQueue: public GenericTaskQueue<E, F, N>
-{
-public:
-  typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size limitation.
-  typedef GenericTaskQueue<E, F, N> taskqueue_t;    // size is N.
+// template<class E, MEMFLAGS F, unsigned int N = TASKQUEUE_SIZE>
+// class OverflowTargetObjQueue: public GenericTaskQueue<E, F, N>
+// {
+// public:
+//   typedef Stack<E, F>               overflow_t;     // Newly added overflow stack. no size limitation ??
+//   typedef GenericTaskQueue<E, F, N> taskqueue_t;    // Content is E* _elem, length is N, Mem_type is F.
 
-  // have a fixed base for the OverflowTargetObjQueue.
-  char* _base;
+//   // The start address for all the OverflowTargetObjQueue.
+//   // This is for RDMA data transfer
+//   // GenericTaskQueue->(E*)_elems is the Content for every single GenericTaskQueue<E, F, N> taskqueue_t.
+//   char* _base;
 
-  TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)
+//   TASKQUEUE_STATS_ONLY(using taskqueue_t::stats;)
 
-  void initialize(size_t q_index);  // newly defined initialize() function for space allocation.
+//   OverflowTargetObjQueue(); // Constructor.
 
-  // Push task t onto the queue or onto the overflow stack.  Return true.
-  inline bool push(E t);
-  // Try to push task t onto the queue only. Returns true if successful, false otherwise.
-  inline bool try_push_to_taskqueue(E t);
+//   void initialize(size_t q_index);  // newly defined initialize() function for space allocation.
 
-  // Attempt to pop from the overflow stack; return true if anything was popped.
-  inline bool pop_overflow(E& t);
+//   // Push task t onto the queue or onto the overflow stack.  Return true.
+//   inline bool push(E t);
+//   // Try to push task t onto the queue only. Returns true if successful, false otherwise.
+//   inline bool try_push_to_taskqueue(E t);
 
-  inline overflow_t* overflow_stack() { return &_overflow_stack; }
+//   // Attempt to pop from the overflow stack; return true if anything was popped.
+//   inline bool pop_overflow(E& t);
 
-  inline bool taskqueue_empty() const { return taskqueue_t::is_empty(); }
-  inline bool overflow_empty()  const { return _overflow_stack.is_empty(); }
-  inline bool is_empty()        const {
-    return taskqueue_empty() && overflow_empty();
-  }
+//   inline overflow_t* overflow_stack() { return &_overflow_stack; }
 
-private:
-  overflow_t _overflow_stack;     // The Stack<E,F>
-};
+//   inline bool taskqueue_empty() const { return taskqueue_t::is_empty(); }
+//   inline bool overflow_empty()  const { return _overflow_stack.is_empty(); }
+//   inline bool is_empty()        const {
+//     return taskqueue_empty() && overflow_empty();
+//   }
+
+// private:
+//   overflow_t _overflow_stack;     // The Stack<E,F>
+// };
 
 
 
@@ -702,21 +706,6 @@ typedef GenericTaskQueueSet<OopStarTaskQueue, mtGC> OopStarTaskQueueSet;
 typedef OverflowTaskQueue<size_t, mtGC>             RegionTaskQueue;
 typedef GenericTaskQueueSet<RegionTaskQueue, mtGC>  RegionTaskQueueSet;
 
-/**
- * Semeru 
- *  
- *  CPU Server  - Producer 
- *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
- *     First, from thread stack variables. This is done during CPU server GC.
- *     Second, Cross-Region references recoreded by the Post Write Barrier ?
- *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
- *  
- *  Memory Server - Consumer 
- *     Receive the TargetObjQueue and use them as the scavenge roots.
- * 
- */
- typedef OverflowTargetObjQueue<StarTask, mtGC>        TargetObjQueue;     // Override the typedef of OopTaskQueue
- typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
 
 
 #endif // SHARE_VM_GC_SHARED_TASKQUEUE_HPP

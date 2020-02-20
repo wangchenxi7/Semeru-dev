@@ -423,7 +423,6 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 
 	} // end of RDMA support
 
-
 }
 
 

@@ -79,6 +79,8 @@ extern Monitor* CGC_lock;                        // used for coordination betwee
 extern Monitor* SemeruCGC_lock;                  // used for coordination between
                                                  // CPU & Memory GC threads.
 
+extern Monitor* SemeruRDMA_lock;                 // used for coordination between
+                                                 // RDMA buffer registration and Semeru Heap initialization.
 
 extern Monitor* STS_lock;                        // used for joining/leaving SuspendibleThreadSet.
 extern Monitor* FullGCCount_lock;                // in support of "concurrent" full gc

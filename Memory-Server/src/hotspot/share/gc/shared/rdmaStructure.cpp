@@ -6,6 +6,74 @@
 #include "gc/shared/rdmaStructure.hpp"   // why can't find this header by using shared/rdmaStructure.hpp
 
 
+
+
+
+
+/**
+ * Structure - CHeapRDMAObj
+ */
+
+
+
+
+
+
+
+
+template <class E , CHeapAllocType Alloc_type> 
+E* CHeapRDMAObj<E, Alloc_type>::test_new_operator( size_t size, size_t commit_size, char* requested_addr ){
+    tty->print("received parameters size %lu, commit_size %lu, requested_addr 0x%lx \n",
+                      size, commit_size, (size_t)requested_addr);
+
+    return NULL;
+}
+
+
+
+//
+// Structure - TaskQueueRDMASuper
+//
+
+
+
+
+//
+// Structure - GenericTaskQueueRDMA
+//
+
+
+
+
+
+
+
+
+template<class E, CHeapAllocType Alloc_type, unsigned int N>
+int GenericTaskQueueRDMA<E, Alloc_type, N>::next_random_queue_id() {
+  return randomParkAndMiller(&_seed);  // defined in taskqueue.inlinel.hpp
+}
+
+
+
+
+
+
+
+
+//
+// OverflowTargetObjQueue
+//
+
+
+
+
+
+
+
+
+
+
 // The size of the flexible array _region_cset[] is limited by global macro, utilities/globalDefinitions.hpp :
 //	#define MEMORY_SERVER_CSET_OFFSET     (size_t)0x8000000   // +128MB
 //	#define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 

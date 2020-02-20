@@ -174,6 +174,7 @@
   LOG_TAG(vtablestubs) \
   LOG_TAG(workgang) \
   LOG_TAG(semeru) /* Semeru*/ \
+  LOG_TAG(rdma) /* Semeru*/ \
   LOG_TAG_LIST_EXT
 
 #define PREFIX_LOG_TAG(T) (LogTag::_##T)

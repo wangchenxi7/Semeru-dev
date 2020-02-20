@@ -1584,6 +1584,7 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
  	CollectedHeap(true),
 	_recv_mem_server_cset(NULL),
 	_cpu_server_flags(NULL),
+	_debug_rdma_padding(NULL),
 	_semeru_rs(NULL),
 	_workers(NULL),
 	_collector_policy(collector_policy),
@@ -1936,15 +1937,20 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// if _mem_server_cset->_num_regions != 0, means new data are sent to Semeru memory server
 	//	  the real data is stored in flexible array, _mem_server_cset->_region_cset[]
 	_recv_mem_server_cset 	= new(MEMORY_SERVER_CSET_SIZE, rdma_rs.base() + MEMORY_SERVER_CSET_OFFSET) received_memory_server_cset();
-	_cpu_server_flags			=	new(FLAGS_OF_CPU_SERVER_STATE_SIZE, rdma_rs.base() + FLAGS_OF_CPU_SERVER_STATE_OFFSET) flags_of_cpu_server_state();
+	_cpu_server_flags				=	new(FLAGS_OF_CPU_SERVER_STATE_SIZE, rdma_rs.base() + FLAGS_OF_CPU_SERVER_STATE_OFFSET) flags_of_cpu_server_state();
 
 
-
-
+	// Debug
+	// Do padding for the first GB meta data space. Until the start of alive_bitmap.
+	_debug_rdma_padding		= new(RDMA_PADDING_SIZE, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
+	tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
+																																									(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
+																																									(size_t)RDMA_PADDING_SIZE);
 
 	//
 	// End of RDMA structure section
 	//
+	
 
 
 	// Carve out the space after reserved_for_rdma_data as a the reserved G1 Java heap space.

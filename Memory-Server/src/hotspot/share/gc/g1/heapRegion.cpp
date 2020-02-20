@@ -460,8 +460,10 @@ G1RegionToSpaceMapper* HeapRegion::create_dest_bitmap_storage(size_t region_idne
 
 // Semeru
 void HeapRegion::allocate_init_target_oop_queue(uint hrm_index){
-  _target_obj_queue = new TargetObjQueue();
-  _target_obj_queue->initialize(hrm_index);
+  
+  // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
+  _target_obj_queue = new (TASKQUEUE_SIZE, hrm_index) TargetObjQueue();   // The instance should be allocated in RDMA Meta space.
+  _target_obj_queue->initialize((size_t)hrm_index);
 }
 
 

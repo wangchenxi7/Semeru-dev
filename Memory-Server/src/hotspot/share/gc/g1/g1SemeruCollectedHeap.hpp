@@ -58,7 +58,7 @@
 // Semeru
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/SemeruHeapRegionManager.hpp"  // G1SemeruCollectedHeap --> SemeruHeapRegionManager, the invoke sequence.
-#include "gc/shared/rdmaStructure.hpp"
+#include "gc/shared/rdmaStructure.inline.hpp"
 
 // A "G1SemeruCollectedHeap" is an implementation of a java memory pool in HotSpot for CPU server.
 // It uses the modified "Garbage First" heap organization and algorithm, which
@@ -212,6 +212,11 @@ public :
 
 
 
+//
+// Debug Structures
+//
+public:
+  rdma_padding* _debug_rdma_padding;
 
 
 private:

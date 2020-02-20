@@ -2,10 +2,13 @@
 #define RDMA_COMM_H
 
 // Implementation-defined, search current directories first.
-
+#include "logging/log.hpp"
 #include "utilities/ostream.hpp"
 #include "runtime/java.hpp"
 #include "utilities/globalDefinitions.hpp"
+#include "runtime/mutexLocker.hpp"
+#include "utilities/debug.hpp"
+
 
 // Include standard libraries. Search the configured path first.
 #include <errno.h>
@@ -21,6 +24,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <linux/kernel.h>
+
 
 //	Memory server is developed in user space, so use user-space IB API.
 //	1)	"rdma/rdma_cma.h" is user space library, which is defined in /usr/include/rdma/rdma_cma.h.
@@ -112,9 +116,10 @@ enum region_status{
  */
 struct message {
 	// Information of the chunk to be mapped to remote memory server.
-	uint64_t buf[MAX_MR_NUM_GB];		  // Remote addr, usd by clinet for RDMA read/write.
-  uint32_t rkey[MAX_MR_NUM_GB];   	// remote key
-  int size_gb;						// different meanings based on the type.
+	uint64_t buf[MAX_REGION_NUM];		      // Remote addr, usd by clinet for RDMA read/write.
+  uint64_t mapped_size[MAX_REGION_NUM]; // For a single Region, Maybe not fully mapped
+  uint32_t rkey[MAX_REGION_NUM];   	    // remote key
+  int mapped_chunk;											// Chunk number in current message. 
 
   enum message_type type;
 };
@@ -198,12 +203,13 @@ struct context {
  * 
  */
 struct rdma_mem_pool{
-	char*	Java_heap_start;									// Start address of Java heap.
-	int		region_num; 											// Number of Regions. Regions size is defined by Macro : CHUNK_SIZE_GB * ONE_GB.
+	char*	  Java_heap_start;									// Start address of Java heap.
+	int		  region_num; 											// Number of Regions. Regions size is defined by Macro : CHUNK_SIZE_GB * ONE_GB.
 
-	struct ibv_mr*  Java_heap_mr[MAX_FREE_MEM_GB];					// Register whole Java heap as RDMA buffer.
-  char*	region_list[MAX_FREE_MEM_GB];       		// Start address of each Region. region_list[0] == Java_start.
-  int		cache_status[MAX_FREE_MEM_GB];					// -1 NOT bind with CPU server. Or check the value of region_status.
+	struct ibv_mr*  Java_heap_mr[MAX_FREE_MEM_GB];	// Register whole Java heap as RDMA buffer.
+  char*	  region_list[MAX_FREE_MEM_GB];       		// Start address of each Region. region_list[0] == Java_start.
+  size_t  region_mapped_size[MAX_FREE_MEM_GB];    // The byte size of the corresponding Region. Count at bytes.
+  int		  cache_status[MAX_FREE_MEM_GB];					// -1 NOT bind with CPU server. Or check the value of region_status.
 };
 
 

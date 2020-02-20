@@ -36,7 +36,7 @@
 #include "utilities/macros.hpp"
 
 // Semeru
-#include "gc/shared/taskqueue.hpp"
+#include "gc/shared/rdmaStructure.inline.hpp"
 #include "gc/g1/g1ConcurrentMarkBitMap.hpp"
 
 

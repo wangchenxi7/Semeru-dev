@@ -51,7 +51,7 @@ inline void inc_stat_counter(volatile julong* dest, julong add_value) {
 template <class E>
 size_t MmapArrayAllocator<E>::size_for(size_t length) {
   size_t size = length * sizeof(E);
-  int alignment = os::vm_allocation_granularity();
+  int alignment = os::vm_allocation_granularity();  // 4KB alignment.
   return align_up(size, alignment);
 }
 
@@ -92,9 +92,15 @@ E* MmapArrayAllocator<E>::allocate(size_t length, MEMFLAGS flags) {
 // Semeru support
 //
 
+/**
+ * Semeru - Allocate an array at fixed size, requested_addr, the array size is length * sizeof(E)
+ *          Warning : 1) this is NOT a pointer array(Java object array). it's a c++ object array.
+ *          e.g. | (0)-- class E instance -- | ..... |
+ *          2) 4KB alignment.
+ */
 template <class E>
 E* MmapArrayAllocator<E>::allocate_at(size_t length, MEMFLAGS flags, char* requested_addr) {
-  size_t size = size_for(length);
+  size_t size = size_for(length);   // sizeof(E) * legnth, align_up to 4KB ?
   int alignment = os::vm_allocation_granularity();
 
   //1) reserve space at requested address.
@@ -237,6 +243,8 @@ E* SemeruArrayAllocator<E>::allocate_mmap(size_t length, MEMFLAGS flags) {
  * Semeru
  * 1) Reserve space from OS
  * 2) Commit the reserved space. 
+ *      length * sizeof(E*)
+ * 
  */
 template <class E>
 E* SemeruArrayAllocator<E>::allocate_mmap_at(size_t length, MEMFLAGS flags, char* requested_addr) {
@@ -264,6 +272,7 @@ E* SemeruArrayAllocator<E>::allocate(size_t length, MEMFLAGS flags) {
 
   return allocate_mmap(length, flags);
 }
+
 
 /**
  * This is used for building the Java heap. It's Multiple-Thread safe.
@@ -331,26 +340,26 @@ void SemeruArrayAllocator<E>::free(E* addr, size_t length) {
 }
 
 
-template <class E> 
-E* CHeapRDMAObj<E>::test_new_operator( size_t size, size_t commit_size, char* requested_addr ){
-    tty->print("received parameters size %lu, commit_size %lu, requested_addr 0x%lx \n",
-                      size, commit_size, (size_t)requested_addr);
+// template <class E> 
+// E* CHeapRDMAObj<E>::test_new_operator( size_t size, size_t commit_size, char* requested_addr ){
+//     tty->print("received parameters size %lu, commit_size %lu, requested_addr 0x%lx \n",
+//                       size, commit_size, (size_t)requested_addr);
 
-    return NULL;
-}
+//     return NULL;
+// }
 
 
 
-// Commit the space at already reserved space directly.
-template <class E>
-E* CHeapRDMAObj<E>::commit_at(size_t commit_size, MEMFLAGS flags, char* requested_addr) {
-  //size_t size = size_for(length);
+// // Commit the space at already reserved space directly.
+// template <class E>
+// E* CHeapRDMAObj<E>::commit_at(size_t commit_size, MEMFLAGS flags, char* requested_addr) {
+//   //size_t size = size_for(length);
 
-  // why here is !ExecMem ?
-  os::commit_memory_or_exit(requested_addr, commit_size, !ExecMem, "Allocator (commit)");  // Commit the space.
+//   // why here is !ExecMem ?
+//   os::commit_memory_or_exit(requested_addr, commit_size, !ExecMem, "Allocator (commit)");  // Commit the space.
 
-  return (E*)requested_addr;
-}
+//   return (E*)requested_addr;
+// }
 
 
 

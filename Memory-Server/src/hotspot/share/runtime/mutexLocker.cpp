@@ -80,6 +80,7 @@ Mutex*   NonJavaThreadsList_lock      = NULL;
 Monitor* CGC_lock                     = NULL;
 // Semeru
 Monitor* SemeruCGC_lock               = NULL;
+Monitor* SemeruRDMA_lock               = NULL;
 Monitor* STS_lock                     = NULL;
 Monitor* FullGCCount_lock             = NULL;
 Mutex*   SATB_Q_FL_lock               = NULL;
@@ -231,7 +232,8 @@ void mutex_init() {
   def(STS_lock                     , PaddedMonitor, leaf,        true,  Monitor::_safepoint_check_never);
 
   // Semeru
-  semeru_def(SemeruCGC_lock               , PaddedMonitor, special,     true,  Monitor::_safepoint_check_never);      // coordinate between CPU and Memory Server GC
+  semeru_def(SemeruCGC_lock        , PaddedMonitor, special,     true,  Monitor::_safepoint_check_never);      // coordinate between CPU and Memory Server GC
+  semeru_def(SemeruRDMA_lock       , PaddedMonitor, special,     true,  Monitor::_safepoint_check_never);      // coordinate between RDMA buffer registration and JVM initialization
 
 
   def(VMWeakAlloc_lock             , PaddedMutex  , vmweak,      true,  Monitor::_safepoint_check_never);
