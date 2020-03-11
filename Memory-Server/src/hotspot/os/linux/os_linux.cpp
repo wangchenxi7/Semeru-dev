@@ -74,8 +74,6 @@
 #include "utilities/macros.hpp"
 #include "utilities/vmError.hpp"
 
-// Semeru - headers
-//#include "rdma_comm.hpp"  // Move to memory/ directory.
 
 // put OS-includes here
 # include <sys/types.h>

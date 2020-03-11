@@ -2097,12 +2097,25 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// (Must do this late, so that "max_regions" is defined.)
 	//_semeru_cm = new G1SemeruConcurrentMark(this, prev_bitmap_storage, next_bitmap_storage);   // G1 GC related data structure
 	
+	// Step 1) Build the G1SemeruConcurrentMark
 	_semeru_cm = new G1SemeruConcurrentMark(this, NULL, NULL);   // G1 GC related data structure
 	if (_semeru_cm == NULL || !_semeru_cm->completed_initialization()) {
 		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
 		return JNI_ENOMEM;
 	}
+
+	// Step 2) Get the G1SemeruConcurrentMarkThread
 	_semeru_cm_thread = _semeru_cm->semeru_cm_thread(); // Semeru should have its own CM thread ? or use the same thread but unique tracing closure ?
+	
+	// Step 3) Build the Semeru STW Compact by reusing G1SemeruConcurrentMark's thread resource
+	_semeru_sc = new G1SemeruSTWCompact(this, _semeru_cm);
+	if (_semeru_sc == NULL || !_semeru_sc->completed_initialization()) {
+		vm_shutdown_during_initialization("Could not create/initialize G1ConcurrentMark");
+		return JNI_ENOMEM;
+	}
+
+	_semeru_cm_thread->set_semeru_sc(_semeru_sc); 	// Assign the G1SemeruSTWCompact instance
+
 
 
 	//debug - Pass
@@ -3035,13 +3048,15 @@ HeapWord* G1SemeruCollectedHeap::do_collection_pause(size_t word_size,
 void G1SemeruCollectedHeap::do_concurrent_mark() {
 	MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
 
+	// The G1SemeruConcurrentMarkThread has to be in Idle state.
+	// [?] Or it can be also in Stated ?
 	if (!_semeru_cm_thread->in_progress()) {
 
-		// Set some information here
+		// Set counting information here
 		increment_old_marking_cycles_started(); 
 
 		_semeru_cm_thread->set_started();
-		SemeruCGC_lock->notify();
+		SemeruCGC_lock->notify();			// G1SemeruConcurrentMarkThreads are waiting here
 	}
 }
 
@@ -3674,7 +3689,9 @@ void G1SemeruCollectedHeap::do_concurrent_mark() {
  *  2) The 2-sided RDMA message is received by a native thread. 
  * 	
  *  [?] How can we let  thread 2) to inform	thread 1) ?
- * 
+ * 		=> Use the Semaphore.
+ *       E.g. if thread 1) is waiting on a lock SemeruGC_lock,
+ *       we can let thread 2) acquire this lock and wake up the threads waiting SemeruGC_lock.
  */
 void G1SemeruCollectedHeap::wake_up_semeru_mem_server_concurrent_gc(){
 

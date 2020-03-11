@@ -269,7 +269,7 @@ class HeapRegion: public G1ContiguousSpace {
   // Target object queue. Contains all the target objects of the cross-region references into current Region.
   // This queue is built by the CPU sever GC.
   // This queue is sent to Memory Server via the RDMA. 
-  // It should be allocated in fixed address : 0x300,000,000,000
+  // It should be allocated in fixed address : defined in SEMERU_START_ADDR
   //
   // [x] Only allocate && initialize this queue in Semeru heap.
   TargetObjQueue* _target_obj_queue;
@@ -283,7 +283,26 @@ class HeapRegion: public G1ContiguousSpace {
   //  So it's better to cut the bitmap into slices, one slice per HeapRegion.
   //  2) They are referenced by pointers stored in G1SemeruCMTask. Because they are used during Semeru CM.
   // 
-  G1CMBitMap             _alive_bitmap;   // pointed by G1SemeruCMTask->_alive_bitmap.
+  G1CMBitMap             _alive_bitmap;       // pointed by G1SemeruCMTask->_alive_bitmap.
+  size_t                 _marked_alive_bytes;
+
+  // DEBUG feilds
+  #ifdef ASSERT
+  // objects contain inter-Region reference
+  // For our current design, we don't need this bitmap.
+  // Because every compcated Region needs to send the new address of target objects to the source.
+  G1CMBitMap             _inter_region_ref_bitmap;
+
+
+  #endif
+  // end of debug
+
+  // fields for Memory Server compaction
+  // This is for fast sumarry.
+  // HeapRegion*            _dest_region_ms; // Only used for compaction in Memory server
+  // HeapRegion*            _second_dest_reigon; // Sometimes, a Region span two destinations.
+  // size_t                 _dest_offset_ms;          // offset in bytes
+
 
   //  The corresponding destination bitmap.
   G1CMBitMap             _dest_bitmap;    
@@ -533,6 +552,13 @@ class HeapRegion: public G1ContiguousSpace {
   size_t live_bytes() {
     return (top() - prev_top_at_mark_start()) * HeapWordSize + marked_bytes();
   }
+
+  // // Semeru
+  // template<typename ApplyToMarkedClosure>
+  // inline void semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
+
+  size_t marked_alive_bytes() { return _marked_alive_bytes; }
+  void  add_to_marked_alive_bytes(size_t incr_bytes)  { _marked_alive_bytes += incr_bytes;  }
 
   // The number of bytes counted in the next marking.
   size_t next_marked_bytes() { return _next_marked_bytes; }

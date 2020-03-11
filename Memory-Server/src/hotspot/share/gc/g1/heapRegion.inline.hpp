@@ -223,26 +223,86 @@ inline void HeapRegion::complete_compaction() {
 	}
 }
 
+
+
+/**
+ * Tag : Evacuate alive objects to desetination according to the bitmap.
+ * 			 This phase is purely object data copy. no pointer adjustment, no RemSet update. 
+ * 
+ * 
+ * 	[?] Destination choosing ? 
+ * 		=> defiend in Full GC's another phase. And already put the object's destination in its markOop.
+ * 	[?] If this is the case, how to do parallel copy. Because it may overwrite the forwarding pointer ?
+ * 
+ * 
+ * [x] How to asign value to the <ApplyToMarkedClosure>
+ * 		=> This function will be inlined the caller.
+ * 			 So the <typename ApplyToMarkedClosure> will be asigned the parameter, closure, 's class type.
+ */
 template<typename ApplyToMarkedClosure>
 inline void HeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure) {
-	HeapWord* limit = scan_limit();
-	HeapWord* next_addr = bottom();
+	HeapWord* limit = scan_limit();		// current Region top
+	HeapWord* next_addr = bottom();		// from Region start
 
 	while (next_addr < limit) {
-		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);
+		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
 		// This explicit is_marked check is a way to avoid
 		// some extra work done by get_next_marked_addr for
 		// the case where next_addr is marked.
-		if (bitmap->is_marked(next_addr)) {
+		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing ?
 			oop current = oop(next_addr);
-			next_addr += closure->apply(current);
+			next_addr += closure->apply(current);		// the apply() function is defiend by the parameter, closure.
 		} else {
-			next_addr = bitmap->get_next_marked_addr(next_addr, limit);
+			next_addr = bitmap->get_next_marked_addr(next_addr, limit);  // next alive objects. 
 		}
 	}
 
 	assert(next_addr == limit, "Should stop the scan at the limit.");
 }
+
+
+
+// /**
+//  * Semeru MS - Compact a scanned Region in Memory Server 
+//  *  
+//  * [?] Adjust inter-Region referecen, RemSet here ?
+//  * When doing the copy, we don't know the reference information ?
+//  * 
+//  * [?] Adjust intra-Region reference, ??
+//  * 
+//  */
+// template<typename ApplyToMarkedClosure>
+// inline void HeapRegion::semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure) {
+// 	HeapWord* limit = scan_limit();		// top()
+// 	HeapWord* next_addr = bottom();
+// 	HeapWord* dest_addr = this->_dest_region_ms->bottom() + this->_dest_offset_ms; // The start destination address, HeapWord
+// 	size_t moved_size = 0;
+
+// 	while (next_addr < limit) {
+// 		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  // [?] This may prefetch lots of dead data to cache ?
+// 		// This explicit is_marked check is a way to avoid
+// 		// some extra work done by get_next_marked_addr for
+// 		// the case where next_addr is marked.
+// 		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing ?
+// 			oop current = oop(next_addr);
+			
+// 			// If we have to check if the src == dest, check it here
+// 			if((HeapWord*)current != dest_addr){
+// 				moved_size = closure->apply(current, dest_addr);		// the apply(oop, dest_addr) function is defiend by the parameter, closure.
+// 				next_addr += moved_size;
+// 				dest_addr += moved_size;
+// 			}// Evacuated object
+// 		} else {
+// 			next_addr = bitmap->get_next_marked_addr(next_addr, limit);  // next alive objects. 
+// 		}
+// 	}
+
+// 	assert(next_addr == limit, "Should stop the scan at the limit.");
+// }
+
+
+
+
 
 inline HeapWord* HeapRegion::par_allocate_no_bot_updates(size_t min_word_size,
 																												 size_t desired_word_size,

@@ -308,8 +308,26 @@ public:
 #endif
 };
 
-// A structure to represent a point at which objects are being copied
-// during compaction.
+/**
+ * A structure to represent a point at which objects are being copied
+ * during compaction.
+ * 
+ * Fileds:
+ * [?] Generation :
+ *     => Should be Young, Old gen.        
+ * 
+ * 
+ * [x] CompactibleSpace :
+ *    => The destination Spaces.
+ * 
+ * 
+ * [x] threshold :
+ *     => The last available address for this Space.
+ *        Usually it's end addr of the space. 
+ *        But some space need to reserve some space.
+ *        check the CompactibleSpace::initialize_threshold() function for more details.
+ * 
+ */
 class CompactPoint : public StackObj {
 public:
   Generation* gen;
@@ -358,8 +376,8 @@ class CompactibleSpace: public Space {
   friend class VMStructs;
   friend class CompactibleFreeListSpace;
 private:
-  HeapWord* _compaction_top;
-  CompactibleSpace* _next_compaction_space;
+  HeapWord* _compaction_top;              // [?] Current top as destination Region ?
+  CompactibleSpace* _next_compaction_space;   // [?] has two destination Region(space) ?
 
   // Auxiliary functions for scan_and_{forward,adjust_pointers,compact} support.
   inline size_t adjust_obj_size(size_t size) const {

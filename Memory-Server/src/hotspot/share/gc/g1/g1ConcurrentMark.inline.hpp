@@ -86,16 +86,16 @@ inline bool G1ConcurrentMark::mark_in_next_bitmap(uint const worker_id, oop cons
  * Tag : mark this object alive in the region's next_bitmap
  * 
  *  [?] Purpose? 
- *  => Used for Remark Phase. 
- *  Tell the region that there are new allocated objects since last Concurrent Full Marking ?
- * 
+ *  => For G1 GC, _next_mark_bitmap is used for 
+ *     1) Calculate the garbage ratio of each Region during the marking.
+ *     2) Use _next_mark_bitmap to Rebuild CSet's Remember Set for mixed tracing.
  */
 inline bool G1ConcurrentMark::mark_in_next_bitmap(uint const worker_id, HeapRegion* const hr, oop const obj) {
   assert(hr != NULL, "just checking");
   assert(hr->is_in_reserved(obj), "Attempting to mark object at " PTR_FORMAT " that is not contained in the given region %u", p2i(obj), hr->hrm_index());
 
-  if (hr->obj_allocated_since_next_marking(obj)) {  // [?] if ture, this shoud be error ?
-    return false;
+  if (hr->obj_allocated_since_next_marking(obj)) {  // [?] if ture, this object is allocated before Marking starts
+    return false;                                   // Skip these newly allocated objects.
   }
 
   // Some callers may have stale objects to mark above nTAMS after humongous reclaim.
@@ -106,7 +106,7 @@ inline bool G1ConcurrentMark::mark_in_next_bitmap(uint const worker_id, HeapRegi
 
   bool success = _next_mark_bitmap->par_mark(obj_addr);   // [?] Mark obj alive in current 
   if (success) {
-    add_to_liveness(worker_id, obj, obj->size());
+    add_to_liveness(worker_id, obj, obj->size());     // Calculate Region's garbage ratio
   }
   return success;
 }
@@ -267,16 +267,19 @@ inline void G1CMTask::abort_marking_if_regular_check_fail() {
 }
 
 /**
- * Tag : Mark the target object alive in CM->_next_bitmap.
- *  Only mark the object alive if it's below the finger. 
- *  Which means that we already scanned it but may bot mark it alive.
+ * Tag : Mark the target object alive in CM->_next_mark_bitmap and push its into Mark queue.
+ *  
+ *   1) Only mark objects below TAMS in _next_mark_bitmap.
+ *   2) Only push objects below finger to Mark queue.
+ *        [?] What's the design purpos of the finger ?
+ *            Eliminate duplicated tracing, by go through the bitmap only once ?
  * 
- *  This funtion is invoked in Remark Phase.
+ *  [?] This funtion is invoked in both Concurrent Mark, Remark Phase.
+ *  
+ * [x] Source of this tracing :
  *  1) Root scavenge, Java/VM thread variables.
- *  2) Java Thread's SATB queue.
+ *  2) Java Thread's SATB queue.  ? 
  * 
- *  [?] Is there any objects is above the global_finger in Remark phase?
- *    => newly allocated objects ?
  * 
  */
 inline bool G1CMTask::make_reference_grey(oop obj) {

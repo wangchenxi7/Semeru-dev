@@ -46,8 +46,8 @@ public:
     Stack();
 
   private:
-    int _requested_phase;
-    ConcurrentGCPhaseManager* _top;
+    int _requested_phase;             // [?] Some Java Thread is waiting for this phase ?
+    ConcurrentGCPhaseManager* _top;   // top ConcurrentGCPhaseManager in the Stack.
 
     // Non-copyable - never defined.
     Stack(const Stack&);
@@ -117,13 +117,13 @@ public:
   // false if not also the requested phase).
   //
   // Preconditions:
-  // - Calling thread must be a Java thread
+  // - Calling thread must be a Java thread.    [?] 
   // - stack must be non-NULL
   static bool wait_for_phase(int phase, Stack* stack);
 
 private:
-  int _phase;
-  bool _active;
+  int _phase;       // [?] current phase.  What's the purpose of this information ?
+  bool _active;     // [?] _active or not ??
   ConcurrentGCPhaseManager* _prev;
   Stack* _stack;
 

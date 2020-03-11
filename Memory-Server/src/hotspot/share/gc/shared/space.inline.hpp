@@ -133,6 +133,17 @@ public:
 
 };
 
+/**
+ * Tag : Calculate the destination Space for current Space ?
+ *  
+ * 
+ * Parameter:
+ *  [?] Is this MT safe ??
+ * 
+ *  [x] CompactPoint :
+ *  => The destination Region (Space) 
+ * 
+ */
 template <class SpaceType>
 inline void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp) {
   // Compute the new addresses for the live objects and store it in the mark
@@ -146,7 +157,7 @@ inline void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* c
     assert(cp->gen != NULL, "need a generation");
     assert(cp->threshold == NULL, "just checking");
     assert(cp->gen->first_compaction_space() == space, "just checking");
-    cp->space = cp->gen->first_compaction_space();
+    cp->space = cp->gen->first_compaction_space();      // [?] This Generation's first compaction space ? young, Old Gen ?
     cp->threshold = cp->space->initialize_threshold();
     cp->space->set_compaction_top(cp->space->bottom());
   }

@@ -74,7 +74,7 @@ private:
 public:
   SuspendibleThreadSetJoiner(bool active = true) : _active(active) {
     if (_active) {
-      SuspendibleThreadSet::join();
+      SuspendibleThreadSet::join();  // [?] like pthread_join(thread*, args), suspend the caller until the finish of target thread?
     }
   }
 

@@ -329,6 +329,12 @@ void G1SemeruCMCSetRegions::prepare_for_scan() {
 }
 
 
+
+/**
+ * Pop a item from the queue. 
+ * Multiple-Thread Safe.
+ *  
+ */
 HeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 	if (_should_abort_compact) {
 		// If someone has set the should_abort flag, we return NULL to
@@ -470,6 +476,80 @@ bool G1SemeruCMCSetRegions::wait_until_scan_finished() {
 
 
 
+
+/**
+ * Semeru MS : Calculate the destination of each SCANNED Region in MS CSet. 
+ * 						 [!] This is only fast and briefly calculate the destination REGION for each region.
+ * 						  We don't want to waste too much time to sumarize all of these scanned Regions.
+ * 							Because the pause time is totally controlled by CPU server GC, Memory server doesn't how many Regions we can compact.	 
+ * 						 [!!] The purpose of this function is for multiple threads' parallel compaction. 									
+ * 						
+ * 
+ * More Explanation:
+ * 	1) Need the alive object total size of each Region.
+ *  2) Calculate the evacuation destination Region of each SCANNED Region.
+ * 	3) This information is calculated by a single thread, e.g. in the G1SemeruConcurrentMarkThread->run_service().	
+ *  4) Compact the alive objects into CSet itself
+ *    pros:
+ * 			a. All the scanned Region in CSet are alreay eivicted to Memory Server.
+ * 			b. All the alive objects can fit into themself.
+ * 		cons:
+ * 			a. Can lead to some non-full Regions.
+ * 			   Because we don't want to split source Regions, this behavior needs object level calculation.
+ * 				 But have to confirm the usaged space are Card alignment.
+ * 
+ * 	e.g. 
+ * 		scanned Regions, 512MB per Region:
+ * 			Region#1, 256MB alive
+ * 			Region#5, 128MB alive
+ * 		  Region#10, 256MB alive
+ * 
+ * 		calculated results
+ * 			=> Region#1, dest_region#1, offset = 0,
+ * 			=> Region#5, dest_region#1, offset = 256MB,  // dest_region#1->_top is 384MB
+ * 			=> Region10, dest_region#5, offset = 0,			 // dest_region#5->_top is 256MB
+ * 
+ * 		And then we can use multiple threads to parallel evacuate these SCANNED Regions.
+ * 
+ * Warning:
+ * 	#1 Objects can't corss Region.
+ * 
+ */
+
+// void G1SemeruCMCSetRegions::estimate_dset_region_for_scanned_cset(){
+// 	size_t src_ind = 0, dest_ind = 0;
+// 	HeapRegion* region_iter = _cm_scanned_regions[src_ind];
+// 	HeapRegion* dest_region = _cm_scanned_regions[dest_ind];			// initia value
+// 	size_t offset_within_dest_region = 0;
+// 	size_t waste_threshold = G1CardTable::card_size;		// size can be wasted. 
+
+// 	// Loop for the soruce Region.
+// 	while(src_ind < _num_cm_scanned_regions){
+
+// 		if( offset_within_dest_region += region_iter->marked_alive_bytes() < HeapRegion::SemeruGrainBytes){
+// 			// The whole Region fit into a Region.
+// 			region_iter->_dest_region_ms = dest_region;
+// 			region_iter->_dest_offset_ms	=	offset_within_dest_region;
+// 			offset_within_dest_region += region_iter->marked_alive_bytes();
+// 			region_iter->_second_dest_reigon = NULL; // reset
+// 		}else{
+// 			// Do NOT split the source Region into 2 destination Regions.
+// 			// Find next new Region for it.
+// 			// update destination Region's top during the compaction
+// 			dest_region = _cm_scanned_regions[++dest_ind]; // Use the next Region.
+// 			region_iter->_dest_region_ms = dest_region;
+// 			offset_within_dest_region = region_iter->marked_alive_bytes();
+// 			region_iter->_dest_offset_ms = offset_within_dest_region;
+// 			region_iter->_second_dest_reigon = NULL;			// not use this field for now.
+
+
+// 		}
+
+// 	  // fast traverse 
+// 		region_iter = _cm_scanned_regions[++src_ind]
+// 	} // End of While()
+
+// }
 
 
 //
@@ -1050,19 +1130,20 @@ public:
 			// [?] Attach the scanning information to this G1SemeruCMTask here, 
 			//		Or  delay the work assignment until going into the task ? 
 			G1SemeruCMTask* task = _semeru_cm->task(worker_id);		// get the CM task
-			task->record_start_time();			// [?] profiling ??
+			task->record_start_time();					// [?] profiling ??
 			if (!_semeru_cm->has_aborted()) {		// [?] aborted ? suspendible control ?
 				do {
 					// An infinite loop,
 					// Doing Concurrent Mark, Remark and Compact until being stopped by CPU server.
 
-
+					// G1SemeruCMTask is the code to be run ?
+					// G1SemeruCMConcurrentMarkingTask defines the user thread task ??
 					task->do_semeru_marking_step(G1ConcMarkStepDurationMillis,
 																true  /* do_termination */,
 																false /* is_serial*/);					// [x] Both C Marking and STW Compaction use this function.
 
 
-					_semeru_cm->do_yield_check();		// yield for what ?
+					_semeru_cm->do_yield_check();		// yield for what ? No need to yield at Semeru Memory Server
 
 				} while (!_semeru_cm->has_aborted() && task->has_aborted());
 			}
@@ -1084,6 +1165,10 @@ public:
 
 	~G1SemeruCMConcurrentMarkingTask() { }
 };
+
+
+
+
 
 /**
  * Semeru Memory Server
@@ -2431,7 +2516,12 @@ G1SemeruConcurrentMark::claim_region(uint worker_id) {
 
 	// When cliam a Region, it's only decieded by CPU server's current state.
 	// Have to volatile.
-	volatile bool cm_scan = _semeru_h->is_cpu_server_in_stw();
+	
+	//[??] Debug
+	//volatile bool cm_scan = _semeru_h->is_cpu_server_in_stw();
+	volatile bool cm_scan = false; // Cliam Region for CT. 
+
+
 	G1SemeruCMCSetRegions* mem_server_cset = this->mem_server_cset();
 
 	do{
@@ -2470,8 +2560,6 @@ G1SemeruConcurrentMark::claim_region(uint worker_id) {
 
 	return NULL; // run out of Memory Server CSet regions.
 }
-
-
 
 
 
@@ -3651,14 +3739,14 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	// drain_global_stack(true);
 
 	//
-	// 1) Concurrently scan all the Regions in Memory Server's Collection Set. 
+	// 1) Concurrently tracing all the Regions in Memory Server's Collection Set. 
 	//
 	//		=> We need to consider the conditions of interrup the 
 	//			 1) Interrupt the concurrent tracing
-	//						e.g. Mutators load data from a tracing Region ?
-	//								 For each Region, 
+	//						1.1) CPU server evict pages to Memory server.
+	//								 Load data to CPU server is good. SATB works.
 	//			 2) Interrupt the Remark and Compact 
-	//						e.g. The CPU server finishes its own STW GC.
+	//						2.1) The CPU server finishes its own STW GC.
 	//
 	do {
 
@@ -3673,9 +3761,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 		if (!has_aborted() && _curr_region != NULL) {  // [?] Should already make the _curr_region point to the first region of CSet.
 			// ==> This means that we're holding on to a region to process.
 			
-			// the CPU server can  add new target_oops at anytime
-			// even just after we finish the scanning of the current Region.
-			// So, we have to confirm that we already get all the target_object_queue before this Region's remakring start.
+			// [?] Check the CPU Server's state at the begining of claim a Region.
+			//	Do we need to periodically check CPU server's STW state during compacting a Region ?
 			is_cpu_server_in_stw = _semeru_h->is_cpu_server_in_stw();
 
 			// 1.1) Handle humonguous objects separately
@@ -3695,10 +3782,10 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 					// [?] Can this detect if this is a oop start address ??
 					//			=> seem no. if not start of a oop, will crash.
 					// [x] Just push this humongous objects into task_queue  ?
-					//			=> No need to mark the humongous's bitmap. 
+					//			=> [?] The humongous objects is marked when pusing it into StarTask queue
 					//			=> Mark its fields alive and push them into task_queue.
 					// [x] How to mark multiple Regions' alive_bitmap ??
-					//			=> No need to mark any humongous region's alive_bitmap.
+					//			=> Only mark the start humongous Region as alive in alive_bitmap ?
 					//bitmap_closure.do_addr(_curr_region->bottom());  
 
 					if(semeru_cm_task_do_addr(_curr_region->bottom()) ){
@@ -3745,7 +3832,10 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			//		[?] Do we need to check if the CPU server is asking for abort current Compact Phase
 			if(is_cpu_server_in_stw == true){
 				// Compact the remarked Region which is pointed  by G1SemeruCMTask->_curr_region.
-				semeru_mem_server_compact();
+				//semeru_mem_server_compact();
+
+				// [XX] Interrupt concurrent tracing and switch to STW Compact.
+
 			}
 
 			// 4) Push the necessary meta data to CPU server immediately for Field Update phase
@@ -4004,23 +4094,6 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 
 
-/**
- * Semeru Memory Server - Compact a Remakred Region.
- *  
- * 	1) The memory server compaction is done in STW.
- *  2) The compaction should correlate with CPU STW window.
- * 	3) The compacted Region is pointed by G1SemeruCMTask->_curr_region.
- * 
- * [?] Learn the design from jdk8, full-gc compaction phase.
- * 
- */
-void G1SemeruCMTask::semeru_mem_server_compact(){
-	
-	// debug
-	tty->print("%s, Warning : this function isn't implemented yet. \n", __func__);
-
-	return;
-}
 
 
 

@@ -121,7 +121,7 @@ class SemaphoreGangTaskDispatcher : public GangTaskDispatcher {
 	volatile uint _not_finished;
 
 	// Semaphore used to start the GangWorkers.
-	Semaphore* _start_semaphore;
+	Semaphore* _start_semaphore;			// [?] How to let the GangWorkers wait on the _start_semaphore ??
 	// Semaphore used to notify the coordinator that all workers are done.
 	Semaphore* _end_semaphore;
 
@@ -139,6 +139,16 @@ public:
 		delete _end_semaphore;
 	}
 
+
+	/**
+	 * [XX] Schedule the workGang to run and wait for its finish. 
+	 *  
+	 * 	1) The ConcurrentMarkThread's workGang is scheduled here.
+	 * 			_start_semaphore will trigger their AbstractGangTask->work()
+	 * 			and then, current thread waits on _end_semaphore.
+	 * 
+	 * 
+	 */
 	void coordinator_execute_on_workers(AbstractGangTask* task, uint num_workers) {
 		// No workers are allowed to read the state variables until they have been signaled.
 		_task         = task;
@@ -267,6 +277,12 @@ static GangTaskDispatcher* create_dispatcher() {
  * 		Then, G1SemeruConcurrentThread is just a handler.
  * 		The real tasks are stored in _concurrent_workers.
  * 
+ * 
+ * [x] The WorkGang threads are waiting on the _dispatcher.
+ * 		 create_dispatcher() will build a SemaphoreGangTaskDispatcher 
+ * 		 and this contructor assigns it to the WorkGang->_dispathcer.
+ * 		 e.g. The G1SemeruSTWCompactTask are waiting on SemaphoreGangTaskDispatcher->_start_semaphore.
+ * 
  */
 WorkGang::WorkGang(const char* name,
 									 uint  workers,
@@ -289,6 +305,7 @@ AbstractGangWorker* WorkGang::allocate_worker(uint worker_id) {
  *  		 There is no need to distinguish them, just find the right number to run.
  * 
  * 	[?] The OS can only see the WorkGang, can NOT see the workers within it ? Because they are user-level threads ??
+ * 		=> Seems the OS can only see the pthread handler, G1SemeruConcurrentMarkThread.
  * 
  * 	[?] How to wake up them to run ?
  * 			=> [GUESS] Each WorkGang is attached to a handler thread, e.g. G1SemeruConcurrentMarkThread.
@@ -360,6 +377,7 @@ void GangWorker::signal_task_done() {
  * 
  * i.e.
  * a. Concurrent Root Region Scan task sets.
+ * b. G1SemeruSTWCompactTask->work() is also scheduled from here.
  * 
  */
 void GangWorker::run_task(WorkData data) {
@@ -378,8 +396,8 @@ void GangWorker::run_task(WorkData data) {
  */
 void GangWorker::loop() {
 	while (true) {
-		WorkData data = wait_for_task();
-
+		WorkData data = wait_for_task();   // Let the WorkGang wait on the WorkGang->_dispatch->_start_semaphore.
+																			 // the workGang will be waken up by the WorkGang::run_task(AbstractGangTask* task)
 		run_task(data);
 
 		signal_task_done();

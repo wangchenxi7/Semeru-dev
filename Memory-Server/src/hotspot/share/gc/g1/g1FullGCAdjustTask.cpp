@@ -61,8 +61,8 @@ class G1AdjustRegionClosure : public HeapRegionClosure {
   bool do_heap_region(HeapRegion* r) {
     G1AdjustClosure cl;
     if (r->is_humongous()) {
-      oop obj = oop(r->humongous_start_region()->bottom());
-      obj->oop_iterate(&cl, MemRegion(r->bottom(), r->top()));
+      oop obj = oop(r->humongous_start_region()->bottom());  // get the humongous object
+      obj->oop_iterate(&cl, MemRegion(r->bottom(), r->top()));    // traverse the humongous object's fields.
     } else if (r->is_open_archive()) {
       // Only adjust the open archive regions, the closed ones
       // never change.
@@ -91,6 +91,22 @@ G1FullGCAdjustTask::G1FullGCAdjustTask(G1FullCollector* collector) :
   ClassLoaderDataGraph::clear_claimed_marks();
 }
 
+
+/**
+ * Tag : update the fields' fields pointer after preparation.
+ *  
+ *  Contents needed to be handled
+ *  1) Marker preserved stack 
+ *    e.g. what's the marker->preserved_stack() ?
+ *  2) Weark reference ?
+ *    e.g. WeakProcessor::Task
+ *  3) Klass information
+ *  4) Function stack variables
+ *    e.g. G1RootProcessor
+ *  5）Heap objects in Region.
+ *    The normal heapd objects.
+ *  
+ */
 void G1FullGCAdjustTask::work(uint worker_id) {
   Ticks start = Ticks::now();
   ResourceMark rm;

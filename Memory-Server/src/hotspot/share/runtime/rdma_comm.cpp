@@ -34,7 +34,7 @@ void* Build_rdma_to_cpu_server(void* _args ){
   struct sockaddr_in6 	addr;
   struct rdma_cm_event 	*event = NULL;
   struct rdma_cm_id 		*listener = NULL;
-  struct rdma_event_channel *ec = NULL;   // [?] Event channel ?
+  struct rdma_event_channel *ec = NULL;   // [x] Event channel, used for 2-sided RDMA. Get interrupes here.
   uint16_t 	port = 0;
 	char* heap_start	= NULL;
 	size_t heap_size	=	0;
@@ -85,13 +85,13 @@ void* Build_rdma_to_cpu_server(void* _args ){
   // [?] Not like kernel level client running in a notify mode, here has to poll the cm event manually ?
   //	Current process stops here to wait for RDMA signal. 
 	//
-  while (rdma_get_cm_event(ec, &event) == 0) {
+  while (rdma_get_cm_event(ec, &event) == 0) {    // Get a 2-sided RDMA message from Event Channel ?
     struct rdma_cm_event event_copy;
 
-    memcpy(&event_copy, event, sizeof(*event));
-    rdma_ack_cm_event(event);    		// [?] Why do we free the event here ?
+    memcpy(&event_copy, event, sizeof(*event));   // [?] Can we handle the received event first, and the ack it ?
+    rdma_ack_cm_event(event);    		// [x] Free the even gotten by rdma_get_cm_event. Have to pair it with rdma_get_cm_event
 
-    if (on_cm_event(&event_copy))   // RDMA communication event handler. 
+    if (on_cm_event(&event_copy))   // [x] Further handler of the received event.
       break;
   }
 
@@ -233,6 +233,7 @@ int on_cm_event(struct rdma_cm_event *event){
 
 
 /**
+ * Get a cm_event : RDMA_CM_EVENT_CONNECT_REQUEST, respons it.
  * CPU server send a reques to build a RDMA connection.   
  * ACCEPT the RDMA conenction.
  * 
@@ -244,7 +245,7 @@ int on_connect_request(struct rdma_cm_id *id)
   struct rdma_conn_param cm_params;
 
   tty->print("%s, received connection request.\n", __func__);
-  build_connection(id);					// Build the RDMA connection.
+  build_connection(id);					// Build the RDMA connection. Post a receive wr here.
   build_params(&cm_params);			// [?] Set some RDMA paramters. 
   TEST_NZ(rdma_accept(id, &cm_params));  // ACCEPT the request to build RDMA connection.
   tty->print("%s, Send ACCEPT back to CPU server \n", __func__);
@@ -402,7 +403,7 @@ void build_qp_attr(struct ibv_qp_init_attr *qp_attr)
  */
 void * poll_cq(void *ctx)
 {
-  struct ibv_cq *cq;  //
+  struct ibv_cq *cq;  // 2-sided, completion queue, retrieve receive_wr hre.
   struct ibv_wc wc;		// 
 
   while (1) {
@@ -500,6 +501,13 @@ void build_params(struct rdma_conn_param *params)
 /**
  * Get a WC from CQ, time to handle the recr_wr.
  * 
+ * [?] What's the message sequence between cm_event and the CQ notify ?
+ *  Is there any orders between  the CM_event and wr ?
+ * 
+ * Guess
+ * 1) CM_even is only used for building the RDMA conenction.
+ * 2) After the RDMA conenction is built, use CQ to receive data, wr.  
+ * 
  */
 void handle_cqe(struct ibv_wc *wc){
 
@@ -511,13 +519,13 @@ void handle_cqe(struct ibv_wc *wc){
   if (wc->status != IBV_WC_SUCCESS)
     die("handle_cqe: status is not IBV_WC_SUCCESS.");
 
-  if (wc->opcode == IBV_WC_RECV){ //Recv
+  if (wc->opcode == IBV_WC_RECV){         // Recv
     switch (rdma_ctx->recv_msg->type){    // Check the DMA buffer of recevei WR.
       case QUERY:
         tty->print("%s, QUERY \n", __func__);
         //atomic_set(&rdma_ctx->cq_qp_state, CQ_QP_BUSY);
         send_free_mem_size(rdma_ctx);				//[!] This is the first time send the FREE SIZE information
-        post_receives(rdma_ctx);
+        post_receives(rdma_ctx);            // post a recv_wr for receiving.
         break;
       case REQUEST_CHUNKS:          //client requests for multiple memory chunks from current server.
         tty->print("%s, REQUEST_CHUNKS, Send available Regions to CPU server \n", __func__);

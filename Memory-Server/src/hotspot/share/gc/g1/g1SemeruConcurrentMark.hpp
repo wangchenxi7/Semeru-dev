@@ -47,6 +47,10 @@ class G1SemeruCMTask;
 class G1SemeruCollectedHeap;
 class G1SemeruConcurrentMark;
 class G1SemeruConcurrentMarkThread;
+class G1SemeruCMOopClosure;
+
+// MS Compact
+class G1SemeruSTWCompact;
 
 
 #ifdef _MSC_VER
@@ -389,6 +393,11 @@ public:
   // are done. Return true if we had to wait, false otherwise.
   bool wait_until_compact_finished();
   bool wait_until_scan_finished();
+
+
+  // Estimate the destination Region for each Scanned Region in a fast way.
+  // void estimate_dset_region_for_scanned_cset();
+
 };
 
 
@@ -412,6 +421,12 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   friend class G1SemeruCMConcurrentMarkingTask;
   friend class G1SemeruCMRemarkTask;
   friend class G1SemeruCMTask;
+
+  // For STW Compact
+  friend class G1SemeruSTWCompact;    // Need to use G1SemeruConcurrentMark to initialize itself
+  
+
+
 
   // [?] Seems that G1SemeruConcurrentMarkThread is only a manager of all the concurrent threads.
   //     The real concurrent threads are stored in _concurrent_workers.
@@ -446,7 +461,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // [?] Initial phase add regions into the Root Region ??
   //
   // G1SemeruCMRootRegions   _root_regions;
-  G1SemeruCMCSetRegions   _mem_server_cset;
+  G1SemeruCMCSetRegions   _mem_server_cset; // also pointed by G1SemeruSTWCompact->_mem_server_cset
 
   // For grey objects
 
@@ -583,6 +598,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   //HeapRegion* claim_region(uint worker_id);
 
   HeapRegion* claim_region(uint worker_id);
+
 
   // Determines whether we've run out of regions to scan. Note that
   // the finger can point past the heap end in case the heap was expanded
@@ -979,17 +995,18 @@ public:
                        bool do_termination,
                        bool is_serial);
 
-  // Semeru : Concurrent or STW Remark a claimed Region.
+  // Semeru Memory Server : Concurrent or STW Remark a claimed Region.
   // [?] How to let multiple concurrent workers to scan a single Region ??
   void do_semeru_marking_step(double time_target_ms,
 															 bool do_termination,
 															 bool is_serial);
 
+
   //
   // Semeru
   //
   G1CMBitMap*    alive_bitmap()  { return _alive_bitmap; }
-  G1CMBitMap*    dest_bitmap()   { return _dest_bitmap;  }
+//  G1CMBitMap*    dest_bitmap()   { return _dest_bitmap;  }  // Should be a key-value pair, not a bitmap.
 
   // Mark an object alive in current scanning region, pointed by _curr_region.
   inline bool mark_in_alive_bitmap(uint const worker_id, oop const obj);

@@ -449,6 +449,9 @@ bool HeapRegionManager::allocate_containing_regions(MemRegion range, size_t* com
  * 	hrclaimer, get a region from freelist. 
  * 	HeapRegionClosure : The closure applied to the got HeapRegion.
  * 
+ * All the threads race Region from index 0.
+ * There is no gurantee for the cliamed order.
+ * 
  */
 void HeapRegionManager::par_iterate(HeapRegionClosure* blk, HeapRegionClaimer* hrclaimer, const uint start_index) const {
 	// Every worker will actually look at all regions, skipping over regions that
@@ -472,7 +475,7 @@ void HeapRegionManager::par_iterate(HeapRegionClosure* blk, HeapRegionClaimer* h
 		if (hrclaimer->is_region_claimed(index)) {
 			continue;
 		}
-		// OK, try to claim it
+		// OK, try to claim it. MT safe.
 		if (!hrclaimer->claim_region(index)) {
 			continue;
 		}

@@ -39,18 +39,26 @@
 #include "oops/oop.inline.hpp"
 #include "utilities/ticks.hpp"
 
+
+/**
+ * Tag : the FullGC threads is summarizing a source Region's destination Region.
+ * 
+ * [x] The claimed source Region will be added into G1FullGCPrepareTask->G1FullGCCompactionPoint
+ *      which points to collector()->compaction_point(worker_id).
+ * 
+ */
 bool G1FullGCPrepareTask::G1CalculatePointersClosure::do_heap_region(HeapRegion* hr) {
-  if (hr->is_humongous()) {
+  if (hr->is_humongous()) {     // 1) Humongous objects are not moved
     oop obj = oop(hr->humongous_start_region()->bottom());
-    if (_bitmap->is_marked(obj)) {
-      if (hr->is_starts_humongous()) {
-        obj->forward_to(obj);
+    if (_bitmap->is_marked(obj)) {      // Both start and following humongous Regions should be marked
+      if (hr->is_starts_humongous()) {  // Only process the start humongous Region.
+        obj->forward_to(obj);  // not moving the humongous objects.
       }
     } else {
       free_humongous_region(hr);
     }
   } else if (!hr->is_pinned()) {
-    prepare_for_compaction(hr);
+    prepare_for_compaction(hr);   // 2) Normal objects  
   }
 
   // Reset data structures not valid after Full GC.
@@ -75,6 +83,14 @@ bool G1FullGCPrepareTask::has_freed_regions() {
   return _freed_regions;
 }
 
+
+/**
+ * Tag : each thread summarize and then compact several Regions ?
+ *       If this is the case, it can put the forwarding pointer in alive objects' markOop.
+ *  
+ *  [x] _hrclaimer is used to split the Regions evenly between different threads.
+ * 
+ */
 void G1FullGCPrepareTask::work(uint worker_id) {
   Ticks start = Ticks::now();
   G1FullGCCompactionPoint* compaction_point = collector()->compaction_point(worker_id);
@@ -106,7 +122,7 @@ void G1FullGCPrepareTask::G1CalculatePointersClosure::free_humongous_region(Heap
   _humongous_regions_removed++;
 
   _g1h->free_humongous_region(hr, &dummy_free_list);
-  prepare_for_compaction(hr);
+  prepare_for_compaction(hr);   // Add this Region into Destination Region candidates
   dummy_free_list.remove_all();
 }
 
@@ -122,6 +138,11 @@ void G1FullGCPrepareTask::G1CalculatePointersClosure::reset_region_metadata(Heap
 G1FullGCPrepareTask::G1PrepareCompactLiveClosure::G1PrepareCompactLiveClosure(G1FullGCCompactionPoint* cp) :
     _cp(cp) { }
 
+
+/**
+ * Tag : Preparation Phase #2, calculate the destination for each alive object in the source/current Region. 
+ *  
+ */
 size_t G1FullGCPrepareTask::G1PrepareCompactLiveClosure::apply(oop object) {
   size_t size = object->size();
   _cp->forward(object, size);
@@ -143,15 +164,23 @@ size_t G1FullGCPrepareTask::G1RePrepareClosure::apply(oop obj) {
   return size;
 }
 
+/**
+ * Tag : Calculate the destination for source Region's alive objects.
+ *  
+ * Parameter:
+ *   cp : the destination Region. Multiple source Regions may be compacted to it.
+ *   hr : The source Region, who should be compacted to cp.
+ * 
+ */
 void G1FullGCPrepareTask::G1CalculatePointersClosure::prepare_for_compaction_work(G1FullGCCompactionPoint* cp,
                                                                                   HeapRegion* hr) {
   G1PrepareCompactLiveClosure prepare_compact(cp);
-  hr->set_compaction_top(hr->bottom());
+  hr->set_compaction_top(hr->bottom());     // should be cp->some addr ? why it's itself ??
   hr->apply_to_marked_objects(_bitmap, &prepare_compact);
 }
 
 void G1FullGCPrepareTask::G1CalculatePointersClosure::prepare_for_compaction(HeapRegion* hr) {
-  if (!_cp->is_initialized()) {
+  if (!_cp->is_initialized()) {   // if G1FullGCCompactionPoint is not setted, compact to itself.
     hr->set_compaction_top(hr->bottom());
     _cp->initialize(hr, true);
   }

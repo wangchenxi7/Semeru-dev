@@ -49,6 +49,9 @@ public:
   bool has_freed_regions();
 
 protected:
+
+  // Preparation Phase #1, calculate the destination Region for each source Region.
+  //
   class G1CalculatePointersClosure : public HeapRegionClosure {
   protected:
     G1CollectedHeap* _g1h;
@@ -65,13 +68,17 @@ protected:
     G1CalculatePointersClosure(G1CMBitMap* bitmap,
                                G1FullGCCompactionPoint* cp);
 
-    void update_sets();
-    bool do_heap_region(HeapRegion* hr);
+    void update_sets();       // [?] Young, Old, Humongous set ?
+    bool do_heap_region(HeapRegion* hr); // Claim and process a Region.
     bool freed_regions();
   };
 
+
+
+  // preparation Phase #2, calculate the destination for each alive object withn a source Region.
+  //
   class G1PrepareCompactLiveClosure : public StackObj {
-    G1FullGCCompactionPoint* _cp;
+    G1FullGCCompactionPoint* _cp;     // This source Region's compaction/destination Region.
 
   public:
     G1PrepareCompactLiveClosure(G1FullGCCompactionPoint* cp);

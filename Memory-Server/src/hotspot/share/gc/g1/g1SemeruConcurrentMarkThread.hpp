@@ -68,19 +68,27 @@ class G1SemeruConcurrentMarkThread: public ConcurrentGCThread {
 
   //G1ConcurrentMark* _semeru_cm;
 
-  // Semeru memory server marking & compaction ?
+  // Semeru memory server marking
   G1SemeruConcurrentMark* _semeru_cm;   // only initialize this for semeru memory pool.
 
+  // Semeru memory server comapcting 
+  G1SemeruSTWCompact*     _semeru_sc;   
+
+  // Control of the Semeru Concurrent Thread
+  volatile bool _semeru_ms_gc_should_terminated;
+
+  // The Concurrent Thread State
   // [?] We should expand the states here ?
   enum State {
     Idle,
-    Started,
-    InProgress
+    Started,      /* Initialization is done. */
+    InProgress    /* Is scheduled to run. */
   };
 
   volatile State _state;
 
   // WhiteBox testing support.
+  // Tag : Push PhaseManager into the stack, shared by different PhaseManager.
   ConcurrentGCPhaseManager::Stack _phase_manager_stack;
 
   void sleep_before_next_cycle();
@@ -111,10 +119,14 @@ class G1SemeruConcurrentMarkThread: public ConcurrentGCThread {
   // Marking virtual time so far this thread and concurrent marking tasks.
   double vtime_mark_accum();
 
-  // G1ConcurrentMark* cm()   { return _semeru_cm; }
 
   // Semeru
   G1SemeruConcurrentMark* semeru_cm()   { return _semeru_cm; }
+  G1SemeruSTWCompact*     semeru_sc()   { return _semeru_sc;  }
+  void set_semeru_sc(G1SemeruSTWCompact* semeru_sc) { _semeru_sc = semeru_sc; }
+
+  bool semeru_ms_gc_should_terminated()   { return _semeru_ms_gc_should_terminated; }
+  void set_semeru_ms_gc_terminated()      { _semeru_ms_gc_should_terminated = true; }
 
   /**
    * [?] What's the difference between Started  and InProgress ??

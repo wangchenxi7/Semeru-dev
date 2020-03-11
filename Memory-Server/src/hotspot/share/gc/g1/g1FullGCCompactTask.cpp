@@ -48,20 +48,30 @@ public:
         if (_bitmap->is_marked(obj)) {
           // Clear bitmap and fix mark word.
           _bitmap->clear(obj);
-          obj->init_mark_raw();
+          obj->init_mark_raw();   // [?] What's the purpose for this marking ?
         } else {
           assert(current->is_empty(), "Should have been cleared in phase 2.");
         }
       }
-      current->reset_during_compaction();
+      current->reset_during_compaction();   // [?] purpose ?
     }
     return false;
   }
 };
 
+
+/**
+ * Tag : Full-GC uses the forwarding pointer to do the object copy ??
+ *        Put the destination into alive object's header as forwarding pointer. 
+ * 
+ *  [?] When and where put the forwarding value ?
+ *    
+ *  [?] Is this MT safe ?
+ * 
+ */
 size_t G1FullGCCompactTask::G1CompactRegionClosure::apply(oop obj) {
   size_t size = obj->size();
-  HeapWord* destination = (HeapWord*)obj->forwardee();
+  HeapWord* destination = (HeapWord*)obj->forwardee();   // [?] already moved
   if (destination == NULL) {
     // Object not moving
     return size;
@@ -70,17 +80,24 @@ size_t G1FullGCCompactTask::G1CompactRegionClosure::apply(oop obj) {
   // copy object and reinit its mark
   HeapWord* obj_addr = (HeapWord*) obj;
   assert(obj_addr != destination, "everything in this pass should be moving");
-  Copy::aligned_conjoint_words(obj_addr, destination, size);
-  oop(destination)->init_mark_raw();
+  Copy::aligned_conjoint_words(obj_addr, destination, size);      // 4 bytes alignment copy ?
+  oop(destination)->init_mark_raw();    // initialize the MarkOop.
   assert(oop(destination)->klass() != NULL, "should have a class");
 
   return size;
 }
 
+/**
+ * The main entry of compacting a Region.
+ *   
+ *  [?] Use the bitmap to do Region based compaction. 
+ * 
+ * 
+ */
 void G1FullGCCompactTask::compact_region(HeapRegion* hr) {
   assert(!hr->is_humongous(), "Should be no humongous regions in compaction queue");
   G1CompactRegionClosure compact(collector()->mark_bitmap());
-  hr->apply_to_marked_objects(collector()->mark_bitmap(), &compact);
+  hr->apply_to_marked_objects(collector()->mark_bitmap(), &compact);  // Do the evacuation according to the next_mark_bitmap.
   // Once all objects have been moved the liveness information
   // needs be cleared.
   collector()->mark_bitmap()->clear_region(hr);

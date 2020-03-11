@@ -2429,6 +2429,10 @@ void G1CollectedHeap::heap_region_par_iterate_from_worker_offset(HeapRegionClosu
 	_hrm->par_iterate(cl, hrclaimer, hrclaimer->offset_for_worker(worker_id));
 }
 
+/**
+ * Different threads cliam Region and apply the HeapRegionClosure from the start, idnex 0 ?
+ *  
+ */
 void G1CollectedHeap::heap_region_par_iterate_from_start(HeapRegionClosure* cl,
 																												 HeapRegionClaimer *hrclaimer) const {
 	_hrm->par_iterate(cl, hrclaimer, 0);

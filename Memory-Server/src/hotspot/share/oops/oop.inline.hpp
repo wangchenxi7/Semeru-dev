@@ -82,6 +82,14 @@ void oopDesc::init_mark() {
 	set_mark(markOopDesc::prototype_for_object(this));
 }
 
+/**
+ * Tag : Set the mark word for the objects.
+ *  
+ * [?] markOopDesc::prototype_for_object(this) ?
+ * 		 => After a STW GC, the object's markOop value is useless ?
+ * 
+ * 
+ */
 void oopDesc::init_mark_raw() {
 	set_mark_raw(markOopDesc::prototype_for_object(this));
 }

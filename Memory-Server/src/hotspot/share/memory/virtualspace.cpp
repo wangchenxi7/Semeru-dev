@@ -33,7 +33,7 @@
 #include "utilities/align.hpp"
 
 // Semeru - headers
-#include "memory/rdma_comm.hpp"
+#include "runtime/rdma_comm.hpp"
 
 // ReservedSpace
 

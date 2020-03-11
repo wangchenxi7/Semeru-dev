@@ -59,6 +59,7 @@
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/SemeruHeapRegionManager.hpp"  // G1SemeruCollectedHeap --> SemeruHeapRegionManager, the invoke sequence.
 #include "gc/shared/rdmaStructure.inline.hpp"
+#include "gc/g1/g1SemeruSTWCompact.hpp"       // share all concurrent thread resource of g1SemeruConcurrentMark
 
 // A "G1SemeruCollectedHeap" is an implementation of a java memory pool in HotSpot for CPU server.
 // It uses the modified "Garbage First" heap organization and algorithm, which
@@ -178,6 +179,10 @@ class G1SemeruCollectedHeap : public CollectedHeap {
 
   // Testing classes.
   friend class G1CheckCSetFastTableClosure;
+
+  // Semeru
+  friend class G1SemeruSTWCompact;
+
 
 //
 // Fields needed to be initialized by CPU server
@@ -881,6 +886,7 @@ private:
 
   // The concurrent marker (and the thread it runs in.)
   G1SemeruConcurrentMark* _semeru_cm;
+  G1SemeruSTWCompact *    _semeru_sc; // use all the concurrent resource of G1SemeruCOncurrentMark, _semeru_cm
   G1SemeruConcurrentMarkThread* _semeru_cm_thread;
 
 //   // The concurrent refiner.

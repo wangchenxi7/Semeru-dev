@@ -32,11 +32,11 @@
 class HeapRegion;
 
 class G1FullGCCompactionPoint : public CHeapObj<mtGC> {
-  HeapRegion* _current_region;
+  HeapRegion* _current_region;      // Current destination Region.
   HeapWord*   _threshold;
-  HeapWord*   _compaction_top;
-  GrowableArray<HeapRegion*>* _compaction_regions;
-  GrowableArrayIterator<HeapRegion*> _compaction_region_iterator;
+  HeapWord*   _compaction_top;      // the top, when this Region is used as compaction destination Region.
+  GrowableArray<HeapRegion*>* _compaction_regions;    // The destination Region candidates. The enqueued source Region.
+  GrowableArrayIterator<HeapRegion*> _compaction_region_iterator; // points to the _compaction_regions[]
 
   bool object_will_fit(size_t size);
   void initialize_values(bool init_threshold);
@@ -59,6 +59,12 @@ public:
   HeapRegion* current_region();
 
   GrowableArray<HeapRegion*>* regions();
+
+  // Semeru support
+
+  // Semeru MS need to reset the CP information at the end of compaction task.
+  void reset_compactionPoint();
+
 };
 
 #endif // SHARE_GC_G1_G1FULLGCCOMPACTIONPOINT_HPP

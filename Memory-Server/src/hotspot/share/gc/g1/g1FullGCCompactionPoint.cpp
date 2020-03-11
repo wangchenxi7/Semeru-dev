@@ -33,7 +33,7 @@ G1FullGCCompactionPoint::G1FullGCCompactionPoint() :
     _threshold(NULL),
     _compaction_top(NULL) {
   _compaction_regions = new (ResourceObj::C_HEAP, mtGC) GrowableArray<HeapRegion*>(32, true, mtGC);
-  _compaction_region_iterator = _compaction_regions->begin();
+  _compaction_region_iterator = _compaction_regions->begin();     // Points to all the Source Region list.
 }
 
 G1FullGCCompactionPoint::~G1FullGCCompactionPoint() {
@@ -70,6 +70,11 @@ HeapRegion* G1FullGCCompactionPoint::current_region() {
   return *_compaction_region_iterator;
 }
 
+/**
+ * Tag : Get next destination Region from G1FullGCCompactionPoint->_compaction_regions[]
+ *    The content are the enqueued source Region. 
+ * 
+ */
 HeapRegion* G1FullGCCompactionPoint::next_region() {
   HeapRegion* next = *(++_compaction_region_iterator);
   assert(next != NULL, "Must return valid region");
@@ -89,16 +94,21 @@ void G1FullGCCompactionPoint::switch_region() {
   // Save compaction top in the region.
   _current_region->set_compaction_top(_compaction_top);
   // Get the next region and re-initialize the values.
-  _current_region = next_region();
+  _current_region = next_region();  // [?] how to determin the next Region ??
   initialize_values(true);
 }
 
+
+/**
+ * Calculate the object, passed in parameter, 's destination address in current CompactionPoint/Region.
+ *  
+ */
 void G1FullGCCompactionPoint::forward(oop object, size_t size) {
   assert(_current_region != NULL, "Must have been initialized");
 
   // Ensure the object fit in the current region.
   while (!object_will_fit(size)) {
-    switch_region();
+    switch_region();  // Switch to a new compaction Region. No need to put any fake oop after the HeapRegion->_top
   }
 
   // Store a forwarding pointer if the object should be moved.
@@ -112,7 +122,7 @@ void G1FullGCCompactionPoint::forward(oop object, size_t size) {
       // with BiasedLocking, in this case forwardee() will return NULL
       // even if the mark-word is used. This is no problem since
       // forwardee() will return NULL in the compaction phase as well.
-      object->init_mark_raw();
+      object->init_mark_raw();  // [?] What cause this? This object should not be forwared, so just reset its markOop. 
     } else {
       // Make sure object has the correct mark-word set or that it will be
       // fixed when restoring the preserved marks.
@@ -132,6 +142,16 @@ void G1FullGCCompactionPoint::forward(oop object, size_t size) {
   }
 }
 
+/**
+ *  Tag : Add this source Region to current compaction_region's queue.
+ *  
+ *  [x] The newly added source Region are also the destination Region candidates.
+ *      Which means that the full-gc compaction is procedure of compacting data into themselves.     
+ * 
+ *  [x] if can't fully compact this source Region into current compaction_region,
+ *       Add a second destination Region into source Region->_next_compaction_space.
+ * 
+ */
 void G1FullGCCompactionPoint::add(HeapRegion* hr) {
   _compaction_regions->append(hr);
 }
@@ -142,4 +162,26 @@ void G1FullGCCompactionPoint::merge(G1FullGCCompactionPoint* other) {
 
 HeapRegion* G1FullGCCompactionPoint::remove_last() {
   return _compaction_regions->pop();
+}
+
+
+/**
+ * clear all the values 
+ *  
+ * HeapRegion* _current_region;      // Current destination Region.
+ * HeapWord*   _threshold;
+ * HeapWord*   _compaction_top;      // the top, when this Region is used as compaction destination Region.
+ * GrowableArray<HeapRegion*>* _compaction_regions;    // The destination Region candidates. The enqueued source Region.
+ * GrowableArrayIterator<HeapRegion*> _compaction_region_iterator; // points to the _compaction_regions[]
+ *   
+ *  
+ */
+void G1FullGCCompactionPoint::reset_compactionPoint(){
+
+  _current_region = NULL;  // set flag non-initialized.
+  _threshold      = NULL;
+  _compaction_top = NULL;
+  _compaction_regions->clear(); // set index, len to 0.
+  _compaction_region_iterator = _compaction_regions->begin();   // point to _compaction_regions's first element.
+
 }

@@ -169,6 +169,7 @@ void G1FullCollector::prepare_collection() {
  * Tag : G1 STW Full heap GC.
  * 
  * [?] How to confirm that this is a STW GC ?
+ *  => When schedule a task to run, the JVM will decide if need to suspend other threads according to the task's characteristics.
  * 
  */
 void G1FullCollector::collect() {
