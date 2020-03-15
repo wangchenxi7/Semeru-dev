@@ -15,11 +15,10 @@
 #include "gc/g1/g1ConcurrentMarkBitMap.hpp"
 #include "gc/g1/g1HeapVerifier.hpp"
 #include "gc/g1/g1RegionMarkStatsCache.hpp"
-#include "gc/g1/heapRegionSet.hpp"
+#include "gc/g1/SemeruHeapRegionSet.hpp"
 #include "gc/shared/taskqueue.hpp"
 #include "gc/shared/gcTimer.hpp"
 #include "gc/shared/gcTrace.hpp"
-#include "gc/g1/heapRegion.inline.hpp"
 
 
 // Full GC structures
@@ -40,6 +39,7 @@ class G1RegionToSpaceMapper;
 class G1SurvivorRegions;
 
 // Semeru
+class SemeruHeapRegion;
 class G1SemeruCollectedHeap;
 class G1SemeruConcurrentMark;
 class G1SemeruConcurrentMarkThread;
@@ -183,10 +183,10 @@ private:
   // method. So, this way, each task will spend very little time in
   // claim_region() and is allowed to call the regular clock method
   // frequently.
-  //HeapRegion* claim_region(uint worker_id);
+  //SemeruHeapRegion* claim_region(uint worker_id);
 
 	// Claim a Scanned Region.
- 	HeapRegion* claim_region_for_comapct(uint worker_id, HeapRegion* prev_compact);
+ 	SemeruHeapRegion* claim_region_for_comapct(uint worker_id, SemeruHeapRegion* prev_compact);
 
 
 
@@ -215,7 +215,7 @@ private:
   // }
 
 
-  // Reliam the entire bitmap of current HeapRegion after the compaction is done.
+  // Reliam the entire bitmap of current SemeruHeapRegion after the compaction is done.
   void clear_bitmap(G1CMBitMap* bitmap, WorkGang* workers, bool may_yield);
 
 
@@ -234,7 +234,7 @@ public:
 
 
   // Notification for eagerly reclaimed regions to clean up.
-  void humongous_object_eagerly_reclaimed(HeapRegion* r);
+  void humongous_object_eagerly_reclaimed(SemeruHeapRegion* r);
 
 
   // Transfer content from G1SemeruCollectedHeap->_recv_mem_server_cset
@@ -336,7 +336,7 @@ public:
 //   G1CMBitMap*                       _alive_bitmap;  // points to the evacutating Region's alive_bitmap.
  
 //   // Region this task is scanning, NULL if we're not scanning any
-//   HeapRegion*                 _curr_compacting_region;
+//   SemeruHeapRegion*                 _curr_compacting_region;
 
 
 
@@ -503,7 +503,7 @@ public:
   // Phase 1, 
   // 1) calculate the destination address for alive objects
   //    Put forwarding pointer in the markOop
-  void phase1_prepare_for_compact(HeapRegion* hr);
+  void phase1_prepare_for_compact(SemeruHeapRegion* hr);
 
   // Phase 2,
   // adjust the pointer
@@ -511,11 +511,11 @@ public:
   //     How to handle the inter-Region ?
   //     Need to record these objects with inter-Region, scan and update their fields at the end of the phase 4?
   //     We can reuse the alive_bitmap for the compacted Region to record the objects having inter-Region references to be updated.
-  void phase2_adjust_intra_region_pointer(HeapRegion* hr);
+  void phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr);
 
   
   // Phase 3,
-	void phase3_compact_region(HeapRegion* hr);  // Compact a single HeapRegion.
+	void phase3_compact_region(SemeruHeapRegion* hr);  // Compact a single SemeruHeapRegion.
 
   // Phase 4,
   // Need to share data between CPU server and other Memory servers.
@@ -540,7 +540,7 @@ public:
   // [X] This closure is only for a single Region. 
   //     All its stateless structures should get from the G1SemeruSTWCompactTask.
   //
-class G1SemeruCalculatePointersClosure : public HeapRegionClosure {
+class G1SemeruCalculatePointersClosure : public SemeruHeapRegionClosure {
 protected:
   //  G1CollectedHeap* _g1h;
     G1SemeruSTWCompact* _semeru_sc;
@@ -548,10 +548,10 @@ protected:
     G1FullGCCompactionPoint* _cp;       // The destination Region, for Semeru MS, each Region compact to itself.
     uint* _humongous_regions_removed;   // stateless,  pointed to G1SemeruSTWCompactTask->_humongous_regions_removed
 
-    virtual void prepare_for_compaction(HeapRegion* hr);
-    void prepare_for_compaction_work(G1FullGCCompactionPoint* cp, HeapRegion* hr);
-    void free_humongous_region(HeapRegion* hr);
-    void reset_region_metadata(HeapRegion* hr);
+    virtual void prepare_for_compaction(SemeruHeapRegion* hr);
+    void prepare_for_compaction_work(G1FullGCCompactionPoint* cp, SemeruHeapRegion* hr);
+    void free_humongous_region(SemeruHeapRegion* hr);
+    void reset_region_metadata(SemeruHeapRegion* hr);
 
 public:
     G1SemeruCalculatePointersClosure( G1SemeruSTWCompact* semeru_sc,
@@ -560,7 +560,7 @@ public:
                                       uint* humongous_regions_removed);
 
     void update_sets();       // [?] Young, Old, Humongous set ?
-    bool do_heap_region(HeapRegion* hr); // Main Entry :  Claim and process a Region.
+    bool do_heap_region(SemeruHeapRegion* hr); // Main Entry :  Claim and process a Region.
     bool freed_regions();
 };
 
@@ -602,11 +602,11 @@ public:
  * 
  */
 class G1SemeruAdjustClosure : public BasicOopIterateClosure {
-  HeapRegion* _curr_region;   // Current compacting Region.
+  SemeruHeapRegion* _curr_region;   // Current compacting Region.
 
-  template <class T> static inline void adjust_intra_region_pointer(T* p, HeapRegion* hr);
+  template <class T> static inline void adjust_intra_region_pointer(T* p, SemeruHeapRegion* hr);
 public:
-  G1SemeruAdjustClosure(HeapRegion* curr_region) : _curr_region(curr_region) { }
+  G1SemeruAdjustClosure(SemeruHeapRegion* curr_region) : _curr_region(curr_region) { }
 
   template <class T> void do_oop_work(T* p) { adjust_intra_region_pointer(p , _curr_region); }
   virtual void do_oop(oop* p);
@@ -635,45 +635,6 @@ public:
 };
 
 
-
-
-
-/**
- * Adjust intra-Region references for a single Region.
- * 
- */
-class G1SemeruAdjustRegionClosure : public HeapRegionClosure {
-  G1SemeruSTWCompact* _semeru_sc;
-  G1CMBitMap* _bitmap;
-  //uint _worker_id;
-
- public:
-  G1SemeruAdjustRegionClosure(G1SemeruSTWCompact* semeru_sc, G1CMBitMap* bitmap) :
-    _semeru_sc(semeru_sc),
-    _bitmap(bitmap) { }
-
-  bool do_heap_region(HeapRegion* r) {
-    G1SemeruAdjustClosure adjust_pointer(r);
-    if (r->is_humongous()) {
-      oop obj = oop(r->humongous_start_region()->bottom());  // get the humongous object
-      obj->oop_iterate(&adjust_pointer, MemRegion(r->bottom(), r->top()));    // traverse the humongous object's fields.
-    } else if (r->is_open_archive()) {
-      // Only adjust the open archive regions, the closed ones
-      // never change.
-      G1SemeruAdjustLiveClosure adjust_oop(&adjust_pointer);
-      r->apply_to_marked_objects(_bitmap, &adjust_oop);
-      // Open archive regions will not be compacted and the marking information is
-      // no longer needed. Clear it here to avoid having to do it later.
-      _bitmap->clear_region(r);
-    } else {
-      G1SemeruAdjustLiveClosure adjust_oop(&adjust_pointer);
-      r->apply_to_marked_objects(_bitmap, &adjust_oop);
-    }
-    return false;
-  }
-
-
-};
 
 
 

@@ -22,8 +22,8 @@
  *
  */
 
-#ifndef SHARE_VM_GC_G1_HEAPREGION_HPP
-#define SHARE_VM_GC_G1_HEAPREGION_HPP
+#ifndef SHARE_VM_GC_G1_SEMERU_HEAPREGION_HPP
+#define SHARE_VM_GC_G1_SEMERU_HEAPREGION_HPP
 
 #include "gc/g1/g1BlockOffsetTable.hpp"
 #include "gc/g1/g1HeapRegionTraceType.hpp"
@@ -35,17 +35,21 @@
 #include "gc/shared/spaceDecorator.hpp"
 #include "utilities/macros.hpp"
 
+// Semeru
+#include "gc/g1/heapRegion.hpp"   // Reuse class in original heapRegion.hpp
+#include "gc/shared/rdmaStructure.hpp"    // .hpp not to inlcude inline.hpp, will crash the include hierarchy
+#include "gc/g1/g1ConcurrentMarkBitMap.hpp"
 
 
-// The inlcude order is that : HeapRegionSet include HeapRegion.
+// The inlcude order is that : HeapRegionSet include SemeruHeapRegion.
 //                             SemeruHeapRegionManager.hpp include HeapRegionSet.
 //    Don't make a circle here.
 //#include "gc/g1/SemeruHeapRegionManager.hpp"   
 
-// A HeapRegion is the smallest piece of a G1CollectedHeap that
+// A SemeruHeapRegion is the smallest piece of a G1CollectedHeap that
 // can be collected independently.
 
-// NOTE: Although a HeapRegion is a Space, its
+// NOTE: Although a SemeruHeapRegion is a Space, its
 // Space::initDirtyCardClosure method must not be called.
 // The problem is that the existence of this method breaks
 // the independence of barrier sets from remembered sets.
@@ -62,172 +66,51 @@
 // region may have top() equal the end of object if there isn't
 // room for filler objects to pad out to the end of the region.
 
-class G1CollectedHeap;
+
 class G1CMBitMap;
 class G1IsAliveAndApplyClosure;
 class HeapRegionRemSet;
 class HeapRegionRemSetIterator;
-class HeapRegion;
-class HeapRegionSetBase;
+class SemeruHeapRegionSetBase;
 class nmethod;
 
-
-
-#define HR_FORMAT "%u:(%s)[" PTR_FORMAT "," PTR_FORMAT "," PTR_FORMAT "]"
-#define HR_FORMAT_PARAMS(_hr_) \
-                (_hr_)->hrm_index(), \
-                (_hr_)->get_short_type_str(), \
-                p2i((_hr_)->bottom()), p2i((_hr_)->top()), p2i((_hr_)->end())
-
-// sentinel value for hrm_index
-#define G1_NO_HRM_INDEX ((uint) -1)
-
-// The complicating factor is that BlockOffsetTable diverged
-// significantly, and we need functionality that is only in the G1 version.
-// So I copied that code, which led to an alternate G1 version of
-// OffsetTableContigSpace.  If the two versions of BlockOffsetTable could
-// be reconciled, then G1OffsetTableContigSpace could go away.
-
-// The idea behind time stamps is the following. We want to keep track of
-// the highest address where it's safe to scan objects for each region.
-// This is only relevant for current GC alloc regions so we keep a time stamp
-// per region to determine if the region has been allocated during the current
-// GC or not. If the time stamp is current we report a scan_top value which
-// was saved at the end of the previous GC for retained alloc regions and which is
-// equal to the bottom for all other regions.
-// There is a race between card scanners and allocating gc workers where we must ensure
-// that card scanners do not read the memory allocated by the gc workers.
-// In order to enforce that, we must not return a value of _top which is more recent than the
-// time stamp. This is due to the fact that a region may become a gc alloc region at
-// some point after we've read the timestamp value as being < the current time stamp.
-// The time stamps are re-initialized to zero at cleanup and at Full GCs.
-// The current scheme that uses sequential unsigned ints will fail only if we have 4b
-// evacuation pauses between two cleanups, which is _highly_ unlikely.
-class G1ContiguousSpace: public CompactibleSpace {
-  friend class VMStructs;
-  HeapWord* volatile _top;
- protected:
-  G1BlockOffsetTablePart _bot_part;  // [?] 1 byte for each card. To record the start object offset for each card.
-  Mutex _par_alloc_lock;
-  // When we need to retire an allocation region, while other threads
-  // are also concurrently trying to allocate into it, we typically
-  // allocate a dummy object at the end of the region to ensure that
-  // no more allocations can take place in it. However, sometimes we
-  // want to know where the end of the last "real" object we allocated
-  // into the region was and this is what this keeps track.
-  HeapWord* _pre_dummy_top;
-
- public:
-  G1ContiguousSpace(G1BlockOffsetTable* bot);
-
-  void set_top(HeapWord* value) { _top = value; }
-  HeapWord* top() const { return _top; }
-
- protected:
-  // Reset the G1ContiguousSpace.
-  virtual void initialize(MemRegion mr, bool clear_space, bool mangle_space);
-
-  HeapWord* volatile* top_addr() { return &_top; }
-  // Try to allocate at least min_word_size and up to desired_size from this Space.
-  // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
-  // space allocated.
-  // This version assumes that all allocation requests to this Space are properly
-  // synchronized.
-  inline HeapWord* allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
-  // Try to allocate at least min_word_size and up to desired_size from this Space.
-  // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
-  // space allocated.
-  // This version synchronizes with other calls to par_allocate_impl().
-  inline HeapWord* par_allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
-
- public:
-  void reset_after_compaction() { set_top(compaction_top()); }
-
-  size_t used() const { return byte_size(bottom(), top()); }
-  size_t free() const { return byte_size(top(), end()); }
-  bool is_free_block(const HeapWord* p) const { return p >= top(); }
-
-  MemRegion used_region() const { return MemRegion(bottom(), top()); }
-
-  void object_iterate(ObjectClosure* blk);
-  void safe_object_iterate(ObjectClosure* blk);
-
-  void mangle_unused_area() PRODUCT_RETURN;
-  void mangle_unused_area_complete() PRODUCT_RETURN;
-
-  // See the comment above in the declaration of _pre_dummy_top for an
-  // explanation of what it is.
-  void set_pre_dummy_top(HeapWord* pre_dummy_top) {
-    assert(is_in(pre_dummy_top) && pre_dummy_top <= top(), "pre-condition");
-    _pre_dummy_top = pre_dummy_top;
-  }
-  HeapWord* pre_dummy_top() {
-    return (_pre_dummy_top == NULL) ? top() : _pre_dummy_top;
-  }
-  void reset_pre_dummy_top() { _pre_dummy_top = NULL; }
-
-  virtual void clear(bool mangle_space);
-
-  HeapWord* block_start(const void* p);
-  HeapWord* block_start_const(const void* p) const;
-
-  // Allocation (return NULL if full).  Assumes the caller has established
-  // mutually exclusive access to the space.
-  HeapWord* allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
-  // Allocation (return NULL if full).  Enforces mutual exclusion internally.
-  HeapWord* par_allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
-
-  virtual HeapWord* allocate(size_t word_size);
-  virtual HeapWord* par_allocate(size_t word_size);
-
-  HeapWord* saved_mark_word() const { ShouldNotReachHere(); return NULL; }
-
-  // MarkSweep support phase3
-  virtual HeapWord* initialize_threshold();
-  virtual HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
-
-  virtual void print() const;
-
-  void reset_bot() {
-    _bot_part.reset_bot();
-  }
-
-  void print_bot_on(outputStream* out) {
-    _bot_part.print_on(out);
-  }
-};
-
+// Semeru
+class G1SemeruCollectedHeap;
+class SemeruHeapRegion;
 
 
 /**
- * Tag: HeapRegion management handler.
- *      HeapRegion is also a CHeapObj, allocated into native memory. 
+ * Semeru SemeruHeapRegion.
+ * 
+ * There are 3 kinds of fields based on the sent direction.
+ *    1) CPU server send first kind of fields to Memory server
+ *    2) Memory server send 2nd kind of fields to CPU server
+ *    3) CPU server and Memory server keep different values for same fields.
+ * 
+ *  
+ * Based on the sent timmings, the fields are also divided into 2 types:
+ *    1) Sent at the JVM initialziaiton, one time communication.
+ *    2) Frequently sent/recieve during the execution.
+ * 
+ * For the fields  sent and received together, group them into a class.
+ * For effiency, better to access data in cache line alignment.
  * 
  * 
- * [?] Values of some fields are fixed, no need to update between CPU and memory server.
- *     But some fields' value may be only setted by one server and needed by another server.
- *     How to handle this case ??
+ * For the TargetObjQueue
+ *  
+ *  CPU Server  - Producer 
+ *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
+ *     First, from thread stack variables. This is done during CPU server GC.
+ *     Second, Cross-Region references recoreded by the Post Write Barrier ?
+ *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
+ *  
+ *  Memory Server - Consumer 
+ *     Receive the TargetObjQueue and use them as the scavenge roots.
  * 
+ *  Moved the definition to taskqueue.hpp.
+ *  Because these structures are used by multiple components.
  */
-class HeapRegion: public G1ContiguousSpace {
-  friend class VMStructs;
-  friend class SemeruHeapRegionManager; // Allocate & initialize its private field, target_oop_queue.
-  // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
-  template <typename SpaceType>
-  friend void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp);
- 
- // Upgrade the protection from private to protected. 
- // Becasue we need to merge them together for update purpose.
- //private:
- protected: 
 
-  /**
-   * Fields need to be updated between CPU srever and Memory server
-   * 
-   * The current solution is to allocate these fields at fixed address at page granularity.
-   * And then let  RDMA to transfer these pages at necessary site.
-   * 
-   */
 
 
 
@@ -237,11 +120,32 @@ class HeapRegion: public G1ContiguousSpace {
   //
 
 
+
+class CPUToMemoryAtInit : public CHeapRDMAObj< CPUToMemoryAtInit, CPU_TO_MEM_AT_INIT_ALLOCTYPE>{
+
+public:
   // 1.1) These fields are integrated into the super-instance.
   //
-
   // The index of this region in the heap region sequence.
   uint  _hrm_index;
+
+
+  // Declare the  functions in SemeruHeapRegion directly.
+  CPUToMemoryAtInit(uint hrm_index): _hrm_index(hrm_index) {  }
+
+
+
+};
+
+
+/**
+ * Fields for GC purpose.
+ * Synchronized before/after each CPU STW GC.
+ *  
+ */
+class CPUToMemoryAtGC : public CHeapRDMAObj< CPUToMemoryAtGC, CPU_TO_MEM_AT_GC_ALLOCTYPE> {
+
+public:
 
   // Free(Reserved, but not commited), Eden, Survivor, Old, Humonguous 
   // Only CPU server do the Region allocation.
@@ -250,35 +154,122 @@ class HeapRegion: public G1ContiguousSpace {
   // For a humongous region, region in which it starts.
   // This is only address value for the Region, 
   // Both CPU and Memory server both have this instance at the same address.
-  HeapRegion* _humongous_start_region;
+  SemeruHeapRegion* _humongous_start_region;
 
- 
-  
-
-  // fields for Memory Server compaction
-  // This is for fast sumarry.
-  // HeapRegion*            _dest_region_ms; // Only used for compaction in Memory server
-  // HeapRegion*            _second_dest_reigon; // Sometimes, a Region span two destinations.
-  // size_t                 _dest_offset_ms;          // offset in bytes
-
-
-  //  The corresponding destination bitmap.
-  // G1CMBitMap             _dest_bitmap;    
-  
-  // Fields used by the HeapRegionSetBase class and subclasses.
+   
+  // Fields used by the SemeruHeapRegionSetBase class and subclasses.
   // [?] what's these 2 fields used for ??
-  HeapRegion*           _next;
-  HeapRegion*           _prev;
+  SemeruHeapRegion*           _next;
+  SemeruHeapRegion*           _prev;
 
 
+
+  // Target object queue. Contains all the target objects of the cross-region references into current Region.
+  // This queue is built by the CPU sever GC.
+  // This queue is sent to Memory Server via the RDMA. 
+  // It should be allocated in fixed address : defined in SEMERU_START_ADDR
+  //
+  // [x] Only allocate && initialize this queue in Semeru heap.
+  TargetObjQueue* _target_obj_queue;
+
+
+  // functions
+
+  CPUToMemoryAtGC(uint hrm_index):
+   _type(),
+   _humongous_start_region(NULL),
+   _next(NULL),
+   _prev(NULL),
+   _target_obj_queue(NULL)
+   { }
+
+
+};
+
+
+
+
+//
+// 2) Fields setted by Memory server and needed by CPU server.
+//    CPU server will swap in these pages on demand.
+
+
+class MemoryToCPUAtGC : public CHeapRDMAObj< MemoryToCPUAtGC, MEM_TO_CPU_AT_GC_ALLOCTYPE>{
+
+public:
+  // this field identify this Region is already traced by the concurrent threads.
+  // This value is setted by Semeru memory srver BUT also accessed by the CPU server.
+  bool _cm_scanned;    
+
+
+  // Every SemeruHeapRegion should has its own _alive_bitmap.
+  // Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
+  // CPU server only caches the necessary bitmap to save CPU local memory size.
+  // So it's better to cut the bitmap into slices, one slice per SemeruHeapRegion.
+  //
+  // [x] Disable the prev_bitmap design by always setting the _prev_top_at_mark_start to the Region->_bottom. 
+  //
+  // [??] Change it to a pointer based instance.
+  //      Because the CPU server doesn't need this field for all the Regions.
+  //
+  G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
+  size_t        _marked_alive_bytes;   // Marked alive objects
+
+
+
+  // DEBUG feilds
+  #ifdef ASSERT
+  // objects contain inter-Region reference
+  // For our current design, we don't need this bitmap.
+  // Because every compcated Region needs to send the new address of target objects to the source.
+  G1CMBitMap             _inter_region_ref_bitmap;
+
+
+  #endif
+  // end of debug
+
+
+  //
+  // functions
+  //
+  MemoryToCPUAtGC(uint hrm_index) {}
+
+
+
+};
+
+
+/**
+ * Tag: SemeruHeapRegion management handler.
+ *      SemeruHeapRegion is also a CHeapObj, allocated into native memory. 
+ * 
+ * 
+ * [?] Values of some fields are fixed, no need to update between CPU and memory server.
+ *     But some fields' value may be only setted by one server and needed by another server.
+ *     How to handle this case ??
+ * 
+ */
+class SemeruHeapRegion: public G1ContiguousSpace {
+  friend class VMStructs;
+  friend class SemeruHeapRegionManager; // Allocate & initialize its private field, target_oop_queue.
+  // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
+  template <typename SpaceType>
+  friend void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp);
  
+ // Upgrade the protection from private to protected. 
+ // Becasue we need to merge them together for update purpose.
+ //private:
+public:
+
+
+  // RDMA communication structure, allocate into RDMA meta space
+  CPUToMemoryAtInit   *_cpu_to_mem_init;
+  CPUToMemoryAtGC     *_cpu_to_mem_gc;
+  MemoryToCPUAtGC     *_mem_to_cpu_gc;
 
 
 
-
-
-
-
+ protected: 
   //
   // ############################# End of update fields section #############################
   //
@@ -291,7 +282,7 @@ class HeapRegion: public G1ContiguousSpace {
   // (Might want to make this "inline" later, to avoid some alloc failure
   // issues.)
   // 
-  // [??] Not needed by the Semeru memory server. 
+  // [x] Not needed by the Semeru memory server. 
   //
   HeapRegionRemSet* _rem_set;  //[x] Region Local RemSet
 
@@ -308,7 +299,7 @@ class HeapRegion: public G1ContiguousSpace {
   }
 
   inline size_t scanned_block_size(const HeapWord* addr) const {
-    return HeapRegion::block_size(addr); // Avoid virtual call
+    return SemeruHeapRegion::block_size(addr); // Avoid virtual call
   }
 
   void report_region_type_change(G1HeapRegionTraceType::Type to);
@@ -329,7 +320,7 @@ class HeapRegion: public G1ContiguousSpace {
 
 
 #ifdef ASSERT
-  HeapRegionSetBase* _containing_set;
+  SemeruHeapRegionSetBase* _containing_set;
 #endif // ASSERT
 
   // We use concurrent marking to determine the amount of live data
@@ -348,9 +339,7 @@ class HeapRegion: public G1ContiguousSpace {
   int  _age_index;
 
 
-  // [?] Are these 2 bitmaps used for Concurrent Marking ?
-  //  Concurrent marking scans [bottom, _prev_top_at_mark_start).
-  //  And, Remark scans  [_prev_top_at_mark_start, min(_next_top_at_mark_start, end) ) ??
+
   //  
   //
   // The start of the unmarked area. The unmarked area extends from this
@@ -359,7 +348,7 @@ class HeapRegion: public G1ContiguousSpace {
   // have been allocated in this part since the last mark phase.
   // "prev" is the top at the start of the last completed marking.
   // "next" is the top at the start of the in-progress marking (if any.)
-  HeapWord* _prev_top_at_mark_start;
+  HeapWord* _prev_top_at_mark_start;  // Keep  this value NULL to disable dual marking bitmap for Semeru MS.
   HeapWord* _next_top_at_mark_start;
   // If a collection pause is in progress, this is the top at the start
   // of that pause.
@@ -390,7 +379,7 @@ class HeapRegion: public G1ContiguousSpace {
   template <class Closure, bool is_gc_active>
   inline bool do_oops_on_card_in_humongous(MemRegion mr,
                                            Closure* cl,
-                                           G1CollectedHeap* g1h);
+                                           G1SemeruCollectedHeap* g1h);
 
   // Returns the block size of the given (dead, potentially having its class unloaded) object
   // starting at p extending to at most the prev TAMS using the given mark bitmap.
@@ -398,17 +387,17 @@ class HeapRegion: public G1ContiguousSpace {
 
 
  public:
-  HeapRegion(uint hrm_index,
+  SemeruHeapRegion(uint hrm_index,
              G1BlockOffsetTable* bot,
              MemRegion mr);
 
-  // Initializing the HeapRegion not only resets the data structure, but also
+  // Initializing the SemeruHeapRegion not only resets the data structure, but also
   // resets the BOT for that heap region.
   // The default values for clear_space means that we will do the clearing if
   // there's clearing to be done ourselves. We also always mangle the space.
   virtual void initialize(MemRegion mr, bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
 
-  // Initialize HeapRegion with alive/dest bitmap information.
+  // Initialize SemeruHeapRegion with alive/dest bitmap information.
   virtual void initialize(MemRegion mr, 
                             size_t region_index,
                             bool clear_space = false, 
@@ -417,18 +406,27 @@ class HeapRegion: public G1ContiguousSpace {
 
   void allocate_init_target_oop_queue(uint hrm_index);
 
-  static int    LogOfHRGrainBytes;
-  static int    LogOfHRGrainWords;
 
-  static size_t GrainBytes;
-  static size_t GrainWords;      // [?] The Region size is fixed to this, 128K words, 1MB ??
-  static size_t CardsPerRegion;  
+  //
+  // Semeru
+  //
+  static int    SemeruLogOfHRGrainBytes;
+  static int    SemeruLogOfHRGrainWords;
 
+  static size_t SemeruGrainBytes;   // The Region size, decided in function SemeruHeapRegion::setup_heap_region_size
+  static size_t SemeruGrainWords;      
+  static size_t SemeruCardsPerRegion;  
+
+  // get current Region's alive/dest bitmap
+  G1CMBitMap* alive_bitmap()  { return &(_mem_to_cpu_gc->_alive_bitmap);  }
+
+  // allocate space for the alive/dest bitmap.
+  G1RegionToSpaceMapper* create_alive_bitmap_storage(size_t region_idnex);
 
 
   static size_t align_up_to_region_byte_size(size_t sz) {
-    return (sz + (size_t) GrainBytes - 1) &
-                                      ~((1 << (size_t) LogOfHRGrainBytes) - 1);
+    return (sz + (size_t) SemeruGrainBytes - 1) &
+                                      ~((1 << (size_t) SemeruLogOfHRGrainBytes) - 1);
   }
 
 
@@ -437,22 +435,24 @@ class HeapRegion: public G1ContiguousSpace {
   static bool is_in_same_region(T* p, oop obj) {
     assert(p != NULL, "p can't be NULL");
     assert(obj != NULL, "obj can't be NULL");
-    return (((uintptr_t) p ^ cast_from_oop<uintptr_t>(obj)) >> LogOfHRGrainBytes) == 0;
+    return (((uintptr_t) p ^ cast_from_oop<uintptr_t>(obj)) >> SemeruLogOfHRGrainBytes) == 0;
   }
 
   static size_t max_region_size();
   static size_t min_region_size_in_words();
 
-  // It sets up the heap region size (GrainBytes / GrainWords), as
-  // well as other related fields that are based on the heap region
-  // size (LogOfHRGrainBytes / LogOfHRGrainWords /
-  // CardsPerRegion). All those fields are considered constant
-  // throughout the JVM's execution, therefore they should only be set
-  // up once during initialization time.
-  static void setup_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
+  // // It sets up the heap region size (SemeruGrainBytes / GrainWords), as
+  // // well as other related fields that are based on the heap region
+  // // size (SemeruLogOfHRGrainBytes / LogOfHRGrainWords /
+  // // CardsPerRegion). All those fields are considered constant
+  // // throughout the JVM's execution, therefore they should only be set
+  // // up once during initialization time.
+  // static void setup_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
 
+  // Semeru
+  static void setup_semeru_heap_region_size(size_t initial_heap_size, size_t max_heap_size);
 
-  // All allocated blocks are occupied by objects in a HeapRegion
+  // All allocated blocks are occupied by objects in a SemeruHeapRegion
   bool block_is_obj(const HeapWord* p) const;
 
   // Returns whether the given object is dead based on TAMS and bitmap.
@@ -477,7 +477,8 @@ class HeapRegion: public G1ContiguousSpace {
 
   // If this region is a member of a HeapRegionManager, the index in that
   // sequence, otherwise -1.
-  uint hrm_index() const { return _hrm_index; }
+  uint hrm_index() const { return _cpu_to_mem_init->_hrm_index; }
+  void set_hrm_index(uint hrm_index)  { _cpu_to_mem_init->_hrm_index = hrm_index; }
 
   // The number of bytes marked live in the region in the last marking phase.
   size_t marked_bytes()    { return _prev_marked_bytes; }
@@ -489,8 +490,8 @@ class HeapRegion: public G1ContiguousSpace {
   // template<typename ApplyToMarkedClosure>
   // inline void semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
 
-  //size_t marked_alive_bytes() { return _marked_alive_bytes; }
-  //void  add_to_marked_alive_bytes(size_t incr_bytes)  { _marked_alive_bytes += incr_bytes;  }
+  size_t marked_alive_bytes() { return _mem_to_cpu_gc->_marked_alive_bytes; }
+  void  add_to_marked_alive_bytes(size_t incr_bytes)  { _mem_to_cpu_gc->_marked_alive_bytes += incr_bytes;  }
 
   // The number of bytes counted in the next marking.
   size_t next_marked_bytes() { return _next_marked_bytes; }
@@ -528,40 +529,40 @@ class HeapRegion: public G1ContiguousSpace {
     _prev_marked_bytes = _next_marked_bytes = 0;
   }
 
-  const char* get_type_str() const { return _type.get_str(); }
-  const char* get_short_type_str() const { return _type.get_short_str(); }
-  G1HeapRegionTraceType::Type get_trace_type() { return _type.get_trace_type(); }
+  const char* get_type_str() const { return _cpu_to_mem_gc->_type.get_str(); }
+  const char* get_short_type_str() const { return _cpu_to_mem_gc->_type.get_short_str(); }
+  G1HeapRegionTraceType::Type get_trace_type() { return _cpu_to_mem_gc->_type.get_trace_type(); }
 
-  bool is_free() const { return _type.is_free(); }
+  bool is_free() const { return _cpu_to_mem_gc->_type.is_free(); }
 
-  bool is_young()    const { return _type.is_young();    }
-  bool is_eden()     const { return _type.is_eden();     }
-  bool is_survivor() const { return _type.is_survivor(); }
+  bool is_young()    const { return _cpu_to_mem_gc->_type.is_young();    }
+  bool is_eden()     const { return _cpu_to_mem_gc->_type.is_eden();     }
+  bool is_survivor() const { return _cpu_to_mem_gc->_type.is_survivor(); }
 
-  bool is_humongous() const { return _type.is_humongous(); }
-  bool is_starts_humongous() const { return _type.is_starts_humongous(); }
-  bool is_continues_humongous() const { return _type.is_continues_humongous();   }
+  bool is_humongous() const { return _cpu_to_mem_gc->_type.is_humongous(); }
+  bool is_starts_humongous() const { return _cpu_to_mem_gc->_type.is_starts_humongous(); }
+  bool is_continues_humongous() const { return _cpu_to_mem_gc->_type.is_continues_humongous();   }
 
-  bool is_old() const { return _type.is_old(); }
+  bool is_old() const { return _cpu_to_mem_gc->_type.is_old(); }
 
-  bool is_old_or_humongous() const { return _type.is_old_or_humongous(); }
+  bool is_old_or_humongous() const { return _cpu_to_mem_gc->_type.is_old_or_humongous(); }
 
-  bool is_old_or_humongous_or_archive() const { return _type.is_old_or_humongous_or_archive(); }
+  bool is_old_or_humongous_or_archive() const { return _cpu_to_mem_gc->_type.is_old_or_humongous_or_archive(); }
 
   // A pinned region contains objects which are not moved by garbage collections.
   // Humongous regions and archive regions are pinned.
-  bool is_pinned() const { return _type.is_pinned(); }
+  bool is_pinned() const { return _cpu_to_mem_gc->_type.is_pinned(); }
 
   // An archive region is a pinned region, also tagged as old, which
   // should not be marked during mark/sweep. This allows the address
   // space to be shared by JVM instances.
-  bool is_archive()        const { return _type.is_archive(); }
-  bool is_open_archive()   const { return _type.is_open_archive(); }
-  bool is_closed_archive() const { return _type.is_closed_archive(); }
+  bool is_archive()        const { return _cpu_to_mem_gc->_type.is_archive(); }
+  bool is_open_archive()   const { return _cpu_to_mem_gc->_type.is_open_archive(); }
+  bool is_closed_archive() const { return _cpu_to_mem_gc->_type.is_closed_archive(); }
 
   // For a humongous region, region in which it starts.
-  HeapRegion* humongous_start_region() const {
-    return _humongous_start_region;
+  SemeruHeapRegion* humongous_start_region() const {
+    return _cpu_to_mem_gc->_humongous_start_region;
   }
 
   // Makes the current region be a "starts humongous" region, i.e.,
@@ -575,7 +576,7 @@ class HeapRegion: public G1ContiguousSpace {
   // Makes the current region be a "continues humongous'
   // region. first_hr is the "start humongous" region of the series
   // which this region will be part of.
-  void set_continues_humongous(HeapRegion* first_hr);
+  void set_continues_humongous(SemeruHeapRegion* first_hr);
 
   // Unsets the humongous-related fields on the region.
   void clear_humongous();
@@ -585,6 +586,9 @@ class HeapRegion: public G1ContiguousSpace {
     return _rem_set;
   }
 
+  TargetObjQueue* target_obj_queue() const {
+    return _cpu_to_mem_gc->_target_obj_queue;
+  }
 
   // Change this code to  check if a Region is in Memory Server CSet.
   //
@@ -592,16 +596,16 @@ class HeapRegion: public G1ContiguousSpace {
 
 
 
-  // Methods used by the HeapRegionSetBase class and subclasses.
+  // Methods used by the SemeruHeapRegionSetBase class and subclasses.
 
   // Getter and setter for the next and prev fields used to link regions into
   // linked lists.
-  HeapRegion* next()              { return _next; }
-  HeapRegion* prev()              { return _prev; }
+  SemeruHeapRegion* next()              { return _cpu_to_mem_gc->_next; }
+  SemeruHeapRegion* prev()              { return _cpu_to_mem_gc->_prev; }
 
 
-  void set_next(HeapRegion* next) { _next = next; }
-  void set_prev(HeapRegion* prev) { _prev = prev; }
+  void set_next(SemeruHeapRegion* next) { _cpu_to_mem_gc->_next = next; }
+  void set_prev(SemeruHeapRegion* prev) { _cpu_to_mem_gc->_prev = prev; }
 
 
   // Every region added to a set is tagged with a reference to that
@@ -609,7 +613,7 @@ class HeapRegion: public G1ContiguousSpace {
   // the contents of a set are as they should be and it's only
   // available in non-product builds.
 #ifdef ASSERT
-  void set_containing_set(HeapRegionSetBase* containing_set) {
+  void set_containing_set(SemeruHeapRegionSetBase* containing_set) {
     assert((containing_set == NULL && _containing_set != NULL) ||
            (containing_set != NULL && _containing_set == NULL),
            "containing_set: " PTR_FORMAT " "
@@ -619,18 +623,18 @@ class HeapRegion: public G1ContiguousSpace {
     _containing_set = containing_set;
   }
 
-  HeapRegionSetBase* containing_set() { return _containing_set; }
+  SemeruHeapRegionSetBase* containing_set() { return _containing_set; }
 #else // ASSERT
-  void set_containing_set(HeapRegionSetBase* containing_set) { }
+  void set_containing_set(SemeruHeapRegionSetBase* containing_set) { }
 
   // containing_set() is only used in asserts so there's no reason
   // to provide a dummy version of it.
 #endif // ASSERT
 
 
-  // Reset the HeapRegion to default values.
+  // Reset the SemeruHeapRegion to default values.
   // If skip_remset is true, do not clear the remembered set.
-  // If clear_space is true, clear the HeapRegion's memory.
+  // If clear_space is true, clear the SemeruHeapRegion's memory.
   // If locked is true, assume we are the only thread doing this operation.
   void hr_clear(bool skip_remset, bool clear_space, bool locked = false);
   // Clear the card table corresponding to this region.
@@ -803,6 +807,18 @@ class HeapRegion: public G1ContiguousSpace {
   // the strong code roots list for this region
   void strong_code_roots_do(CodeBlobClosure* blk) const;
 
+
+  //
+  // The Semeru section
+  //
+
+  void set_region_cm_scanned()    { _mem_to_cpu_gc->_cm_scanned = true;  }
+  void reset_region_cm_scanned()  { _mem_to_cpu_gc->_cm_scanned = false;  }
+  bool is_region_cm_scanned()     { return _mem_to_cpu_gc->_cm_scanned; }
+
+
+
+
   // Verify that the entries on the strong code root list for this
   // region are live and include at least one pointer into this region.
   void verify_strong_code_roots(VerifyOption vo, bool* failures) const;
@@ -832,11 +848,12 @@ class HeapRegion: public G1ContiguousSpace {
   void verify_rem_set() const;
 };
 
-// HeapRegionClosure is used for iterating over regions.
+
+
+// SemeruHeapRegionClosure is used for iterating over regions.
 // Terminates the iteration when the "do_heap_region" method returns "true".
-class HeapRegionClosure : public StackObj {
-  friend class HeapRegionManager;
-  friend class G1CollectionSet;
+class SemeruHeapRegionClosure : public StackObj {
+  friend class G1CollectionSet;         // [?] do we need this ?
   friend class CollectionSetChooser;
   friend class SemeruHeapRegionManager; // to access its private fields.
 
@@ -844,12 +861,12 @@ class HeapRegionClosure : public StackObj {
   void set_incomplete() { _is_complete = false; }
 
  public:
-  HeapRegionClosure(): _is_complete(true) {}
+  SemeruHeapRegionClosure(): _is_complete(true) {}
 
   // Typically called on each region until it returns true.
-  // [?] Let the sub-class to define its own operations on a HeapRegion ? 
+  // [?] Let the sub-class to define its own operations on a SemeruHeapRegion ? 
   //
-  virtual bool do_heap_region(HeapRegion* r) = 0;
+  virtual bool do_heap_region(SemeruHeapRegion* r) = 0;
 
   // True after iteration if the closure was applied to all heap regions
   // and returned "false" in all cases.

@@ -11,6 +11,9 @@
 #include "oops/oop.inline.hpp"
 
 
+// inline 
+#include "gc/g1/SemeruHeapRegion.inline.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 
 
 
@@ -30,7 +33,7 @@
  * 
  */
 template <class T> 
-inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, HeapRegion* curr_region) {
+inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapRegion* curr_region) {
   T heap_oop = RawAccess<>::oop_load(p);
   if (CompressedOops::is_null(heap_oop)) {
     return;

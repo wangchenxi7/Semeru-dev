@@ -638,7 +638,7 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
   G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
   //size_t* received_num = mem_server_cset->num_received_regions();
   int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
-   HeapRegion* region_received = NULL;
+   SemeruHeapRegion* region_received = NULL;
 
   while(received_region_ind != -1){
     region_received = semeru_heap->hrm()->at(received_region_ind);

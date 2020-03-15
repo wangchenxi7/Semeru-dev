@@ -29,11 +29,12 @@
 //#include "gc/g1/g1ConcurrentMarkObjArrayProcessor.hpp"
 #include "gc/g1/g1HeapVerifier.hpp"
 #include "gc/g1/g1RegionMarkStatsCache.hpp"
-#include "gc/g1/heapRegionSet.hpp"
+//#include "gc/g1/heapRegionSet.hpp"
 #include "gc/shared/taskqueue.hpp"
 #include "memory/allocation.hpp"
 
 // Semeru headers
+#include "gc/g1/SemeruHeapRegionSet.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.hpp"
 
 class ConcurrentGCTimer;
@@ -261,7 +262,7 @@ private:
 // Root regions comprise of the complete contents of survivor regions, and any
 // objects copied into old gen during GC.
 // class G1SemeruCMRootRegions {
-//   HeapRegion** _root_regions;
+//   SemeruHeapRegion** _root_regions;
 //   size_t const _max_regions;
 
 //   volatile size_t _num_root_regions; // Actual number of root regions.
@@ -280,7 +281,7 @@ private:
 //   // Reset the data structure to allow addition of new root regions.
 //   void reset();
 
-//   void add(HeapRegion* hr);
+//   void add(SemeruHeapRegion* hr);
 
 //   // Reset the claiming / scanning of the root regions.
 //   void prepare_for_scan();
@@ -294,7 +295,7 @@ private:
 
 //   // Claim the next root region to scan atomically, or return NULL if
 //   // all have been claimed.
-//   HeapRegion* claim_next();
+//   SemeruHeapRegion* claim_next();
 
 //   // The number of root regions to scan.
 //   uint num_root_regions() const;
@@ -322,8 +323,8 @@ private:
  *    This structure is built from the region index set from CPU server.
  */
 class G1SemeruCMCSetRegions {
-  HeapRegion** _cm_scanned_regions;
-  HeapRegion** _freshly_evicted_regions;
+  SemeruHeapRegion** _cm_scanned_regions;
+  SemeruHeapRegion** _freshly_evicted_regions;
 
   //size_t const _max_cm_scanned_regions;
   //size_t const _max_freshly_evicted_regions;
@@ -351,8 +352,8 @@ public:
   // Reset the data structure to allow addition of new root regions.
   void reset();
 
-  void add_cm_scanned_regions(HeapRegion* hr);
-  void add_freshly_evicted_regions(HeapRegion* hr);
+  void add_cm_scanned_regions(SemeruHeapRegion* hr);
+  void add_freshly_evicted_regions(SemeruHeapRegion* hr);
 
   // Reset the claiming / scanning of the root regions.
   void prepare_for_compact();
@@ -370,8 +371,8 @@ public:
 
   // Claim the next root region to scan atomically, or return NULL if
   // all have been claimed.
-  HeapRegion* claim_cm_scanned_next();
-  HeapRegion* claim_freshly_evicted_next();
+  SemeruHeapRegion* claim_cm_scanned_next();
+  SemeruHeapRegion* claim_freshly_evicted_next();
 
   // The number of root regions to scan.
   size_t num_cm_scanned_regions() const;
@@ -446,12 +447,12 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   // Semeru memory sever
 
-  //  Every HeapRegion should has its own _alive_bitmap.
+  //  Every SemeruHeapRegion should has its own _alive_bitmap.
   //  Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
-  //  So it's better to cut the bitmap into slices, one slice per HeapRegion.
+  //  So it's better to cut the bitmap into slices, one slice per SemeruHeapRegion.
   //
   //  Move these fields to G1SemeruCMTask
-  //G1CMBitMap*             _alive_bitmap; // Points to the scanning Region's bitmap. HeapRegion->alive_bitmap
+  //G1CMBitMap*             _alive_bitmap; // Points to the scanning Region's bitmap. SemeruHeapRegion->alive_bitmap
   //G1CMBitMap*             _dest_bitmap;  
 
   // Heap bounds
@@ -552,7 +553,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   // Clear statistics gathered during the concurrent cycle for the given region after
   // it has been reclaimed.
-  void clear_statistics(HeapRegion* r);
+  void clear_statistics(SemeruHeapRegion* r);
 
   // Resets the global marking data structures, as well as the
   // task local ones; should be called during initial mark.
@@ -595,9 +596,9 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // method. So, this way, each task will spend very little time in
   // claim_region() and is allowed to call the regular clock method
   // frequently.
-  //HeapRegion* claim_region(uint worker_id);
+  //SemeruHeapRegion* claim_region(uint worker_id);
 
-  HeapRegion* claim_region(uint worker_id);
+  SemeruHeapRegion* claim_region(uint worker_id);
 
 
   // Determines whether we've run out of regions to scan. Note that
@@ -652,7 +653,7 @@ public:
   size_t liveness(uint region) const { return _region_mark_stats[region]._live_words; }
 
   // Sets the internal top_at_region_start for the given region to current top of the region.
-  inline void update_top_at_rebuild_start(HeapRegion* r);
+  inline void update_top_at_rebuild_start(SemeruHeapRegion* r);
   // TARS for the given region during remembered set rebuilding.
   inline HeapWord* top_at_rebuild_start(uint region) const;
 
@@ -660,7 +661,7 @@ public:
   // it has been reclaimed.
   void clear_statistics_in_region(uint region_idx);
   // Notification for eagerly reclaimed regions to clean up.
-  void humongous_object_eagerly_reclaimed(HeapRegion* r);
+  void humongous_object_eagerly_reclaimed(SemeruHeapRegion* r);
   // Manipulation of the global mark stack.
   // The push and pop operations are used by tasks for transfers
   // between task-local queues and the global mark stack.
@@ -741,10 +742,10 @@ public:
   //
 
   // Concurrent Mark.
-  void semeru_concurrent_mark_a_region( HeapRegion* region_to_scan); 
+  void semeru_concurrent_mark_a_region( SemeruHeapRegion* region_to_scan); 
 
   // The compact is executed in STW mode.
-  void semeru_stw_compact_a_region( HeapRegion* region_to_scan);
+  void semeru_stw_compact_a_region( SemeruHeapRegion* region_to_scan);
 
 
   // Scan all the root regions and mark everything reachable from
@@ -752,7 +753,7 @@ public:
   void scan_root_regions();
 
   // Scan a single root region from nTAMS to top and mark everything reachable from it.
-  void scan_root_region(HeapRegion* hr, uint worker_id);
+  void scan_root_region(SemeruHeapRegion* hr, uint worker_id);
 
   // Do concurrent phase of marking, to a tentative transitive closure.
   void mark_from_roots();
@@ -796,7 +797,7 @@ public:
   void print_on_error(outputStream* st) const;
 
   // Mark the given object on the next bitmap if it is below nTAMS.
-  inline bool mark_in_next_bitmap(uint worker_id, HeapRegion* const hr, oop const obj);
+  inline bool mark_in_next_bitmap(uint worker_id, SemeruHeapRegion* const hr, oop const obj);
   inline bool mark_in_next_bitmap(uint worker_id, oop const obj);
 
   inline bool is_marked_in_next_bitmap(oop p) const;
@@ -871,7 +872,7 @@ private:
   G1SemeruCMOopClosure*       _semeru_cm_oop_closure; // the closure for scan a marked object
 
   // Region this task is scanning, NULL if we're not scanning any
-  HeapRegion*                 _curr_region;
+  SemeruHeapRegion*                 _curr_region;
   // Local finger of this task, NULL if we're not scanning a region
   HeapWord*                   _finger;
   // Limit of the region this task is scanning, NULL if we're not scanning one
@@ -884,12 +885,12 @@ private:
   // [?] For the marking and compacting, use two lists seperately.
   // [?] When to initialize these two list ?
   // Region this task is scanning, NULL if we're not scanning any
-  //HeapRegion*                 _curr_marking_region;     //[x] _curr_region points to current marking Region now.
+  //SemeruHeapRegion*                 _curr_marking_region;     //[x] _curr_region points to current marking Region now.
   // Limit of the region this task is scanning, NULL if we're not scanning one
   //HeapWord*                   _marking_region_limit;
 
   // Region this task is scanning, NULL if we're not scanning any
-  HeapRegion*                 _curr_compacting_region;
+  SemeruHeapRegion*                 _curr_compacting_region;
   // Limit of the region this task is scanning, NULL if we're not scanning one
   HeapWord*                   _compacting_region_limit;
 
@@ -939,7 +940,7 @@ private:
 
   // Updates the local fields after this task has claimed
   // a new region to scan
-  void setup_for_region(HeapRegion* hr);
+  void setup_for_region(SemeruHeapRegion* hr);
   // Makes the limit of the region up-to-date
   void update_region_limit();
 
@@ -1134,7 +1135,7 @@ public:
 // Class that's used to to print out per-region liveness
 // information. It's currently used at the end of marking and also
 // after we sort the old regions at the end of the cleanup operation.
-class G1SemeruPrintRegionLivenessInfoClosure : public HeapRegionClosure {
+class G1SemeruPrintRegionLivenessInfoClosure : public SemeruHeapRegionClosure {
   // Accumulators for these values.
   size_t _total_used_bytes;
   size_t _total_capacity_bytes;
@@ -1155,7 +1156,7 @@ public:
   // The header and footer are printed in the constructor and
   // destructor respectively.
   G1SemeruPrintRegionLivenessInfoClosure(const char* phase_name);
-  virtual bool do_heap_region(HeapRegion* r);
+  virtual bool do_heap_region(SemeruHeapRegion* r);
   ~G1SemeruPrintRegionLivenessInfoClosure();
 };
 

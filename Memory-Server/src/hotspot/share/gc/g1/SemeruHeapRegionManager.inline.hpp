@@ -25,43 +25,46 @@
 #ifndef SHARE_VM_GC_G1_SEMERU_HEAPREGIONMANAGER_INLINE_HPP
 #define SHARE_VM_GC_G1_SEMERU_HEAPREGIONMANAGER_INLINE_HPP
 
-#include "gc/g1/heapRegion.hpp"
+//#include "gc/g1/heapRegion.hpp"
 //#include "gc/g1/heapRegionManager.hpp"
-#include "gc/g1/heapRegionSet.inline.hpp"
+//#include "gc/g1/heapRegionSet.inline.hpp"
 
 // Semeru
+#include "gc/g1/SemeruHeapRegion.hpp"
 #include "gc/g1/SemeruHeapRegionManager.hpp"
+#include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 
 
-inline HeapRegion* SemeruHeapRegionManager::addr_to_region(HeapWord* addr) const {
+
+inline SemeruHeapRegion* SemeruHeapRegionManager::addr_to_region(HeapWord* addr) const {
   assert(addr < heap_end(),
         "addr: " PTR_FORMAT " end: " PTR_FORMAT, p2i(addr), p2i(heap_end()));
   assert(addr >= heap_bottom(),
         "addr: " PTR_FORMAT " bottom: " PTR_FORMAT, p2i(addr), p2i(heap_bottom()));
 
-  HeapRegion* hr = _regions.get_by_address(addr);
+  SemeruHeapRegion* hr = _regions.get_by_address(addr);
   return hr;
 }
 
-inline HeapRegion* SemeruHeapRegionManager::at(uint index) const {
+inline SemeruHeapRegion* SemeruHeapRegionManager::at(uint index) const {
   assert(is_available(index), "pre-condition");
-  HeapRegion* hr = _regions.get_by_index(index);
+  SemeruHeapRegion* hr = _regions.get_by_index(index);
   assert(hr != NULL, "sanity");
   assert(hr->hrm_index() == index, "sanity");
   return hr;
 }
 
-inline HeapRegion* SemeruHeapRegionManager::at_or_null(uint index) const {
+inline SemeruHeapRegion* SemeruHeapRegionManager::at_or_null(uint index) const {
   if (!is_available(index)) {
     return NULL;
   }
-  HeapRegion* hr = _regions.get_by_index(index);
-  assert(hr != NULL, "All available regions must have a HeapRegion but index %u has not.", index);
+  SemeruHeapRegion* hr = _regions.get_by_index(index);
+  assert(hr != NULL, "All available regions must have a SemeruHeapRegion but index %u has not.", index);
   assert(hr->hrm_index() == index, "sanity");
   return hr;
 }
 
-inline HeapRegion* SemeruHeapRegionManager::next_region_in_humongous(HeapRegion* hr) const {
+inline SemeruHeapRegion* SemeruHeapRegionManager::next_region_in_humongous(SemeruHeapRegion* hr) const {
   uint index = hr->hrm_index();
   assert(is_available(index), "pre-condition");
   assert(hr->is_humongous(), "next_region_in_humongous should only be called for a humongous region.");
@@ -78,7 +81,7 @@ inline HeapRegion* SemeruHeapRegionManager::next_region_in_humongous(HeapRegion*
  *  This procedure usually happenned during commit/expand the spaces, young/old. 
  * 
  */
-inline void SemeruHeapRegionManager::insert_into_free_list(HeapRegion* hr) {
+inline void SemeruHeapRegionManager::insert_into_free_list(SemeruHeapRegion* hr) {
   _free_list.add_ordered(hr);
 }
 

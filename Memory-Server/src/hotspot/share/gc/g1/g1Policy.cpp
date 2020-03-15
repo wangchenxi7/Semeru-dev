@@ -961,6 +961,43 @@ double G1Policy::predict_region_elapsed_time_ms(HeapRegion* hr,
   return region_elapsed_time_ms;
 }
 
+
+// Semeru support
+// [?] For Semeru CPU/Memory server GC, we also need to care about the pause time ?
+//     At least we care about the garbarage ratio.      
+//
+double G1Policy::predict_region_elapsed_time_ms(SemeruHeapRegion* hr,
+                                                bool for_young_gc) const {
+
+  // Debug
+  tty->print("%s, this is not implemented yet. \n", __func__);
+  return 0;
+
+
+  // size_t rs_length = hr->rem_set()->occupied();
+  // // Predicting the number of cards is based on which type of GC
+  // // we're predicting for.
+  // size_t card_num = _analytics->predict_card_num(rs_length, for_young_gc);
+  // size_t bytes_to_copy = predict_bytes_to_copy(hr);
+
+  // double region_elapsed_time_ms =
+  //   _analytics->predict_rs_scan_time_ms(card_num, collector_state()->in_young_only_phase()) +
+  //   _analytics->predict_object_copy_time_ms(bytes_to_copy, collector_state()->mark_or_rebuild_in_progress());
+
+  // // The prediction of the "other" time for this region is based
+  // // upon the region type and NOT the GC type.
+  // if (hr->is_young()) {
+  //   region_elapsed_time_ms += _analytics->predict_young_other_time_ms(1);
+  // } else {
+  //   region_elapsed_time_ms += _analytics->predict_non_young_other_time_ms(1);
+  // }
+  // return region_elapsed_time_ms;
+}
+
+
+
+
+
 bool G1Policy::should_allocate_mutator_region() const {
   uint young_list_length = _g1h->young_regions_count();
   uint young_list_target_length = _young_list_target_length;

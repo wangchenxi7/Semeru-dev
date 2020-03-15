@@ -65,7 +65,7 @@ size_t G1SemeruCMObjArrayProcessor::process_slice(HeapWord* slice) {
   // slide is fast enough for "smaller" objects in non-humongous regions, but is slower
   // than directly using heap region table.
   G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();
-  HeapRegion* r = semeru_h->heap_region_containing(slice);
+  SemeruHeapRegion* r = semeru_h->heap_region_containing(slice);
 
   HeapWord* const start_address = r->is_humongous() ?
                                   r->humongous_start_region()->bottom() :

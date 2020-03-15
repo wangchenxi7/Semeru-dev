@@ -38,6 +38,10 @@ class G1CMTask;
 class G1ConcurrentMark;
 class HeapRegion;
 
+// Semeru
+class SemeruHeapRegion;
+
+
 // Closure for iteration over bitmaps
 class G1CMBitMapClosure {
   G1ConcurrentMark* const _cm;
@@ -63,8 +67,17 @@ public:
   virtual void on_commit(uint start_idx, size_t num_regions, bool zero_filled);
 };
 
-// A generic mark bitmap for concurrent marking.  This is essentially a wrapper
-// around the BitMap class that is based on HeapWords, with one bit per (1 << _shifter) HeapWords.
+
+/**
+ * A generic mark bitmap for concurrent marking.  This is essentially a wrapper
+ * around the BitMap class that is based on HeapWords, with one bit per (1 << _shifter) HeapWords.
+ * 
+ * [?] The main storage of the bitmap is allocated by the function, initialize(), not by the new ?
+ * 
+ * [x] MarkBitMap doesn't inherit from CHeapObj, it doesn't have a self defined operator, new.
+ *     So we can't use the new MarkBitMap() to allocate it.
+ *     " Use of global operators new and delete is not allowed in Hotspot "
+ */
 class G1CMBitMap : public MarkBitMap {
 
   G1CMBitMapMappingChangedListener _listener;
@@ -85,6 +98,13 @@ public:
   inline bool iterate(G1CMBitMapClosure* cl, MemRegion mr);
 
   void clear_region(HeapRegion* hr);
+
+  //
+  // Semeru functions
+  //
+
+  void clear_region(SemeruHeapRegion* hr);
+
 };
 
 #endif // SHARE_VM_GC_G1_G1CONCURRENTMARKBITMAP_HPP

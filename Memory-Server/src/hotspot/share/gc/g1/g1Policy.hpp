@@ -39,6 +39,9 @@
 
 //Semeru
 #include "gc/g1/g1SemeruCollectorPolicy.hpp"
+#include "gc/g1/g1SemeruInCSetState.hpp"
+#include "gc/g1/g1SemeruRemSetTrackingPolicy.hpp"
+
 
 // A G1Policy makes policy decisions that determine the
 // characteristics of the collector.  Examples include:
@@ -55,6 +58,10 @@ class G1YoungGenSizer;
 class GCPolicyCounters;
 class STWGCTimer;
 
+// Semeru
+class SemeruHeapRegion;
+
+
 class G1Policy: public CHeapObj<mtGC> {
  private:
 
@@ -69,6 +76,10 @@ class G1Policy: public CHeapObj<mtGC> {
   G1Predictions _predictor;
   G1Analytics* _analytics;
   G1RemSetTrackingPolicy _remset_tracker;
+
+  //Semeru
+  G1SemeruRemSetTrackingPolicy _semeru_remset_tracker;
+
   G1MMUTracker* _mmu_tracker;
   G1IHOPControl* _ihop_control;
 
@@ -120,6 +131,16 @@ public:
 
   G1RemSetTrackingPolicy* remset_tracker() { return &_remset_tracker; }
 
+  // Semeru
+  G1SemeruRemSetTrackingPolicy* semeru_remset_tracker() { 
+    // debug
+
+    tty->print("%s, Warning: the _semeru_remset_tracker is not initialized yet!!! \n",__func__);
+
+    return &_semeru_remset_tracker; 
+    
+    }
+
   // Add the given number of bytes to the total number of allocated bytes in the old gen.
   void add_bytes_allocated_in_old_since_last_gc(size_t bytes) { _bytes_allocated_in_old_since_last_gc += bytes; }
 
@@ -142,6 +163,10 @@ public:
                                       size_t scanned_cards) const;
   size_t predict_bytes_to_copy(HeapRegion* hr) const;
   double predict_region_elapsed_time_ms(HeapRegion* hr, bool for_young_gc) const;
+
+  // Semeru
+  double predict_region_elapsed_time_ms(SemeruHeapRegion* hr, bool for_young_gc) const;
+  
 
   double predict_survivor_regions_evac_time() const;
 

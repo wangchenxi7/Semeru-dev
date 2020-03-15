@@ -38,8 +38,10 @@ public:
 protected:
   address _base;          // the real base address
   size_t _length;         // the length of the array
+
   address _biased_base;   // base address biased by "bias" elements
   size_t _bias;           // the bias, i.e. the offset biased_base is located to the right in elements
+  
   uint _shift_by;         // the amount of bits to shift right when mapping to an index of the array.
 
 protected:

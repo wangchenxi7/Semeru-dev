@@ -51,6 +51,8 @@ size_t MarkBitMap::mark_distance() {
 void MarkBitMap::initialize(MemRegion heap, MemRegion storage) {
   _covered = heap;
 
+  // MarkBitMap->_bm is the real content of bitmap.
+  // The storage is alreay reserved in C-Heap.
   _bm = BitMapView((BitMap::bm_word_t*) storage.start(), _covered.word_size() >> _shifter);
 }
 

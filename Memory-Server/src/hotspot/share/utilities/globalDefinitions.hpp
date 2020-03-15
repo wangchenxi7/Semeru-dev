@@ -139,6 +139,8 @@
 
 #define SEMERU_START_ADDR   ((size_t)0x400000000000)
 
+#define RDMA_ALIGNMENT_BYTES    64  // cache line.
+
 // RDMA structure space
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
 #define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *4)
@@ -151,19 +153,40 @@
 #define TARGET_OBJ_OFFSET     (size_t)0
 #define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
 
-// 1.2 Memory server CSet
+// 1.2 Small meta data
+
+// 1.2.1 Memory server CSet
 #define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB
 #define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
 
-// 1.3 Flags setted by CPU srver
-#define FLAGS_OF_CPU_SERVER_STATE_OFFSET  (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE) // 129MB
-#define FLAGS_OF_CPU_SERVER_STATE_SIZE    (size_t)0x1000    // 4KB
+// 1.2.2 flags 
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)
+#define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)0x1000      // 4KB 
+
+// 1.3 CPU Server To Memory server, Initialization
+#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE) //
+#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 16*ONE_MB    //
+
+// 1.4 CPU Server To Memory server, GC
+#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) //
+#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+// 1.5 Memory server To CPU server 
+#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) //
+#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+// The space upper should be all committed contiguously.
+// and then can register them as RDMA buffer.
+
+
 
 // 1.x Padding for debug
 //     Make it easier to register RDMA buffer.
 //     Commit a contiguous space for RDMA Meta Space.
 //     Points to the last item.
-#define RDMA_PADDING_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)
+#define RDMA_PADDING_OFFSET     (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT)
 #define RDMA_PADDING_SIZE       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
 
 

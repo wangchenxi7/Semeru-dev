@@ -22,20 +22,20 @@
  *
  */
 
-#ifndef SHARE_VM_GC_G1_G1HRPRINTER_HPP
-#define SHARE_VM_GC_G1_G1HRPRINTER_HPP
+#ifndef SHARE_VM_GC_G1_SEMERU_G1HRPRINTER_HPP
+#define SHARE_VM_GC_G1_SEMERU_G1HRPRINTER_HPP
 
-#include "gc/g1/heapRegion.hpp"
+#include "gc/g1/SemeruHeapRegion.hpp"
 #include "logging/log.hpp"
 
 #define SKIP_RETIRED_FULL_REGIONS 1
 
-class G1HRPrinter {
+class G1SemeruHRPrinter {
 
 private:
 
   // Print an action event.
-  static void print(const char* action, HeapRegion* hr) {
+  static void print(const char* action, SemeruHeapRegion* hr) {
     log_trace(gc, region)("G1HR %s(%s) [" PTR_FORMAT ", " PTR_FORMAT ", " PTR_FORMAT "]",
                           action, hr->get_type_str(), p2i(hr->bottom()), p2i(hr->top()), p2i(hr->end()));
   }
@@ -48,13 +48,13 @@ public:
 
   // The methods below are convenient wrappers for the print() method.
 
-  void alloc(HeapRegion* hr, bool force = false) {
+  void alloc(SemeruHeapRegion* hr, bool force = false) {
     if (is_active()) {
       print((force) ? "ALLOC-FORCE" : "ALLOC", hr);
     }
   }
 
-  void retire(HeapRegion* hr) {
+  void retire(SemeruHeapRegion* hr) {
     if (is_active()) {
       if (!SKIP_RETIRED_FULL_REGIONS || hr->top() < hr->end()) {
         print("RETIRE", hr);
@@ -62,43 +62,43 @@ public:
     }
   }
 
-  void reuse(HeapRegion* hr) {
+  void reuse(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("REUSE", hr);
     }
   }
 
-  void cset(HeapRegion* hr) {
+  void cset(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("CSET", hr);
     }
   }
 
-  void evac_failure(HeapRegion* hr) {
+  void evac_failure(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("EVAC-FAILURE", hr);
     }
   }
 
-  void cleanup(HeapRegion* hr) {
+  void cleanup(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("CLEANUP", hr);
     }
   }
 
-  void post_compaction(HeapRegion* hr) {
+  void post_compaction(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("POST-COMPACTION", hr);
     }
   }
 
-  void commit(HeapRegion* hr) {
+  void commit(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("COMMIT", hr);
     }
   }
 
-  void uncommit(HeapRegion* hr) {
+  void uncommit(SemeruHeapRegion* hr) {
     if (is_active()) {
       print("UNCOMMIT", hr);
     }

@@ -25,11 +25,11 @@
 #include "precompiled.hpp"
 #include "code/nmethod.hpp"
 #include "gc/g1/g1BlockOffsetTable.inline.hpp"
-#include "gc/g1/g1CollectedHeap.inline.hpp"
+//#include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1CollectionSet.hpp"
 #include "gc/g1/g1HeapRegionTraceType.hpp"
 #include "gc/g1/g1OopClosures.inline.hpp"
-#include "gc/g1/heapRegion.inline.hpp"
+//#include "gc/g1/heapRegion.inline.hpp"
 #include "gc/g1/heapRegionBounds.inline.hpp"
 #include "gc/g1/heapRegionManager.inline.hpp"
 #include "gc/g1/heapRegionRemSet.hpp"
@@ -49,44 +49,54 @@
 
 
 // Semeru
-#include "gc/g1/g1SemeruCollectedHeap.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
+#include "gc/g1/SemeruHeapRegion.inline.hpp"
 
 
-int    HeapRegion::LogOfHRGrainBytes = 0;
-int    HeapRegion::LogOfHRGrainWords = 0;
-size_t HeapRegion::GrainBytes        = 0;
-size_t HeapRegion::GrainWords        = 0;
-size_t HeapRegion::CardsPerRegion    = 0;
-
-size_t HeapRegion::max_region_size() {
+size_t SemeruHeapRegion::max_region_size() {
   return HeapRegionBounds::max_size();
 }
 
-size_t HeapRegion::min_region_size_in_words() {
+size_t SemeruHeapRegion::min_region_size_in_words() {
   return HeapRegionBounds::min_size() >> LogHeapWordSize;
 }
 
 
+//
+// Semeru heap control.
+//
+int    SemeruHeapRegion::SemeruLogOfHRGrainBytes = 0;
+int    SemeruHeapRegion::SemeruLogOfHRGrainWords = 0;
+size_t SemeruHeapRegion::SemeruGrainBytes        = 0;   // Semeru allocation alignment && Region size.
+size_t SemeruHeapRegion::SemeruGrainWords        = 0;      
+size_t SemeruHeapRegion::SemeruCardsPerRegion    = 0;  
+
 
 
 /**
- * Tag : Intialize Heap Region related information.
- * 
- *  e.g. Region size, HeapRegion::GrainWords.
- *
- * [?] We build 2 heap for the G1 GC. Each CollectedHeap needs to rebuild the G1CollectorPolicy. 
- *     Which lead to initialize some global variable twice.
- *     This behavior can lead to guarantee check error.
+ * Semeru
+ *  
+ * Initialize the Heap Region parameters 
  * 
  */
-void HeapRegion::setup_heap_region_size(size_t initial_heap_size, size_t max_heap_size) {
+void SemeruHeapRegion::setup_semeru_heap_region_size(size_t initial_sermeru_heap_size, size_t max_semeru_heap_size) {
 
-  size_t region_size = G1HeapRegionSize;
-  if (FLAG_IS_DEFAULT(G1HeapRegionSize)) {
-    size_t average_heap_size = (initial_heap_size + max_heap_size) / 2;
-    region_size = MAX2(average_heap_size / HeapRegionBounds::target_number(),
-                       HeapRegionBounds::min_size());
-  }
+  // Confirm their initial value is 0.
+  assert(initial_sermeru_heap_size == max_semeru_heap_size, 
+              "%s, Semeru's initial heap size(0x%llx) must equal to its max size(0x%llx) .", 
+              __func__, (unsigned long long)initial_sermeru_heap_size, (unsigned long long)max_semeru_heap_size );
+
+  // region size control, use the Semeru specific policy 
+  //
+  // size_t region_size = G1HeapRegionSize;
+  // if (FLAG_IS_DEFAULT(G1HeapRegionSize)) {
+  //   size_t average_heap_size = (initial_sermeru_heap_size + max_semeru_heap_size) / 2;
+  //   region_size = MAX2(average_heap_size / HeapRegionBounds::target_number(),
+  //                      HeapRegionBounds::min_size());
+  // }
+
+  // For Semeru memopy pool, Region size equal to the allocation alignment.
+  size_t region_size = SemeruMemPoolAlignment;
 
   int region_size_log = log2_long((jlong) region_size);
   // Recalculate the region size to make sure it's a power of
@@ -94,38 +104,41 @@ void HeapRegion::setup_heap_region_size(size_t initial_heap_size, size_t max_hea
   // <= what we've calculated so far.
   region_size = ((size_t)1 << region_size_log);
 
-  // Now make sure that we don't go over or under our limits.
-  if (region_size < HeapRegionBounds::min_size()) {
-    region_size = HeapRegionBounds::min_size();
-  } else if (region_size > HeapRegionBounds::max_size()) {
-    region_size = HeapRegionBounds::max_size();
-  }
+  // // Now make sure that we don't go over or under our limits.
+  // if (region_size < HeapRegionBounds::min_size()) {
+  //   region_size = HeapRegionBounds::min_size();
+  // } else if (region_size > HeapRegionBounds::max_size()) {
+  //   region_size = HeapRegionBounds::max_size();
+  // }
 
   // And recalculate the log.
   region_size_log = log2_long((jlong) region_size);
 
   // Now, set up the globals.
-  guarantee(LogOfHRGrainBytes == 0, "we should only set it once");
-  LogOfHRGrainBytes = region_size_log;
+  guarantee(SemeruLogOfHRGrainBytes == 0, "we should only set it once");
+  SemeruLogOfHRGrainBytes = region_size_log;
 
-  guarantee(LogOfHRGrainWords == 0, "we should only set it once");
-  LogOfHRGrainWords = LogOfHRGrainBytes - LogHeapWordSize;
+  guarantee(SemeruLogOfHRGrainWords == 0, "we should only set it once");
+  SemeruLogOfHRGrainWords = SemeruLogOfHRGrainBytes - LogHeapWordSize;
 
-  guarantee(GrainBytes == 0, "we should only set it once");
+  guarantee(SemeruGrainBytes == 0, "we should only set it once");
   // The cast to int is safe, given that we've bounded region_size by
   // MIN_REGION_SIZE and MAX_REGION_SIZE.
-  GrainBytes = region_size;
-  log_info(gc, heap)("Heap region size: " SIZE_FORMAT "M", GrainBytes / M);
+  SemeruGrainBytes = region_size;
+  log_info(heap)("Heap region size: " SIZE_FORMAT "M", SemeruGrainBytes / M);
 
-  guarantee(GrainWords == 0, "we should only set it once");
-  GrainWords = GrainBytes >> LogHeapWordSize;
-  guarantee((size_t) 1 << LogOfHRGrainWords == GrainWords, "sanity");
 
-  guarantee(CardsPerRegion == 0, "we should only set it once");
-  CardsPerRegion = GrainBytes >> G1CardTable::card_shift;
+  guarantee(SemeruGrainWords == 0, "we should only set it once");
+  SemeruGrainWords = SemeruGrainBytes >> LogHeapWordSize;
+  guarantee((size_t) 1 << SemeruLogOfHRGrainWords == SemeruGrainWords, "sanity");
 
-  if (G1HeapRegionSize != GrainBytes) {
-    FLAG_SET_ERGO(size_t, G1HeapRegionSize, GrainBytes);
+  guarantee(SemeruCardsPerRegion == 0, "we should only set it once");
+  SemeruCardsPerRegion = SemeruGrainBytes >> G1CardTable::card_shift;  // number of card per Semeru Region.
+
+  if (SemeruMemPoolAlignment != SemeruGrainBytes) {
+    tty->print("%s, Warning! SemeruGrainBytes != SemeruMemPoolAlignment. Reset the SemeruMemPoolAlignment. \n", __func__);
+
+    FLAG_SET_ERGO(size_t, SemeruMemPoolAlignment, SemeruGrainBytes);
   }
 }
 
@@ -135,10 +148,12 @@ void HeapRegion::setup_heap_region_size(size_t initial_heap_size, size_t max_hea
 
 
 
-
-
-void HeapRegion::hr_clear(bool keep_remset, bool clear_space, bool locked) {
-  assert(_humongous_start_region == NULL,
+/**
+ * Init the fields of a Semeru HeapRegion.
+ *  
+ */
+void SemeruHeapRegion::hr_clear(bool keep_remset, bool clear_space, bool locked) {
+  assert(_cpu_to_mem_gc->_humongous_start_region == NULL,
          "we should have already filtered out humongous regions");
   assert(!in_collection_set(),
          "Should not clear heap region %u in the collection set", hrm_index());
@@ -147,6 +162,12 @@ void HeapRegion::hr_clear(bool keep_remset, bool clear_space, bool locked) {
   uninstall_surv_rate_group();
   set_free();
   reset_pre_dummy_top();
+
+    //Debug
+  if(rem_set() == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
 
   if (!keep_remset) {
     if (locked) {
@@ -162,15 +183,15 @@ void HeapRegion::hr_clear(bool keep_remset, bool clear_space, bool locked) {
   if (clear_space) clear(SpaceDecorator::Mangle);
 }
 
-void HeapRegion::clear_cardtable() {
-  G1CardTable* ct = G1CollectedHeap::heap()->card_table();
+void SemeruHeapRegion::clear_cardtable() {
+  G1CardTable* ct = G1SemeruCollectedHeap::heap()->card_table();
   ct->clear(MemRegion(bottom(), end()));
 }
 
-void HeapRegion::calc_gc_efficiency() {
+void SemeruHeapRegion::calc_gc_efficiency() {
   // GC efficiency is the ratio of how much space would be
   // reclaimed over how long we predict it would take to reclaim it.
-  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
   G1Policy* g1p = g1h->g1_policy();
 
   // Retrieve a prediction of the elapsed time for this region for
@@ -186,95 +207,94 @@ void HeapRegion::calc_gc_efficiency() {
  *  
  */
 
-void HeapRegion::set_free() {
+void SemeruHeapRegion::set_free() {
   report_region_type_change(G1HeapRegionTraceType::Free);
-  _type.set_free();
+  _cpu_to_mem_gc->_type.set_free();
 }
 
-void HeapRegion::set_eden() {
+void SemeruHeapRegion::set_eden() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
-  _type.set_eden();
+  _cpu_to_mem_gc->_type.set_eden();
 }
 
-void HeapRegion::set_eden_pre_gc() {
+void SemeruHeapRegion::set_eden_pre_gc() {
   report_region_type_change(G1HeapRegionTraceType::Eden);
-  _type.set_eden_pre_gc();
+  _cpu_to_mem_gc->_type.set_eden_pre_gc();
 }
 
-void HeapRegion::set_survivor() {
+void SemeruHeapRegion::set_survivor() {
   report_region_type_change(G1HeapRegionTraceType::Survivor);
-  _type.set_survivor();
+  _cpu_to_mem_gc->_type.set_survivor();
 }
 
-void HeapRegion::move_to_old() {
-  if (_type.relabel_as_old()) {
+void SemeruHeapRegion::move_to_old() {
+  if (_cpu_to_mem_gc->_type.relabel_as_old()) {
     report_region_type_change(G1HeapRegionTraceType::Old);
   }
 }
 
-void HeapRegion::set_old() {
+void SemeruHeapRegion::set_old() {
   report_region_type_change(G1HeapRegionTraceType::Old);
-  _type.set_old();
+  _cpu_to_mem_gc->_type.set_old();
 }
 
-void HeapRegion::set_open_archive() {
+void SemeruHeapRegion::set_open_archive() {
   report_region_type_change(G1HeapRegionTraceType::OpenArchive);
-  _type.set_open_archive();
+  _cpu_to_mem_gc->_type.set_open_archive();
 }
 
-void HeapRegion::set_closed_archive() {
+void SemeruHeapRegion::set_closed_archive() {
   report_region_type_change(G1HeapRegionTraceType::ClosedArchive);
-  _type.set_closed_archive();
+  _cpu_to_mem_gc->_type.set_closed_archive();
 }
 
-void HeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
+void SemeruHeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size) {
   assert(!is_humongous(), "sanity / pre-condition");
   assert(top() == bottom(), "should be empty");
 
   report_region_type_change(G1HeapRegionTraceType::StartsHumongous);
-  _type.set_starts_humongous();
-  _humongous_start_region = this;
+  _cpu_to_mem_gc->_type.set_starts_humongous();
+  _cpu_to_mem_gc->_humongous_start_region = this;
 
   _bot_part.set_for_starts_humongous(obj_top, fill_size);
 }
 
-void HeapRegion::set_continues_humongous(HeapRegion* first_hr) {
+void SemeruHeapRegion::set_continues_humongous(SemeruHeapRegion* first_hr) {
   assert(!is_humongous(), "sanity / pre-condition");
   assert(top() == bottom(), "should be empty");
   assert(first_hr->is_starts_humongous(), "pre-condition");
 
   report_region_type_change(G1HeapRegionTraceType::ContinuesHumongous);
-  _type.set_continues_humongous();
-  _humongous_start_region = first_hr;
+  _cpu_to_mem_gc->_type.set_continues_humongous();
+  _cpu_to_mem_gc->_humongous_start_region = first_hr;
 
   _bot_part.set_object_can_span(true);
 }
 
-void HeapRegion::clear_humongous() {
+void SemeruHeapRegion::clear_humongous() {
   assert(is_humongous(), "pre-condition");
 
-  assert(capacity() == HeapRegion::GrainBytes, "pre-condition");
-  _humongous_start_region = NULL;
+  assert(capacity() == SemeruHeapRegion::SemeruGrainBytes, "pre-condition");
+  _cpu_to_mem_gc->_humongous_start_region = NULL;
 
   _bot_part.set_object_can_span(false);
 }
 
 
 /**
- * Tag : Initialize a HeapRegion
+ * Tag : Initialize a SemeruHeapRegion
  * 
- * [x] All the HeapRegion, HeapRegionRemSet are CHeapObj, which will be allocated native buffer.
+ * [x] All the SemeruHeapRegion, HeapRegionRemSet are CHeapObj, which will be allocated native buffer.
  *     Check the operator new of CHeapObj.
  * 
  */
-HeapRegion::HeapRegion(uint hrm_index,
+SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
                        G1BlockOffsetTable* bot,
                        MemRegion mr) :
     G1ContiguousSpace(bot),
-    _hrm_index(hrm_index),
-    _type(),
-    _humongous_start_region(NULL),
-    _next(NULL), _prev(NULL),
+    _cpu_to_mem_init(NULL),
+    _cpu_to_mem_gc(NULL),
+    _mem_to_cpu_gc(NULL),
     _rem_set(NULL),
     _evacuation_failed(false),
 #ifdef ASSERT
@@ -283,17 +303,43 @@ HeapRegion::HeapRegion(uint hrm_index,
     _prev_marked_bytes(0), _next_marked_bytes(0), _gc_efficiency(0.0),
     _index_in_opt_cset(G1OptionalCSet::InvalidCSetIndex), _young_index_in_cset(-1),
     _surv_rate_group(NULL), _age_index(-1),
-    _prev_top_at_mark_start(NULL), _next_top_at_mark_start(NULL),
+    _prev_top_at_mark_start(NULL),    // Always keep its value to NULL to disable the dual-bitmap design.
+    _next_top_at_mark_start(NULL),
     _recorded_rs_length(0), _predicted_elapsed_time_ms(0)
 {
-  _rem_set = new HeapRegionRemSet(bot, this);   // The new operator is overwriten by CHeapObj.
+  // Basic fields
+  //
+
+  // _alive_bitmap
+  tty->print("%s, Change SemeruHeapRegion->_alive_bitmap to pointer-based java object instance. \n",__func__);
+  
+  // Initialize the RDMA meta data space
+  _cpu_to_mem_init = new(hrm_index) CPUToMemoryAtInit(hrm_index);
+
+
+  _cpu_to_mem_gc = new(hrm_index) CPUToMemoryAtGC(hrm_index);
+
+
+  _mem_to_cpu_gc = new(hrm_index) MemoryToCPUAtGC(hrm_index);
+
+
+  // Other fields
+  //_rem_set = new HeapRegionRemSet(bot, this);   // The new operator is overwriten by CHeapObj.
+  // DEBUG 
+  tty->print("%s, Warning : the _rem_set can't be used in Semeru MS. Fix here.", __func__);
 
   initialize(mr);
 }
 
 
-void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
-  assert(_rem_set->is_empty(), "Remembered set must be empty");
+void SemeruHeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
+  //assert(_rem_set->is_empty(), "Remembered set must be empty");
+
+  //debug
+  if(_rem_set == NULL ){
+    tty->print("%s, Warning, _rem_set is disabled in Smemru MS. \n", __func__);
+  }
+
 
   G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
 
@@ -303,24 +349,29 @@ void HeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
 
 
 /**
- * Initialize HeapRegion with the alive_bitmap and dest_bitmap.
+ * Initialize SemeruHeapRegion with the alive_bitmap and dest_bitmap.
  *  
  * Parameters
  *    alive_bitmap_storage : the storage mapping between Region and Meta space.
  * 
  */
-void HeapRegion::initialize(MemRegion mr, 
+void SemeruHeapRegion::initialize(MemRegion mr, 
                             size_t region_index,
                             bool clear_space, 
                             bool mangle_space) {
-  assert(_rem_set->is_empty(), "Remembered set must be empty");
+  //assert(_rem_set->is_empty(), "Remembered set must be empty");
+    //debug
+  if(_rem_set == NULL){
+    tty->print("%s, Warning, _rem_set is disabled in Smemru MS. \n", __func__);
+  }
+
 
   G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
 
-  // Assign the commit alive/dest_bitmap size to the HeapRegion->_alive/_dest_bitmap
-  //G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
+  // Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
+  G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
   
-  //_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
+  _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
 
   hr_clear(false /*par*/, false /*clear_space*/);
   set_top(bottom());
@@ -328,16 +379,51 @@ void HeapRegion::initialize(MemRegion mr,
 
 
 
+/**
+ * Semeru - Reserver and Commit bitmap storage for alive/dest bitmaps. 
+ * 
+ *  [?] They don't reserve new memory space from OS, here we reserve space from reserved Semeru heap.
+ * 			=> The start address for both alive/dest bitmap are already fixed.
+ */
+G1RegionToSpaceMapper* SemeruHeapRegion::create_alive_bitmap_storage(size_t region_idnex){
+	
+	size_t per_region_bitmap_size = G1CMBitMap::compute_size(SemeruHeapRegion::SemeruGrainBytes);// for alive_bitmap, count by bytes.
+  G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();
+	//ReservedSpace* semeru_rs =	semeru_h->semeru_reserved_space();
 
-void HeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {
-  HeapRegionTracer::send_region_type_change(_hrm_index,
+	// Create and reserve the bitmap
+	G1RegionToSpaceMapper* alive_bitmap_storage =
+			semeru_h->create_aux_memory_mapper_from_rs("Alive Bitmap", per_region_bitmap_size, 
+                                                                G1CMBitMap::heap_map_factor(), 
+																						                    ALIVE_BITMAP_OFFSET + per_region_bitmap_size*region_idnex );
+
+	// Commit the bitmap immediately
+	alive_bitmap_storage->commit_regions(0, 1, semeru_h->workers());  // There is only 1 regions
+
+	return alive_bitmap_storage;
+}
+
+
+
+
+// Semeru
+void SemeruHeapRegion::allocate_init_target_oop_queue(uint hrm_index){
+  
+  // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
+  _cpu_to_mem_gc->_target_obj_queue = new (TASKQUEUE_SIZE, hrm_index) TargetObjQueue();   // The instance should be allocated in RDMA Meta space.
+  _cpu_to_mem_gc->_target_obj_queue->initialize((size_t)hrm_index);
+}
+
+
+void SemeruHeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {
+  HeapRegionTracer::send_region_type_change( _cpu_to_mem_init->_hrm_index,
                                             get_trace_type(),
                                             to,
                                             (uintptr_t)bottom(),
                                             used());
 }
 
-void HeapRegion::note_self_forwarding_removal_start(bool during_initial_mark,
+void SemeruHeapRegion::note_self_forwarding_removal_start(bool during_initial_mark,
                                                     bool during_conc_mark) {
   // We always recreate the prev marking info and we'll explicitly
   // mark all objects we find to be self-forwarded on the prev
@@ -359,7 +445,7 @@ void HeapRegion::note_self_forwarding_removal_start(bool during_initial_mark,
   }
 }
 
-void HeapRegion::note_self_forwarding_removal_end(size_t marked_bytes) {
+void SemeruHeapRegion::note_self_forwarding_removal_end(size_t marked_bytes) {
   assert(marked_bytes <= used(),
          "marked: " SIZE_FORMAT " used: " SIZE_FORMAT, marked_bytes, used());
   _prev_top_at_mark_start = top();
@@ -368,24 +454,48 @@ void HeapRegion::note_self_forwarding_removal_end(size_t marked_bytes) {
 
 // Code roots support
 
-void HeapRegion::add_strong_code_root(nmethod* nm) {
+void SemeruHeapRegion::add_strong_code_root(nmethod* nm) {
   HeapRegionRemSet* hrrs = rem_set();
+    //Debug
+  if(hrrs == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
   hrrs->add_strong_code_root(nm);
 }
 
-void HeapRegion::add_strong_code_root_locked(nmethod* nm) {
+void SemeruHeapRegion::add_strong_code_root_locked(nmethod* nm) {
   assert_locked_or_safepoint(CodeCache_lock);
   HeapRegionRemSet* hrrs = rem_set();
+    //Debug
+  if(hrrs == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
   hrrs->add_strong_code_root_locked(nm);
 }
 
-void HeapRegion::remove_strong_code_root(nmethod* nm) {
+void SemeruHeapRegion::remove_strong_code_root(nmethod* nm) {
   HeapRegionRemSet* hrrs = rem_set();
+  //Debug
+  if(hrrs == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
   hrrs->remove_strong_code_root(nm);
 }
 
-void HeapRegion::strong_code_roots_do(CodeBlobClosure* blk) const {
+void SemeruHeapRegion::strong_code_roots_do(CodeBlobClosure* blk) const {
   HeapRegionRemSet* hrrs = rem_set();
+  //Debug
+  if(hrrs == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
   hrrs->strong_code_roots_do(blk);
 }
 
@@ -398,7 +508,7 @@ void HeapRegion::strong_code_roots_do(CodeBlobClosure* blk) const {
 
 
 class VerifyStrongCodeRootOopClosure: public OopClosure {
-  const HeapRegion* _hr;
+  const SemeruHeapRegion* _hr;
   bool _failures;
   bool _has_oops_in_region;
 
@@ -425,7 +535,7 @@ class VerifyStrongCodeRootOopClosure: public OopClosure {
   }
 
 public:
-  VerifyStrongCodeRootOopClosure(const HeapRegion* hr):
+  VerifyStrongCodeRootOopClosure(const SemeruHeapRegion* hr):
     _hr(hr), _failures(false), _has_oops_in_region(false) {}
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
@@ -436,10 +546,10 @@ public:
 };
 
 class VerifyStrongCodeRootCodeBlobClosure: public CodeBlobClosure {
-  const HeapRegion* _hr;
+  const SemeruHeapRegion* _hr;
   bool _failures;
 public:
-  VerifyStrongCodeRootCodeBlobClosure(const HeapRegion* hr) :
+  VerifyStrongCodeRootCodeBlobClosure(const SemeruHeapRegion* hr) :
     _hr(hr), _failures(false) {}
 
   void do_code_blob(CodeBlob* cb) {
@@ -469,7 +579,7 @@ public:
   bool failures()       { return _failures; }
 };
 
-void HeapRegion::verify_strong_code_roots(VerifyOption vo, bool* failures) const {
+void SemeruHeapRegion::verify_strong_code_roots(VerifyOption vo, bool* failures) const {
   if (!G1VerifyHeapRegionCodeRoots) {
     // We're not verifying code roots.
     return;
@@ -486,6 +596,13 @@ void HeapRegion::verify_strong_code_roots(VerifyOption vo, bool* failures) const
   }
 
   HeapRegionRemSet* hrrs = rem_set();
+
+  //Debug
+  if(hrrs == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
   size_t strong_code_roots_length = hrrs->strong_code_roots_list_length();
 
   // if this region is empty then there should be no entries
@@ -516,9 +633,16 @@ void HeapRegion::verify_strong_code_roots(VerifyOption vo, bool* failures) const
   }
 }
 
-void HeapRegion::print() const { print_on(tty); }
-void HeapRegion::print_on(outputStream* st) const {
-  st->print("|%4u", this->_hrm_index);
+void SemeruHeapRegion::print() const { print_on(tty); }
+void SemeruHeapRegion::print_on(outputStream* st) const {
+
+    //Debug
+  if(rem_set() == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
+  st->print("|%4u", this->_cpu_to_mem_init->_hrm_index);
   st->print("|" PTR_FORMAT ", " PTR_FORMAT ", " PTR_FORMAT,
             p2i(bottom()), p2i(top()), p2i(end()));
   st->print("|%3d%%", (int) ((double) used() * 100 / capacity()));
@@ -534,7 +658,7 @@ void HeapRegion::print_on(outputStream* st) const {
 
 class G1VerificationClosure : public BasicOopIterateClosure {
 protected:
-  G1CollectedHeap* _g1h;
+  G1SemeruCollectedHeap* _g1h;
   G1CardTable *_ct;
   oop _containing_obj;
   bool _failures;
@@ -544,7 +668,7 @@ public:
   // _vo == UsePrevMarking -> use "prev" marking information,
   // _vo == UseNextMarking -> use "next" marking information,
   // _vo == UseFullMarking -> use "next" marking bitmap but no TAMS.
-  G1VerificationClosure(G1CollectedHeap* g1h, VerifyOption vo) :
+  G1VerificationClosure(G1SemeruCollectedHeap* g1h, VerifyOption vo) :
     _g1h(g1h), _ct(g1h->card_table()),
     _containing_obj(NULL), _failures(false), _n_failures(0), _vo(vo) {
   }
@@ -570,9 +694,9 @@ public:
   debug_only(virtual bool should_verify_oops() { return false; })
 };
 
-class VerifyLiveClosure : public G1VerificationClosure {
+class SemeruVerifyLiveClosure : public G1VerificationClosure {
 public:
-  VerifyLiveClosure(G1CollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
+  SemeruVerifyLiveClosure(G1SemeruCollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
   virtual void do_oop(narrowOop* p) { do_oop_work(p); }
   virtual void do_oop(oop* p) { do_oop_work(p); }
 
@@ -600,16 +724,16 @@ public:
         }
         ResourceMark rm;
         if (!_g1h->is_in_closed_subset(obj)) {
-          HeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
+          SemeruHeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
           log.error("Field " PTR_FORMAT " of live obj " PTR_FORMAT " in region [" PTR_FORMAT ", " PTR_FORMAT ")",
             p2i(p), p2i(_containing_obj), p2i(from->bottom()), p2i(from->end()));
           LogStream ls(log.error());
           print_object(&ls, _containing_obj);
-          HeapRegion* const to = _g1h->heap_region_containing(obj);
+          SemeruHeapRegion* const to = _g1h->heap_region_containing(obj);
           log.error("points to obj " PTR_FORMAT " in region " HR_FORMAT " remset %s", p2i(obj), HR_FORMAT_PARAMS(to), to->rem_set()->get_state_str());
         } else {
-          HeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
-          HeapRegion* to = _g1h->heap_region_containing((HeapWord*)obj);
+          SemeruHeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
+          SemeruHeapRegion* to = _g1h->heap_region_containing((HeapWord*)obj);
           log.error("Field " PTR_FORMAT " of live obj " PTR_FORMAT " in region [" PTR_FORMAT ", " PTR_FORMAT ")",
             p2i(p), p2i(_containing_obj), p2i(from->bottom()), p2i(from->end()));
           LogStream ls(log.error());
@@ -627,9 +751,9 @@ public:
   }
 };
 
-class VerifyRemSetClosure : public G1VerificationClosure {
+class SemeruVerifyRemSetClosure : public G1VerificationClosure {
 public:
-  VerifyRemSetClosure(G1CollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
+  SemeruVerifyRemSetClosure(G1SemeruCollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
   virtual void do_oop(narrowOop* p) { do_oop_work(p); }
   virtual void do_oop(oop* p) { do_oop_work(p); }
 
@@ -643,58 +767,67 @@ public:
 
   template <class T>
   void verify_remembered_set(T* p) {
-    T heap_oop = RawAccess<>::oop_load(p);
-    Log(gc, verify) log;
-    if (!CompressedOops::is_null(heap_oop)) {
-      oop obj = CompressedOops::decode_not_null(heap_oop);
-      HeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
-      HeapRegion* to = _g1h->heap_region_containing(obj);
-      if (from != NULL && to != NULL &&
-        from != to &&
-        !to->is_pinned() &&
-        to->rem_set()->is_complete()) {
-        jbyte cv_obj = *_ct->byte_for_const(_containing_obj);
-        jbyte cv_field = *_ct->byte_for_const(p);
-        const jbyte dirty = G1CardTable::dirty_card_val();
 
-        bool is_bad = !(from->is_young()
-          || to->rem_set()->contains_reference(p)
-          || (_containing_obj->is_objArray() ?
-                cv_field == dirty :
-                cv_obj == dirty || cv_field == dirty));
-        if (is_bad) {
-          MutexLockerEx x(ParGCRareEvent_lock,
-            Mutex::_no_safepoint_check_flag);
+     //Debug
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
 
-          if (!_failures) {
-            log.error("----------");
-          }
-          log.error("Missing rem set entry:");
-          log.error("Field " PTR_FORMAT " of obj " PTR_FORMAT ", in region " HR_FORMAT,
-            p2i(p), p2i(_containing_obj), HR_FORMAT_PARAMS(from));
-          ResourceMark rm;
-          LogStream ls(log.error());
-          _containing_obj->print_on(&ls);
-          log.error("points to obj " PTR_FORMAT " in region " HR_FORMAT " remset %s", p2i(obj), HR_FORMAT_PARAMS(to), to->rem_set()->get_state_str());
-          if (oopDesc::is_oop(obj)) {
-            obj->print_on(&ls);
-          }
-          log.error("Obj head CTE = %d, field CTE = %d.", cv_obj, cv_field);
-          log.error("----------");
-          _failures = true;
-          _n_failures++;
-        }
-      }
-    }
-  }
+
+    
+  //   T heap_oop = RawAccess<>::oop_load(p);
+  //   Log(gc, verify) log;
+  //   if (!CompressedOops::is_null(heap_oop)) {
+  //     oop obj = CompressedOops::decode_not_null(heap_oop);
+  //     SemeruHeapRegion* from = _g1h->heap_region_containing((HeapWord*)p);
+  //     SemeruHeapRegion* to = _g1h->heap_region_containing(obj);
+  //     if (from != NULL && to != NULL &&
+  //       from != to &&
+  //       !to->is_pinned() &&
+  //       to->rem_set()->is_complete()) {
+  //       jbyte cv_obj = *_ct->byte_for_const(_containing_obj);
+  //       jbyte cv_field = *_ct->byte_for_const(p);
+  //       const jbyte dirty = G1CardTable::dirty_card_val();
+
+  //       bool is_bad = !(from->is_young()
+  //         || to->rem_set()->contains_reference(p)
+  //         || (_containing_obj->is_objArray() ?
+  //               cv_field == dirty :
+  //               cv_obj == dirty || cv_field == dirty));
+  //       if (is_bad) {
+  //         MutexLockerEx x(ParGCRareEvent_lock,
+  //           Mutex::_no_safepoint_check_flag);
+
+  //         if (!_failures) {
+  //           log.error("----------");
+  //         }
+  //         log.error("Missing rem set entry:");
+  //         log.error("Field " PTR_FORMAT " of obj " PTR_FORMAT ", in region " HR_FORMAT,
+  //           p2i(p), p2i(_containing_obj), HR_FORMAT_PARAMS(from));
+  //         ResourceMark rm;
+  //         LogStream ls(log.error());
+  //         _containing_obj->print_on(&ls);
+  //         log.error("points to obj " PTR_FORMAT " in region " HR_FORMAT " remset %s", p2i(obj), HR_FORMAT_PARAMS(to), to->rem_set()->get_state_str());
+  //         if (oopDesc::is_oop(obj)) {
+  //           obj->print_on(&ls);
+  //         }
+  //         log.error("Obj head CTE = %d, field CTE = %d.", cv_obj, cv_field);
+  //         log.error("----------");
+  //         _failures = true;
+  //         _n_failures++;
+  //       }
+  //     }
+  //   }
+  } // end of function verify_remembered_set()
+
+
 };
 
 // Closure that applies the given two closures in sequence.
-class G1Mux2Closure : public BasicOopIterateClosure {
+class G1SemeruMux2Closure : public BasicOopIterateClosure {
   OopClosure* _c1;
   OopClosure* _c2;
 public:
-  G1Mux2Closure(OopClosure *c1, OopClosure *c2) { _c1 = c1; _c2 = c2; }
+  G1SemeruMux2Closure(OopClosure *c1, OopClosure *c2) { _c1 = c1; _c2 = c2; }
   template <class T> inline void do_oop_work(T* p) {
     // Apply first closure; then apply the second.
     _c1->do_oop(p);
@@ -710,14 +843,14 @@ public:
 // This really ought to be commoned up into OffsetTableContigSpace somehow.
 // We would need a mechanism to make that code skip dead objects.
 
-void HeapRegion::verify(VerifyOption vo,
+void SemeruHeapRegion::verify(VerifyOption vo,
                         bool* failures) const {
-  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+  G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
   *failures = false;
   HeapWord* p = bottom();
   HeapWord* prev_p = NULL;
-  VerifyLiveClosure vl_cl(g1h, vo);
-  VerifyRemSetClosure vr_cl(g1h, vo);
+  SemeruVerifyLiveClosure vl_cl(g1h, vo);
+  SemeruVerifyRemSetClosure vr_cl(g1h, vo);
   bool is_region_humongous = is_humongous();
   size_t object_num = 0;
   while (p < top()) {
@@ -744,7 +877,7 @@ void HeapRegion::verify(VerifyOption vo,
           if (!g1h->collector_state()->in_full_gc() || G1VerifyRSetsDuringFullGC) {
             // verify liveness and rem_set
             vr_cl.set_containing_obj(obj);
-            G1Mux2Closure mux(&vl_cl, &vr_cl);
+            G1SemeruMux2Closure mux(&vl_cl, &vr_cl);
             obj->oop_iterate(&mux);
 
             if (vr_cl.failures()) {
@@ -854,17 +987,17 @@ void HeapRegion::verify(VerifyOption vo,
   verify_strong_code_roots(vo, failures);
 }
 
-void HeapRegion::verify() const {
+void SemeruHeapRegion::verify() const {
   bool dummy = false;
   verify(VerifyOption_G1UsePrevMarking, /* failures */ &dummy);
 }
 
-void HeapRegion::verify_rem_set(VerifyOption vo, bool* failures) const {
-  G1CollectedHeap* g1h = G1CollectedHeap::heap();
+void SemeruHeapRegion::verify_rem_set(VerifyOption vo, bool* failures) const {
+  G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
   *failures = false;
   HeapWord* p = bottom();
   HeapWord* prev_p = NULL;
-  VerifyRemSetClosure vr_cl(g1h, vo);
+  SemeruVerifyRemSetClosure vr_cl(g1h, vo);
   while (p < top()) {
     oop obj = oop(p);
     size_t obj_size = block_size(p);
@@ -893,75 +1026,13 @@ void HeapRegion::verify_rem_set(VerifyOption vo, bool* failures) const {
   }
 }
 
-void HeapRegion::verify_rem_set() const {
+void SemeruHeapRegion::verify_rem_set() const {
   bool failures = false;
   verify_rem_set(VerifyOption_G1UsePrevMarking, &failures);
-  guarantee(!failures, "HeapRegion RemSet verification failed");
+  guarantee(!failures, "SemeruHeapRegion RemSet verification failed");
 }
 
-void HeapRegion::prepare_for_compaction(CompactPoint* cp) {
+void SemeruHeapRegion::prepare_for_compaction(CompactPoint* cp) {
   // Not used for G1 anymore, but pure virtual in Space.
   ShouldNotReachHere();
-}
-
-// G1OffsetTableContigSpace code; copied from space.cpp.  Hope this can go
-// away eventually.
-
-void G1ContiguousSpace::clear(bool mangle_space) {
-  set_top(bottom());
-  CompactibleSpace::clear(mangle_space);
-  reset_bot();
-}
-#ifndef PRODUCT
-void G1ContiguousSpace::mangle_unused_area() {
-  mangle_unused_area_complete();
-}
-
-void G1ContiguousSpace::mangle_unused_area_complete() {
-  SpaceMangler::mangle_region(MemRegion(top(), end()));
-}
-#endif
-
-void G1ContiguousSpace::print() const {
-  print_short();
-  tty->print_cr(" [" INTPTR_FORMAT ", " INTPTR_FORMAT ", "
-                INTPTR_FORMAT ", " INTPTR_FORMAT ")",
-                p2i(bottom()), p2i(top()), p2i(_bot_part.threshold()), p2i(end()));
-}
-
-HeapWord* G1ContiguousSpace::initialize_threshold() {
-  return _bot_part.initialize_threshold();
-}
-
-HeapWord* G1ContiguousSpace::cross_threshold(HeapWord* start,
-                                                    HeapWord* end) {
-  _bot_part.alloc_block(start, end);
-  return _bot_part.threshold();
-}
-
-void G1ContiguousSpace::safe_object_iterate(ObjectClosure* blk) {
-  object_iterate(blk);
-}
-
-void G1ContiguousSpace::object_iterate(ObjectClosure* blk) {
-  HeapWord* p = bottom();
-  while (p < top()) {
-    if (block_is_obj(p)) {
-      blk->do_object(oop(p));
-    }
-    p += block_size(p);
-  }
-}
-
-G1ContiguousSpace::G1ContiguousSpace(G1BlockOffsetTable* bot) :
-  _bot_part(bot, this),
-  _par_alloc_lock(Mutex::leaf, "OffsetTableContigSpace par alloc lock", true)
-{
-}
-
-void G1ContiguousSpace::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
-  CompactibleSpace::initialize(mr, clear_space, mangle_space);
-  _top = bottom();
-  set_saved_mark_word(NULL);
-  reset_bot();
 }

@@ -27,12 +27,20 @@
  *  
  */
 enum CHeapAllocType {
-  ALLOC_TARGET_OBJ_QUEUE,     // 0,
+  CPU_TO_MEM_AT_INIT_ALLOCTYPE,   // 0,
+  CPU_TO_MEM_AT_GC_ALLOCTYPE,     // 1,
+  MEM_TO_CPU_AT_GC_ALLOCTYPE,     // 2,
+  ALLOC_TARGET_OBJ_QUEUE,         // 3,
   NON_ALLOC_TYPE     // non type
 };
 
 /**
  * This allocator is used to allocate objects into fixed address for RDMA communications between CPU and memory server.
+ * 
+ * Template Parameter:
+ *    class E : Used to calculate class array's element size.
+ *    CHeapAllocType Alloc_type : Used to choose which RDMA meta space is allocated into.
+ *  
  * 
  * [?] CHeapObj allocates object into C-Heap by malloc().
  *     We commit space from reserved space.
@@ -59,11 +67,13 @@ public:
   //  Variables
   //
 
-  // Keep a global pointer to each meta data segment 
-  // [xx] Each instantiation of class template has its own copy of member static variables.
+  // Used to calculate the offset for different instan's offset.
+  // [xx] Each instance of this template class has its own copy of member static variables.
   //      So, based on different CHeapAllocType value, _alloc_ptr should be initiazlied to different value.
-  static char* _alloc_ptr; 
-
+  //
+  // [??] This filed is useless here for now.
+  static char   *_alloc_ptr; 
+  static size_t  _instance_size;  // only used for normal instance allocation. e.g. the obj in SemeruHeapRegion.
 
 
   //
@@ -73,20 +83,12 @@ public:
   //
   // Warning : this funtion is invoked latter than operator new.
   CHeapRDMAObj(){
-    // switch(Alloc_type)
-    // {
-    //   case ALLOC_TARGET_OBJ_QUEUE:
-    //     _alloc_ptr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET);
-    //   break;
-
-    //   default:
-    //     break;
-    // }
 
   }
 
 
   /**
+   * new object instance #1
    * Allocate space for non-array object instance.
    *  1) Single structure.
    *  2) Content are stored in a flexible array
@@ -102,18 +104,186 @@ public:
    * 3) The override operator always work like static, 
    *     It can only invoke static functions.
    * 4) The first parameter, size, is assigned by Operator new. It's the size of the class.
-   *    [?] Do we need to allocate the instance first, and then follow the data for the flexible array ?
-	 *				The commit size should be page, 4KB, alignment. 
+   *    The commit size is passed by the caller,  
+   *      a. to reserve space for the flexible array at the end of the class
+   *      b. for alignment.
 	 */
-  ALWAYSINLINE void* operator new(size_t size, size_t commit_size , char* requested_addr) throw() {
-    //  return (void*)test_new_operator(size, commit_size, requested_addr);
+  ALWAYSINLINE void* operator new(size_t instance_size, size_t commit_size , char* requested_addr) throw() {
+    assert(commit_size > instance_size, "Committed size is too small. ");
 
     // discard the parameter, size, which is defined by sizeof(clas)
     return (void*)commit_at(commit_size, mtGC, requested_addr);
   }
 
 
+
+ /**
+  * new object instance #2.
+  * Allocate object instances based on Alloc_type and index.
+  * 
+  * [X] Each object instance should be equal here.
+  * 
+  */
+  ALWAYSINLINE void* operator new(size_t instance_size, size_t index ) throw() {
+    // Calculate the queue's entire size, 4KB alignment
+    // The commit_size for every queue type is fixed.
+    size_t commit_size = align_up(instance_size, RDMA_ALIGNMENT_BYTES); // need to record how much memory is used
+    char* requested_addr = NULL;
+    char* old_val;
+    char* ret;
+    switch(Alloc_type)  // based on the instantiation of Template
+    {
+      case CPU_TO_MEM_AT_INIT_ALLOCTYPE :
+        // 1) commit all the reserved space for easy debuging
+        //    First time entering the zone.
+        if(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr == NULL){
+          requested_addr = (char*)(SEMERU_START_ADDR + CPU_TO_MEMORY_INIT_OFFSET);
+          CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
+          
+          if( (char*)commit_at(CPU_TO_MEMORY_INIT_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+            old_val = CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr;  // NULL
+            ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr), old_val);
+            assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+          }
+
+          
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr);
+
+          break;
+        }
+
+        // 2) this type space is already committed.
+        //    Just return a start address back to caller && adjust the pointer value.
+        requested_addr = CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr;
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT), 
+                                                        "%s, Exceed the CPU_TO_MEMORY_INIT_SIZE_LIMIT's space range. \n", __func__ );
+
+        // Before bump the alloc pointer.
+        // Assume the the instance size are all the same for all the type under CPU_TO_MEM_AT_INIT_ALLOCTYPE
+        // assert( (size_t)(SEMERU_START_ADDR + CPU_TO_MEMORY_INIT_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr,
+        //     " Each element size of type  CPU_TO_MEM_AT_INIT_ALLOCTYPE should be equal.");
+
+        // bump the pointer
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr), requested_addr);
+        assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
+
+        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr);
+
+        break;
+
+
+      case CPU_TO_MEM_AT_GC_ALLOCTYPE :
+        // 1) commit all the reserved space for easy debuging
+        //    First time entering the zone.
+        if(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr == NULL){
+          requested_addr = (char*)(SEMERU_START_ADDR + CPU_TO_MEMORY_GC_OFFSET);
+          CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
+
+          
+          if( (char*)commit_at(CPU_TO_MEMORY_GC_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+            old_val = CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr;  // NULL
+            ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr), old_val);
+            assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+          }
+
+          
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_GC_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr);
+
+          break;
+        }
+
+        // 2) this type space is already committed.
+        //    Just return a start address back to caller && adjust the pointer value.
+        requested_addr = CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr;
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT), 
+                                                        "%s, Exceed the CPU_TO_MEMORY_INIT_SIZE_LIMIT's space range. \n", __func__ );
+
+        // Before bump the alloc pointer.
+        // Assume the the instance size are all the same for all the type under CPU_TO_MEM_AT_GC_ALLOCTYPE
+        // assert( (size_t)(SEMERU_START_ADDR + CPU_TO_MEMORY_GC_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr,
+        //     " Each element size of type  CPU_TO_MEM_AT_GC_ALLOCTYPE should be equal.");
+
+        // bump the pointer
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr), requested_addr);
+        assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
+
+        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_GC_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr);
+
+        break;
+
+
+      case MEM_TO_CPU_AT_GC_ALLOCTYPE :
+        // 1) commit all the reserved space for easy debuging
+        //    First time entering the zone.
+        if(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr == NULL){
+          requested_addr = (char*)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET);
+          CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
+          
+          if( (char*)commit_at(MEMORY_TO_CPU_GC_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+            old_val = CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr;  // NULL
+            ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr), old_val);
+            assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+          }
+
+          
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for MEM_TO_CPU_AT_GC_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr);
+
+          break;
+        }
+
+        // 2) this type space is already committed.
+        //    Just return a start address back to caller && adjust the pointer value.
+        requested_addr = CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr;
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT), 
+                                                        "%s, Exceed the MEM_TO_CPU_AT_GC_ALLOCTYPE's space range. \n", __func__ );
+
+        // Before bump the alloc pointer.
+        // Assume the the instance size are all the same for all the type under MEM_TO_CPU_AT_GC_ALLOCTYPE
+        // assert( (size_t)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr,
+        //     " Each element size of type  MEM_TO_CPU_AT_GC_ALLOCTYPE should be equal.");
+
+        // bump the pointer
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr), requested_addr);
+        assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
+
+        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for MEM_TO_CPU_AT_GC_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr);
+
+        break;
+
+
+
+      case NON_ALLOC_TYPE :
+          //debug
+          tty->print("Error in %s. Can't reach here. \n",__func__);
+        break;
+
+
+      default:
+        requested_addr = NULL;
+        break;
+    }
+
+
+
+    // discard the parameter, size, which is defined by sizeof(clas)
+    return (void*)requested_addr;
+  }
+
+
+
+
+
+
+
   /**
+   * new object array #1
+   * 
    * Allocate space for Object Array.
    *  1) multiple queue with index information.
    *  2) Content is not a flexible array.
@@ -146,6 +316,7 @@ public:
                                                         "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
         
         // [?] How to handle the failure ?
+        //     The _alloc_ptr is useless here.
         old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr;
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr), old_val);
         assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
@@ -185,12 +356,15 @@ public:
 
 // https://stackoverflow.com/questions/610245/where-and-why-do-i-have-to-put-the-template-and-typename-keywords
 // Each instantiation of the tmplate class has different instance of static variable
-// [??]So, based on different CHeapAllocType value, _alloc_ptr should be initiazlied to different value.
-//   		How to implement this ??  
+// operator new is invoked before the constructor,
+// so it's useless to initiate the value here.
+// We assign the values in operator new.
 template <class E , CHeapAllocType Alloc_type>
-//char* CHeapRDMAObj<E, Alloc_type>::_alloc_ptr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET);
 char* CHeapRDMAObj<E, Alloc_type>::_alloc_ptr = NULL;
 
+
+template <class E , CHeapAllocType Alloc_type>
+size_t CHeapRDMAObj<E, Alloc_type>::_instance_size = 0;
 
 
 

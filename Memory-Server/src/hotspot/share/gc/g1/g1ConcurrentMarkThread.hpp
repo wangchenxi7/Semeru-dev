@@ -89,8 +89,8 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   void stop_service();
 
   // semeru
-  void run_semeru_service();
-  void stop_semeru_service();
+ // void run_semeru_service();
+ // void stop_semeru_service();
 
  public:
   // Constructor
@@ -133,11 +133,6 @@ class G1ConcurrentMarkThread: public ConcurrentGCThread {
   ConcurrentGCPhaseManager::Stack* phase_manager_stack() {
     return &_phase_manager_stack;
   }
-
-  //
-  // Semeru Memory Server
-  //
-  void dispatch_received_regions(received_memory_server_cset* mem_server_cset);
 
 };
 

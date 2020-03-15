@@ -26,24 +26,25 @@
 #define SHARE_VM_GC_G1_G1SemeruCollectedHeap_INLINE_HPP
 
 #include "gc/g1/g1BarrierSet.hpp"
-#include "gc/g1/g1SemeruCollectedHeap.hpp"
 #include "gc/g1/g1CollectorState.hpp"
 //#include "gc/g1/heapRegionManager.inline.hpp"
-#include "gc/g1/heapRegionSet.inline.hpp"
+//#include "gc/g1/heapRegionSet.inline.hpp"
 #include "gc/shared/taskqueue.inline.hpp"
 #include "runtime/orderAccess.hpp"
 
 
 // Semeru
+#include "gc/g1/g1SemeruCollectedHeap.hpp"
+#include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 #include "gc/g1/SemeruHeapRegionManager.inline.hpp"
 
 
 
-// G1EvacStats* G1SemeruCollectedHeap::alloc_buffer_stats(InCSetState dest) {
+// G1EvacStats* G1SemeruCollectedHeap::alloc_buffer_stats(SemeruInCSetState dest) {
 //   switch (dest.value()) {
-//     case InCSetState::Young:
+//     case SemeruInCSetState::Young:
 //       return &_survivor_evac_stats;
-//     case InCSetState::Old:
+//     case SemeruInCSetState::Old:
 //       return &_old_evac_stats;
 //     default:
 //       ShouldNotReachHere();
@@ -51,7 +52,7 @@
 //   }
 // }
 
-// size_t G1SemeruCollectedHeap::desired_plab_sz(InCSetState dest) {
+// size_t G1SemeruCollectedHeap::desired_plab_sz(SemeruInCSetState dest) {
 //   size_t gclab_word_size = alloc_buffer_stats(dest)->desired_plab_sz(workers()->active_workers());
 //   // Prevent humongous PLAB sizes for two reasons:
 //   // * PLABs are allocated using a similar paths as oops, but should
@@ -63,12 +64,12 @@
 // Inline functions for G1SemeruCollectedHeap
 
 // Return the region with the given index. It assumes the index is valid.
-inline HeapRegion* G1SemeruCollectedHeap::region_at(uint index) const { return _hrm->at(index); }
+inline SemeruHeapRegion* G1SemeruCollectedHeap::region_at(uint index) const { return _hrm->at(index); }
 
 // Return the region with the given index, or NULL if unmapped. It assumes the index is valid.
-inline HeapRegion* G1SemeruCollectedHeap::region_at_or_null(uint index) const { return _hrm->at_or_null(index); }
+inline SemeruHeapRegion* G1SemeruCollectedHeap::region_at_or_null(uint index) const { return _hrm->at_or_null(index); }
 
-// inline HeapRegion* G1SemeruCollectedHeap::next_region_in_humongous(HeapRegion* hr) const {
+// inline SemeruHeapRegion* G1SemeruCollectedHeap::next_region_in_humongous(SemeruHeapRegion* hr) const {
 //   return _hrm->next_region_in_humongous(hr);
 // }
 
@@ -76,15 +77,15 @@ inline uint G1SemeruCollectedHeap::addr_to_region(HeapWord* addr) const {
   assert(is_in_reserved(addr),
          "Cannot calculate region index for address " PTR_FORMAT " that is outside of the heap [" PTR_FORMAT ", " PTR_FORMAT ")",
          p2i(addr), p2i(reserved_region().start()), p2i(reserved_region().end()));
-  return (uint)(pointer_delta(addr, reserved_region().start(), sizeof(uint8_t)) >> HeapRegion::SemeruLogOfHRGrainBytes);
+  return (uint)(pointer_delta(addr, reserved_region().start(), sizeof(uint8_t)) >> SemeruHeapRegion::SemeruLogOfHRGrainBytes);
 }
 
 inline HeapWord* G1SemeruCollectedHeap::bottom_addr_for_region(uint index) const {
-  return _hrm->reserved().start() + index * HeapRegion::SemeruGrainWords;
+  return _hrm->reserved().start() + index * SemeruHeapRegion::SemeruGrainWords;
 }
 
 template <class T>
-inline HeapRegion* G1SemeruCollectedHeap::heap_region_containing(const T addr) const {
+inline SemeruHeapRegion* G1SemeruCollectedHeap::heap_region_containing(const T addr) const {
   assert(addr != NULL, "invariant");
   assert(is_in_g1_reserved((const void*) addr),
          "Address " PTR_FORMAT " is outside of the heap ranging from [" PTR_FORMAT " to " PTR_FORMAT ")",
@@ -93,7 +94,7 @@ inline HeapRegion* G1SemeruCollectedHeap::heap_region_containing(const T addr) c
 }
 
 template <class T>
-inline HeapRegion* G1SemeruCollectedHeap::heap_region_containing_or_null(const T addr) const {
+inline SemeruHeapRegion* G1SemeruCollectedHeap::heap_region_containing_or_null(const T addr) const {
   assert(addr != NULL, "invariant");
   assert(is_in_g1_reserved((const void*) addr),
          "Address " PTR_FORMAT " is outside of the heap ranging from [" PTR_FORMAT " to " PTR_FORMAT ")",
@@ -102,15 +103,15 @@ inline HeapRegion* G1SemeruCollectedHeap::heap_region_containing_or_null(const T
   return region_at_or_null(region_idx);
 }
 
-// inline void G1SemeruCollectedHeap::old_set_add(HeapRegion* hr) {
+// inline void G1SemeruCollectedHeap::old_set_add(SemeruHeapRegion* hr) {
 //   _old_set.add(hr);
 // }
 
-// inline void G1SemeruCollectedHeap::old_set_remove(HeapRegion* hr) {
+// inline void G1SemeruCollectedHeap::old_set_remove(SemeruHeapRegion* hr) {
 //   _old_set.remove(hr);
 // }
 
-// inline void G1SemeruCollectedHeap::archive_set_add(HeapRegion* hr) {
+// inline void G1SemeruCollectedHeap::archive_set_add(SemeruHeapRegion* hr) {
 //   _archive_set.add(hr);
 // }
 
@@ -125,7 +126,7 @@ G1SemeruCollectedHeap::dirty_young_block(HeapWord* start, size_t word_size) {
   // Assign the containing region to containing_hr so that we don't
   // have to keep calling heap_region_containing() in the
   // asserts below.
-  DEBUG_ONLY(HeapRegion* containing_hr = heap_region_containing(start);)
+  DEBUG_ONLY(SemeruHeapRegion* containing_hr = heap_region_containing(start);)
   assert(word_size > 0, "pre-condition");
   assert(containing_hr->is_in(start), "it should contain start");
   assert(containing_hr->is_young(), "it should be young");
@@ -154,7 +155,7 @@ inline bool G1SemeruCollectedHeap::is_in_cset(HeapWord* addr) {
   return _in_cset_fast_test.is_in_cset(addr);
 }
 
-bool G1SemeruCollectedHeap::is_in_cset(const HeapRegion* hr) {
+bool G1SemeruCollectedHeap::is_in_cset(const SemeruHeapRegion* hr) {
   return _in_cset_fast_test.is_in_cset(hr);
 }
 
@@ -162,13 +163,13 @@ bool G1SemeruCollectedHeap::is_in_cset_or_humongous(const oop obj) {
   return _in_cset_fast_test.is_in_cset_or_humongous((HeapWord*)obj);
 }
 
-// InCSetState G1SemeruCollectedHeap::in_cset_state(const oop obj) {
-//   return _in_cset_fast_test.at((HeapWord*)obj);
-// }
+SemeruInCSetState G1SemeruCollectedHeap::in_cset_state(const oop obj) {
+  return _in_cset_fast_test.at((HeapWord*)obj);
+}
 
-// void G1SemeruCollectedHeap::register_humongous_region_with_cset(uint index) {
-//   _in_cset_fast_test.set_humongous(index);
-// }
+void G1SemeruCollectedHeap::register_humongous_region_with_cset(uint index) {
+  _in_cset_fast_test.set_humongous(index);
+}
 
 // #ifndef PRODUCT
 // // Support for G1EvacuationFailureALot
@@ -263,40 +264,40 @@ inline bool G1SemeruCollectedHeap::is_obj_ill(const oop obj) const {
   return is_obj_ill(obj, heap_region_containing(obj));
 }
 
-// inline bool G1SemeruCollectedHeap::is_obj_dead_full(const oop obj, const HeapRegion* hr) const {
-//    return !is_marked_next(obj) && !hr->is_archive();
-// }
+inline bool G1SemeruCollectedHeap::is_obj_dead_full(const oop obj, const SemeruHeapRegion* hr) const {
+   return !is_marked_next(obj) && !hr->is_archive();
+}
 
-// inline bool G1SemeruCollectedHeap::is_obj_dead_full(const oop obj) const {
-//     return is_obj_dead_full(obj, heap_region_containing(obj));
-// }
+inline bool G1SemeruCollectedHeap::is_obj_dead_full(const oop obj) const {
+    return is_obj_dead_full(obj, heap_region_containing(obj));
+}
 
-// inline void G1SemeruCollectedHeap::set_humongous_reclaim_candidate(uint region, bool value) {
-//   assert(_hrm->at(region)->is_starts_humongous(), "Must start a humongous object");
-//   _humongous_reclaim_candidates.set_candidate(region, value);
-// }
+inline void G1SemeruCollectedHeap::set_humongous_reclaim_candidate(uint region, bool value) {
+  assert(_hrm->at(region)->is_starts_humongous(), "Must start a humongous object");
+  _humongous_reclaim_candidates.set_candidate(region, value);
+}
 
-// inline bool G1SemeruCollectedHeap::is_humongous_reclaim_candidate(uint region) {
-//   assert(_hrm->at(region)->is_starts_humongous(), "Must start a humongous object");
-//   return _humongous_reclaim_candidates.is_candidate(region);
-// }
+inline bool G1SemeruCollectedHeap::is_humongous_reclaim_candidate(uint region) {
+  assert(_hrm->at(region)->is_starts_humongous(), "Must start a humongous object");
+  return _humongous_reclaim_candidates.is_candidate(region);
+}
 
-// inline void G1SemeruCollectedHeap::set_humongous_is_live(oop obj) {
-//   uint region = addr_to_region((HeapWord*)obj);
-//   // Clear the flag in the humongous_reclaim_candidates table.  Also
-//   // reset the entry in the _in_cset_fast_test table so that subsequent references
-//   // to the same humongous object do not go into the slow path again.
-//   // This is racy, as multiple threads may at the same time enter here, but this
-//   // is benign.
-//   // During collection we only ever clear the "candidate" flag, and only ever clear the
-//   // entry in the in_cset_fast_table.
-//   // We only ever evaluate the contents of these tables (in the VM thread) after
-//   // having synchronized the worker threads with the VM thread, or in the same
-//   // thread (i.e. within the VM thread).
-//   if (is_humongous_reclaim_candidate(region)) {
-//     set_humongous_reclaim_candidate(region, false);
-//     _in_cset_fast_test.clear_humongous(region);
-//   }
-// }
+inline void G1SemeruCollectedHeap::set_humongous_is_live(oop obj) {
+  uint region = addr_to_region((HeapWord*)obj);
+  // Clear the flag in the humongous_reclaim_candidates table.  Also
+  // reset the entry in the _in_cset_fast_test table so that subsequent references
+  // to the same humongous object do not go into the slow path again.
+  // This is racy, as multiple threads may at the same time enter here, but this
+  // is benign.
+  // During collection we only ever clear the "candidate" flag, and only ever clear the
+  // entry in the in_cset_fast_table.
+  // We only ever evaluate the contents of these tables (in the VM thread) after
+  // having synchronized the worker threads with the VM thread, or in the same
+  // thread (i.e. within the VM thread).
+  if (is_humongous_reclaim_candidate(region)) {
+    set_humongous_reclaim_candidate(region, false);
+    _in_cset_fast_test.clear_humongous(region);
+  }
+}
 
 #endif // SHARE_VM_GC_G1_G1SemeruCollectedHeap_INLINE_HPP

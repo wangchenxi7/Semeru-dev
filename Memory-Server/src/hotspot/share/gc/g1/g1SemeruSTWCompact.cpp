@@ -103,10 +103,10 @@ G1SemeruSTWCompact::G1SemeruSTWCompact(G1SemeruCollectedHeap* 	g1h,
  * 			Select the one with most cross-region referenced scanned region of the las compact Region.
  * 
  */
-HeapRegion*
-G1SemeruSTWCompact::claim_region_for_comapct(uint worker_id, HeapRegion* prev_compact) {
+SemeruHeapRegion*
+G1SemeruSTWCompact::claim_region_for_comapct(uint worker_id, SemeruHeapRegion* prev_compact) {
 
-	HeapRegion* curr_region	= NULL;
+	SemeruHeapRegion* curr_region	= NULL;
 
 	#ifdef ASSERT
 	if(_mem_server_cset == NULL){
@@ -153,7 +153,7 @@ err:
  * Semeru MS - Trigger the compact
  * 		
  * 1) Compact the scanned Region of memory server CSet.	Ø
- * 2) Evacuate alive objects marked in HeapRegion's alive_bitmap.
+ * 2) Evacuate alive objects marked in SemeruHeapRegion's alive_bitmap.
  * 
  */
 void G1SemeruSTWCompact::semeru_stw_compact() {
@@ -167,7 +167,7 @@ void G1SemeruSTWCompact::semeru_stw_compact() {
 	// worker threads may currently exist and more may not be
 	// available.
 	active_workers = _concurrent_workers->update_active_workers(active_workers);
-	log_info(gc, task)("Using %u workers of %u for Semeru MS compacting", active_workers, _concurrent_workers->total_workers());
+	log_info(semeru, compact)("Using %u workers of %u for Semeru MS compacting", active_workers, _concurrent_workers->total_workers());
 
 	// Parallel task terminator is set in "set_concurrency_and_phase()"
 	set_concurrency_and_phase(active_workers, true /* concurrent */);  // actually here is executed in STW.
@@ -312,9 +312,9 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 		_worker_id = worker_id;
 		_cp = _semeru_sc->compaction_point(_worker_id); // [X] Remember to reset the compaction_point at the end of this work.
-		HeapRegion* region_to_evacuate = NULL;
+		SemeruHeapRegion* region_to_evacuate = NULL;
 
-		log_debug(semeru, thread)("%s, Enter SemeruSWTCompact worker[%x] \n", __func__, worker_id);
+		log_debug(semeru, compact)("%s, Enter SemeruSWTCompact worker[%x] \n", __func__, worker_id);
 
 
 
@@ -379,7 +379,9 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
  * Warning : this is a per Region processing. Pass the stateless structure in.
  * 
  */
-void G1SemeruSTWCompactTask::phase1_prepare_for_compact(HeapRegion* hr){
+void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
+
+	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#1, preparation, worker [0x%x] ", __func__, this->_worker_id);
 
 	// get _cp from G1SemeruSTWCompact->compaction_point(worker_id)
 	G1SemeruCalculatePointersClosure semeru_ms_prepare(_semeru_sc, hr->alive_bitmap(), _cp, &_humongous_regions_removed);  
@@ -397,7 +399,58 @@ void G1SemeruSTWCompactTask::phase1_prepare_for_compact(HeapRegion* hr){
  * 			No need for the CompactionPoint.
  * 
  */
-void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(HeapRegion* hr){
+
+
+
+
+
+
+/**
+ * Adjust intra-Region references for a single Region.
+ * 
+ * [x] This class is only used in .cpp file.
+ * 
+ */
+class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
+  G1SemeruSTWCompact* _semeru_sc;
+  G1CMBitMap* _bitmap;
+  //uint _worker_id;
+
+ public:
+  G1SemeruAdjustRegionClosure(G1SemeruSTWCompact* semeru_sc, G1CMBitMap* bitmap) :
+    _semeru_sc(semeru_sc),
+    _bitmap(bitmap) { }
+
+  bool do_heap_region(SemeruHeapRegion* r) {
+    G1SemeruAdjustClosure adjust_pointer(r);
+    if (r->is_humongous()) {
+      oop obj = oop(r->humongous_start_region()->bottom());  // get the humongous object
+      obj->oop_iterate(&adjust_pointer, MemRegion(r->bottom(), r->top()));    // traverse the humongous object's fields.
+    } else if (r->is_open_archive()) {
+      // Only adjust the open archive regions, the closed ones
+      // never change.
+      G1SemeruAdjustLiveClosure adjust_oop(&adjust_pointer);
+      r->apply_to_marked_objects(_bitmap, &adjust_oop);
+      // Open archive regions will not be compacted and the marking information is
+      // no longer needed. Clear it here to avoid having to do it later.
+      _bitmap->clear_region(r);
+    } else {
+      G1SemeruAdjustLiveClosure adjust_oop(&adjust_pointer);
+      r->apply_to_marked_objects(_bitmap, &adjust_oop);
+    }
+    return false;
+  }
+
+
+};
+
+
+
+void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr){
+
+	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
+
+
 	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap() );
 	adjust_region.do_heap_region(hr);
 }
@@ -409,15 +462,18 @@ void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(HeapRegion* hr){
  *  Phase#3 : Do a compaction for a single Region.
  * 						 This behavior is multiple thread safe.
  * 
- * Source : HeapRegion->_alive_bitmap
- * Dest	  : HeapRegion->_dest_region_ms + _dest_offset_ms
+ * Source : SemeruHeapRegion->_alive_bitmap
+ * Dest	  : SemeruHeapRegion->_dest_region_ms + _dest_offset_ms
  * 
  * [?] How to handle the hugongous Regions separately ?
  * 		=> in phase#2, we set humongous Region's forwarding pointer to itself, which will not move any objects in them.
  * 
  */
-void G1SemeruSTWCompactTask::phase3_compact_region(HeapRegion* hr) {
-  assert(!hr->is_humongous(), "Should be no humongous regions in compaction queue");
+void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
+
+	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#3, object compactation, worker [0x%x] ", __func__, this->_worker_id);
+
+	assert(!hr->is_humongous(), "Should be no humongous regions in compaction queue");
 
 	// Warning : for a void parameter constructor, do not assign () at the end.
   G1SemeruCompactRegionClosure semeru_ms_compact;			// the closure to evacuate a single alive object to dest
@@ -470,7 +526,7 @@ G1SemeruCalculatePointersClosure::G1SemeruCalculatePointersClosure( G1SemeruSTWC
  *      which points to collector()->compaction_point(worker_id).
  * 
  */
-bool G1SemeruCalculatePointersClosure::do_heap_region(HeapRegion* hr) {
+bool G1SemeruCalculatePointersClosure::do_heap_region(SemeruHeapRegion* hr) {
   if (hr->is_humongous()) {     // 1) Humongous objects are not moved
     oop obj = oop(hr->humongous_start_region()->bottom());
     if (_bitmap->is_marked(obj)) {      // Both start and following humongous Regions should be marked
@@ -496,7 +552,7 @@ bool G1SemeruCalculatePointersClosure::do_heap_region(HeapRegion* hr) {
  * Tag : a humongous Region need to be freed separately ?? 
  *  
  */
-void G1SemeruCalculatePointersClosure::free_humongous_region(HeapRegion* hr) {
+void G1SemeruCalculatePointersClosure::free_humongous_region(SemeruHeapRegion* hr) {
 
 	//debug
 	tty->print("%s, Error Not implement this function yet. \n", __func__);
@@ -520,7 +576,7 @@ void G1SemeruCalculatePointersClosure::free_humongous_region(HeapRegion* hr) {
  *  Handle the Remerber set infor mation.
  *  
  */
-void G1SemeruCalculatePointersClosure::reset_region_metadata(HeapRegion* hr) {
+void G1SemeruCalculatePointersClosure::reset_region_metadata(SemeruHeapRegion* hr) {
 
 
 	//debug
@@ -541,14 +597,22 @@ void G1SemeruCalculatePointersClosure::reset_region_metadata(HeapRegion* hr) {
  * Semeru MS : Add a Region into current compaction thread's CompactionPoint.
  *  
  */
-void G1SemeruCalculatePointersClosure::prepare_for_compaction(HeapRegion* hr) {
-  if (!_cp->is_initialized()) {   	// if G1FullGCCompactionPoint is not setted, compact to itself.
-    hr->set_compaction_top(hr->bottom());
-    _cp->initialize(hr, true);			// Enqueue current Source Region as the first Destination Region.
-  }
-  // Enqueue this Region into destination Region queue.
-  _cp->add(hr);
-  prepare_for_compaction_work(_cp, hr);
+void G1SemeruCalculatePointersClosure::prepare_for_compaction(SemeruHeapRegion* hr) {
+
+
+	//debug
+	tty->print("%s, Error, the _cp needs to be replaced with \n",__func__);
+
+  // if (!_cp->is_initialized()) {   	// if G1FullGCCompactionPoint is not setted, compact to itself.
+  //   hr->set_compaction_top(hr->bottom());
+  //   _cp->initialize(hr, true);			// Enqueue current Source Region as the first Destination Region.
+  // }
+  // // Enqueue this Region into destination Region queue.
+  // _cp->add(hr);
+  // prepare_for_compaction_work(_cp, hr);
+
+
+
 }
 
 
@@ -561,9 +625,9 @@ void G1SemeruCalculatePointersClosure::prepare_for_compaction(HeapRegion* hr) {
  * 
  */
 void G1SemeruCalculatePointersClosure::prepare_for_compaction_work(G1FullGCCompactionPoint* cp,
-                                                                                  HeapRegion* hr) {
+                                                                                  SemeruHeapRegion* hr) {
   G1SemeruPrepareCompactLiveClosure prepare_compact(cp);
-  hr->set_compaction_top(hr->bottom());     // HeapRegion->_compaction_top is that if using this Region as a Destination, this is his top.
+  hr->set_compaction_top(hr->bottom());     // SemeruHeapRegion->_compaction_top is that if using this Region as a Destination, this is his top.
   hr->apply_to_marked_objects(_bitmap, &prepare_compact);
 }
 

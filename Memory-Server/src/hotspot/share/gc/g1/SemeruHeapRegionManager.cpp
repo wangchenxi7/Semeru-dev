@@ -25,17 +25,19 @@
 #include "precompiled.hpp"
 //#include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1ConcurrentRefine.hpp"
-#include "gc/g1/heapRegion.hpp"
+//#include "gc/g1/heapRegion.hpp"
 //#include "gc/g1/heapRegionManager.inline.hpp"
-#include "gc/g1/heapRegionSet.inline.hpp"
-#include "gc/g1/heterogeneousHeapRegionManager.hpp"
+//#include "gc/g1/heapRegionSet.inline.hpp"
+#include "gc/g1/heterogeneousHeapRegionManager.hpp"   // useless ?
 #include "gc/shared/collectorPolicy.hpp"
 #include "memory/allocation.hpp"
 #include "utilities/bitMap.inline.hpp"
 
 // Semeru
+#include "gc/g1/SemeruHeapRegion.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/SemeruHeapRegionManager.inline.hpp"
+#include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 
 
 /**
@@ -45,7 +47,7 @@
  * 			Change these conditions ?
  * 
  */
-class SemeruMasterFreeRegionListChecker : public HeapRegionSetChecker {
+class SemeruMasterFreeRegionListChecker : public SemeruHeapRegionSetChecker {
 public:
 	void check_mt_safety() {
 		// Master Free List MT safety protocol:
@@ -63,7 +65,7 @@ public:
 			guarantee(Memory_Pool_lock->owned_by_self(), "master free list MT safety protocol outside a safepoint");
 		}
 	}
-	bool is_correct_type(HeapRegion* hr) { return hr->is_free(); }
+	bool is_correct_type(SemeruHeapRegion* hr) { return hr->is_free(); }
 	const char* get_description() { return "Free Regions"; }
 };
 
@@ -100,19 +102,19 @@ SemeruHeapRegionManager::SemeruHeapRegionManager() :
 	_num_committed(0),
 	_allocated_heapregions_length(0),
 	_regions(),
-	_free_list("Free list", new SemeruMasterFreeRegionListChecker()),
+	_free_list("Semeru Free list", new SemeruMasterFreeRegionListChecker()),
 	_heap_mapper(NULL)
 { }
 
 
 
 /**
- * Semeru's HeapRegion manager  
+ * Semeru's SemeruHeapRegion manager  
  * 
  */
 SemeruHeapRegionManager* SemeruHeapRegionManager::create_manager(G1SemeruCollectedHeap* heap, G1SemeruCollectorPolicy* policy) {
 	if (policy->is_hetero_heap()) {
-	//	return new HeterogeneousHeapRegionManager((uint)(policy->max_heap_byte_size() / HeapRegion::GrainBytes) /*heap size as num of regions*/);
+	//	return new HeterogeneousHeapRegionManager((uint)(policy->max_heap_byte_size() / SemeruHeapRegion::SemeruGrainBytes) /*heap size as num of regions*/);
 		
 		// Error
 		printf("Error in %s, Semeru heap doesn't support heterogenous memory.\n", __func__);
@@ -150,7 +152,7 @@ SemeruHeapRegionManager* SemeruHeapRegionManager::create_manager(G1SemeruCollect
 
 // 	// Both _regions[] and _availale_map cover the whole reserved Java heap.
 // 	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
-// 	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
+// 	_regions.initialize(reserved.start(), reserved.end(), SemeruHeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
 
 // 	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
 // }
@@ -172,7 +174,7 @@ void SemeruHeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
 
 	// Both _regions[] and _availale_map cover the whole reserved Java heap.
 	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
-	_regions.initialize(reserved.start(), reserved.end(), HeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
+	_regions.initialize(reserved.start(), reserved.end(), SemeruHeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
 
 	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
 }
@@ -191,19 +193,19 @@ bool SemeruHeapRegionManager::is_available(uint region) const {
  * 		The difference between free and available ?
  * 		
  */
-bool SemeruHeapRegionManager::is_free(HeapRegion* hr) const {
+bool SemeruHeapRegionManager::is_free(SemeruHeapRegion* hr) const {
 	return _free_list.contains(hr);
 }
 #endif
 
 /**
- * Tag : Build HeapRegion management.
+ * Tag : Build SemeruHeapRegion management.
  *  
  */
-HeapRegion* SemeruHeapRegionManager::new_heap_region(uint hrm_index) {
+SemeruHeapRegion* SemeruHeapRegionManager::new_heap_region(uint hrm_index) {
 	G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 	HeapWord* bottom = g1h->bottom_addr_for_region(hrm_index);
-	MemRegion mr(bottom, bottom + HeapRegion::SemeruGrainWords);
+	MemRegion mr(bottom, bottom + SemeruHeapRegion::SemeruGrainWords);
 	assert(reserved().contains(mr), "invariant");
 	return g1h->new_heap_region(hrm_index, mr);
 }
@@ -236,7 +238,7 @@ void SemeruHeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 	// Print before uncommitting.
 	if (G1SemeruCollectedHeap::heap()->hr_printer()->is_active()) {
 		for (uint i = start; i < start + num_regions; i++) {
-			HeapRegion* hr = at(i);
+			SemeruHeapRegion* hr = at(i);
 			G1SemeruCollectedHeap::heap()->hr_printer()->uncommit(hr);
 		}
 	}
@@ -258,7 +260,7 @@ void SemeruHeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 
 
 /**
- * Tag : Allocate HeapRegion management metadata.
+ * Tag : Allocate SemeruHeapRegion management metadata.
  *  
  * [x] Where to allocate these data ? Normal C++ heap ? C_HEAP ? meta space ?
  * 			All the classes inherit from CHeapObj are allicated into native heap be overidden operator new.
@@ -266,13 +268,13 @@ void SemeruHeapRegionManager::uncommit_regions(uint start, size_t num_regions) {
 void SemeruHeapRegionManager::make_regions_available(uint start, uint num_regions, WorkGang* pretouch_gang) {
 	guarantee(num_regions > 0, "No point in calling this for zero regions");
 	
-	// 1) Allocate && initialize the HeapRegion management meta data
+	// 1) Allocate && initialize the SemeruHeapRegion management meta data
 	commit_regions(start, num_regions, pretouch_gang);
 	for (uint i = start; i < start + num_regions; i++) {
 		if (_regions.get_by_index(i) == NULL) {
-			HeapRegion* new_hr = new_heap_region(i);			// 1) Invoke constructor. And then already invokes the HeapRegion::initialization ?
+			SemeruHeapRegion* new_hr = new_heap_region(i);			// 1) Invoke constructor. And then already invokes the SemeruHeapRegion::initialization ?
 			OrderAccess::storestore();
-			_regions.set_by_index(i, new_hr);   //  G1HeapRegionTable _regions; <region_index, HeapRegion*>
+			_regions.set_by_index(i, new_hr);   //  G1HeapRegionTable _regions; <region_index, SemeruHeapRegion*>
 			_allocated_heapregions_length = MAX2(_allocated_heapregions_length, i + 1);
 		}
 	}
@@ -282,16 +284,16 @@ void SemeruHeapRegionManager::make_regions_available(uint start, uint num_region
 	// 2) Initialize the management for the space 
 	for (uint i = start; i < start + num_regions; i++) {
 		assert(is_available(i), "Just made region %u available but is apparently not.", i);
-		HeapRegion* hr = at(i);		//  Retrieve the HeapRegion.
+		SemeruHeapRegion* hr = at(i);		//  Retrieve the SemeruHeapRegion.
 		if (G1SemeruCollectedHeap::heap()->hr_printer()->is_active()) {
 			G1SemeruCollectedHeap::heap()->hr_printer()->commit(hr);
 		}
 		HeapWord* bottom = G1SemeruCollectedHeap::heap()->bottom_addr_for_region(i);	// start addr for the Region[i]
-		MemRegion mr(bottom, bottom + HeapRegion::SemeruGrainWords);									// MR.
+		MemRegion mr(bottom, bottom + SemeruHeapRegion::SemeruGrainWords);									// MR.
 
-		hr->initialize(mr, (size_t)i);		// 2) initialzie more fileds for each HeapRegion.
+		hr->initialize(mr, (size_t)i);		// 2) initialzie more fileds for each SemeruHeapRegion.
 
-		// RDMA : Allocate the HeapRegion->_target_obj_q here.
+		// RDMA : Allocate the SemeruHeapRegion->_target_obj_q here.
 		hr->allocate_init_target_oop_queue(hr->hrm_index()); 
 		
 		insert_into_free_list(at(i));
@@ -411,7 +413,7 @@ uint SemeruHeapRegionManager::find_contiguous(size_t num, bool empty_only) {
 	uint cur = 0;							// Start from 0 ? nor from current index ?
 
 	while (length_found < num && cur < max_length()) {
-		HeapRegion* hr = _regions.get_by_index(cur);
+		SemeruHeapRegion* hr = _regions.get_by_index(cur);
 		if ((!empty_only && !is_available(cur)) || (is_available(cur) && hr != NULL && hr->is_empty())) {
 			// This region is a potential candidate for allocation into.
 			length_found++;
@@ -425,7 +427,7 @@ uint SemeruHeapRegionManager::find_contiguous(size_t num, bool empty_only) {
 
 	if (length_found == num) {
 		for (uint i = found; i < (found + num); i++) {
-			HeapRegion* hr = _regions.get_by_index(i);
+			SemeruHeapRegion* hr = _regions.get_by_index(i);
 			// sanity check
 			guarantee((!empty_only && !is_available(i)) || (is_available(i) && hr != NULL && hr->is_empty()),
 								"Found region sequence starting at " UINT32_FORMAT ", length " SIZE_FORMAT
@@ -437,11 +439,11 @@ uint SemeruHeapRegionManager::find_contiguous(size_t num, bool empty_only) {
 	}
 }
 
-HeapRegion* SemeruHeapRegionManager::next_region_in_heap(const HeapRegion* r) const {
+SemeruHeapRegion* SemeruHeapRegionManager::next_region_in_heap(const SemeruHeapRegion* r) const {
 	guarantee(r != NULL, "Start region must be a valid region");
 	guarantee(is_available(r->hrm_index()), "Trying to iterate starting from region %u which is not in the heap", r->hrm_index());
 	for (uint i = r->hrm_index() + 1; i < _allocated_heapregions_length; i++) {
-		HeapRegion* hr = _regions.get_by_index(i);
+		SemeruHeapRegion* hr = _regions.get_by_index(i);
 		if (is_available(i)) {
 			return hr;
 		}
@@ -449,14 +451,14 @@ HeapRegion* SemeruHeapRegionManager::next_region_in_heap(const HeapRegion* r) co
 	return NULL;
 }
 
-void SemeruHeapRegionManager::iterate(HeapRegionClosure* blk) const {
+void SemeruHeapRegionManager::iterate(SemeruHeapRegionClosure* blk) const {
 	uint len = max_length();
 
 	for (uint i = 0; i < len; i++) {
 		if (!is_available(i)) {
 			continue;
 		}
-		guarantee(at(i) != NULL, "Tried to access region %u that has a NULL HeapRegion*", i);
+		guarantee(at(i) != NULL, "Tried to access region %u that has a NULL SemeruHeapRegion*", i);
 		bool res = blk->do_heap_region(at(i));
 		if (res) {
 			blk->set_incomplete();
@@ -505,7 +507,7 @@ uint SemeruHeapRegionManager::find_highest_free(bool* expanded) {
 	// committed, expand_at that index.
 	uint curr = max_length() - 1;
 	while (true) {
-		HeapRegion *hr = _regions.get_by_index(curr);
+		SemeruHeapRegion *hr = _regions.get_by_index(curr);
 		if (hr == NULL || !is_available(curr)) {
 			uint res = expand_at(curr, 1, NULL);
 			if (res == 1) {
@@ -537,7 +539,7 @@ bool SemeruHeapRegionManager::allocate_containing_regions(MemRegion range, size_
 			commits++;
 			expand_at(curr_index, 1, pretouch_workers);
 		}
-		HeapRegion* curr_region  = _regions.get_by_index(curr_index);
+		SemeruHeapRegion* curr_region  = _regions.get_by_index(curr_index);
 		if (!curr_region->is_free()) {
 			return false;
 		}
@@ -549,12 +551,12 @@ bool SemeruHeapRegionManager::allocate_containing_regions(MemRegion range, size_
 }
 
 /**
- * Tag : Apply closure to HeapRegion parallely.
+ * Tag : Apply closure to SemeruHeapRegion parallely.
  * 	hrclaimer, get a region from freelist. 
- * 	HeapRegionClosure : The closure applied to the got HeapRegion.
+ * 	SemeruHeapRegionClosure : The closure applied to the got SemeruHeapRegion.
  * 
  */
-void SemeruHeapRegionManager::par_iterate(HeapRegionClosure* blk, SemeruHeapRegionClaimer* hrclaimer, const uint start_index) const {
+void SemeruHeapRegionManager::par_iterate(SemeruHeapRegionClosure* blk, SemeruHeapRegionClaimer* hrclaimer, const uint start_index) const {
 	// Every worker will actually look at all regions, skipping over regions that
 	// are currently not committed.
 	// This also (potentially) iterates over regions newly allocated during GC. This
@@ -567,7 +569,7 @@ void SemeruHeapRegionManager::par_iterate(HeapRegionClosure* blk, SemeruHeapRegi
 		if (!is_available(index)) {
 			continue;
 		}
-		HeapRegion* r = _regions.get_by_index(index);
+		SemeruHeapRegion* r = _regions.get_by_index(index);
 		// We'll ignore regions already claimed.
 		// However, if the iteration is specified as concurrent, the values for
 		// is_starts_humongous and is_continues_humongous can not be trusted,
@@ -674,7 +676,7 @@ void SemeruHeapRegionManager::verify() {
 			continue;
 		}
 		num_committed++;
-		HeapRegion* hr = _regions.get_by_index(i);
+		SemeruHeapRegion* hr = _regions.get_by_index(i);
 		guarantee(hr != NULL, "invariant: i: %u", i);
 		guarantee(!prev_committed || hr->bottom() == prev_end,
 							"invariant i: %u " HR_FORMAT " prev_end: " PTR_FORMAT,

@@ -22,13 +22,13 @@
  *
  */
 
-#ifndef SHARE_VM_GC_G1_HEAPREGION_INLINE_HPP
-#define SHARE_VM_GC_G1_HEAPREGION_INLINE_HPP
+#ifndef SHARE_VM_GC_G1_SEMERU_HEAPREGION_INLINE_HPP
+#define SHARE_VM_GC_G1_SEMERU_HEAPREGION_INLINE_HPP
 
 #include "gc/g1/g1BlockOffsetTable.inline.hpp"
-#include "gc/g1/g1CollectedHeap.inline.hpp"
+//#include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1ConcurrentMarkBitMap.inline.hpp"
-#include "gc/g1/heapRegion.hpp"
+//#include "gc/g1/heapRegion.hpp"
 #include "gc/shared/space.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/atomic.hpp"
@@ -36,109 +36,16 @@
 #include "utilities/align.hpp"
 
 
-
-/**
- * Tag : allocate object into a G1 Heap region
- * 
- * [?] Is this region thread local ??
- * 
- * Can't find any lock ?
- * 
- * 
- * x.Region Architecture:
- * G1ContiguousSpace   ----> CompactibleSpace  ---> Space  --> CHeapObj
- *  =>top(Allocate pointer)                          =>_bottom
- *                                                   =>_end
- * 
- */
-inline HeapWord* G1ContiguousSpace::allocate_impl(size_t min_word_size,
-																									size_t desired_word_size,
-																									size_t* actual_size) {
-	HeapWord* obj = top();
-	size_t available = pointer_delta(end(), obj);
-	size_t want_to_allocate = MIN2(available, desired_word_size);
-	if (want_to_allocate >= min_word_size) {
-		HeapWord* new_top = obj + want_to_allocate;
-		set_top(new_top);
-		assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
-		*actual_size = want_to_allocate;
-		return obj;
-	} else {
-		return NULL;
-	}
-}
+// Semeru
+#include "gc/g1/heapRegion.inline.hpp"		// Use some functions defined in here.
+#include "gc/g1/SemeruHeapRegion.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 
 
-/**
- * Tag : concurrent object allocation in a G1 Heap Region
- * 		=> Allocate into current Region, or return NULL.
- * While loop + Atomic::cmpxchg(new_val, mem/dest_var, cmp/old_val)
- * 
- */
-inline HeapWord* G1ContiguousSpace::par_allocate_impl(size_t min_word_size,
-																											size_t desired_word_size,
-																											size_t* actual_size) {
-	do {
-		HeapWord* obj = top();
-		size_t available = pointer_delta(end(), obj);
-		size_t want_to_allocate = MIN2(available, desired_word_size);
-		if (want_to_allocate >= min_word_size) {
-			HeapWord* new_top = obj + want_to_allocate;
-			HeapWord* result = Atomic::cmpxchg(new_top, top_addr(), obj);
-			// result can be one of two:
-			//  the old top value: the exchange succeeded
-			//  otherwise: the new value of the top is returned.
-			if (result == obj) {
-				assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
-				*actual_size = want_to_allocate;
-				return obj;
-			}
-		} else {
-			return NULL;
-		}
-	} while (true);
-}
 
-inline HeapWord* G1ContiguousSpace::allocate(size_t min_word_size,
-																						 size_t desired_word_size,
-																						 size_t* actual_size) {
-	HeapWord* res = allocate_impl(min_word_size, desired_word_size, actual_size);
-	if (res != NULL) {
-		_bot_part.alloc_block(res, *actual_size);
-	}
-	return res;
-}
 
-inline HeapWord* G1ContiguousSpace::allocate(size_t word_size) {
-	size_t temp;
-	return allocate(word_size, word_size, &temp);
-}
 
-inline HeapWord* G1ContiguousSpace::par_allocate(size_t word_size) {
-	size_t temp;
-	return par_allocate(word_size, word_size, &temp);
-}
-
-// Because of the requirement of keeping "_offsets" up to date with the
-// allocations, we sequentialize these with a lock.  Therefore, best if
-// this is used for larger LAB allocations only.
-inline HeapWord* G1ContiguousSpace::par_allocate(size_t min_word_size,
-																								 size_t desired_word_size,
-																								 size_t* actual_size) {
-	MutexLocker x(&_par_alloc_lock);
-	return allocate(min_word_size, desired_word_size, actual_size);
-}
-
-inline HeapWord* G1ContiguousSpace::block_start(const void* p) {
-	return _bot_part.block_start(p);
-}
-
-inline HeapWord*
-G1ContiguousSpace::block_start_const(const void* p) const {
-	return _bot_part.block_start_const(p);
-}
-
-inline bool HeapRegion::is_obj_dead_with_size(const oop obj, const G1CMBitMap* const prev_bitmap, size_t* size) const {
+inline bool SemeruHeapRegion::is_obj_dead_with_size(const oop obj, const G1CMBitMap* const prev_bitmap, size_t* size) const {
 	HeapWord* addr = (HeapWord*) obj;
 
 	assert(addr < top(), "must be");
@@ -158,8 +65,8 @@ inline bool HeapRegion::is_obj_dead_with_size(const oop obj, const G1CMBitMap* c
 }
 
 inline bool
-HeapRegion::block_is_obj(const HeapWord* p) const {
-	G1CollectedHeap* g1h = G1CollectedHeap::heap();
+SemeruHeapRegion::block_is_obj(const HeapWord* p) const {
+	G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 
 	if (!this->is_in(p)) {
 		assert(is_continues_humongous(), "This case can only happen for humongous regions");
@@ -171,7 +78,7 @@ HeapRegion::block_is_obj(const HeapWord* p) const {
 	return p < top();
 }
 
-inline size_t HeapRegion::block_size_using_bitmap(const HeapWord* addr, const G1CMBitMap* const prev_bitmap) const {
+inline size_t SemeruHeapRegion::block_size_using_bitmap(const HeapWord* addr, const G1CMBitMap* const prev_bitmap) const {
 	assert(ClassUnloadingWithConcurrentMark,
 				 "All blocks should be objects if class unloading isn't used, so this method should not be called. "
 				 "HR: [" PTR_FORMAT ", " PTR_FORMAT ", " PTR_FORMAT ") "
@@ -186,14 +93,14 @@ inline size_t HeapRegion::block_size_using_bitmap(const HeapWord* addr, const G1
 	return pointer_delta(next, addr);
 }
 
-inline bool HeapRegion::is_obj_dead(const oop obj, const G1CMBitMap* const prev_bitmap) const {
+inline bool SemeruHeapRegion::is_obj_dead(const oop obj, const G1CMBitMap* const prev_bitmap) const {
 	assert(is_in_reserved(obj), "Object " PTR_FORMAT " must be in region", p2i(obj));
 	return !obj_allocated_since_prev_marking(obj) &&
 				 !prev_bitmap->is_marked((HeapWord*)obj) &&
 				 !is_open_archive();
 }
 
-inline size_t HeapRegion::block_size(const HeapWord *addr) const {
+inline size_t SemeruHeapRegion::block_size(const HeapWord *addr) const {
 	if (addr == top()) {
 		return pointer_delta(end(), addr);
 	}
@@ -202,10 +109,10 @@ inline size_t HeapRegion::block_size(const HeapWord *addr) const {
 		return oop(addr)->size();
 	}
 
-	return block_size_using_bitmap(addr, G1CollectedHeap::heap()->concurrent_mark()->prev_mark_bitmap());
+	return block_size_using_bitmap(addr, G1SemeruCollectedHeap::heap()->concurrent_mark()->prev_mark_bitmap());
 }
 
-inline void HeapRegion::complete_compaction() {
+inline void SemeruHeapRegion::complete_compaction() {
 	// Reset space and bot after compaction is complete if needed.
 	reset_after_compaction();
 	if (used_region().is_empty()) {
@@ -240,7 +147,7 @@ inline void HeapRegion::complete_compaction() {
  * 			 So the <typename ApplyToMarkedClosure> will be asigned the parameter, closure, 's class type.
  */
 template<typename ApplyToMarkedClosure>
-inline void HeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure) {
+inline void SemeruHeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure) {
 	HeapWord* limit = scan_limit();		// current Region top
 	HeapWord* next_addr = bottom();		// from Region start
 
@@ -263,46 +170,46 @@ inline void HeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarke
 
 
 
-inline HeapWord* HeapRegion::par_allocate_no_bot_updates(size_t min_word_size,
+inline HeapWord* SemeruHeapRegion::par_allocate_no_bot_updates(size_t min_word_size,
 																												 size_t desired_word_size,
 																												 size_t* actual_word_size) {
 	assert(is_young(), "we can only skip BOT updates on young regions");
 	return par_allocate_impl(min_word_size, desired_word_size, actual_word_size);
 }
 
-inline HeapWord* HeapRegion::allocate_no_bot_updates(size_t word_size) {
+inline HeapWord* SemeruHeapRegion::allocate_no_bot_updates(size_t word_size) {
 	size_t temp;
 	return allocate_no_bot_updates(word_size, word_size, &temp);
 }
 
-inline HeapWord* HeapRegion::allocate_no_bot_updates(size_t min_word_size,
+inline HeapWord* SemeruHeapRegion::allocate_no_bot_updates(size_t min_word_size,
 																										 size_t desired_word_size,
 																										 size_t* actual_word_size) {
 	assert(is_young(), "we can only skip BOT updates on young regions");
 	return allocate_impl(min_word_size, desired_word_size, actual_word_size);
 }
 
-inline void HeapRegion::note_start_of_marking() {
+inline void SemeruHeapRegion::note_start_of_marking() {
 	_next_marked_bytes = 0;
 	_next_top_at_mark_start = top();
 }
 
-inline void HeapRegion::note_end_of_marking() {
+inline void SemeruHeapRegion::note_end_of_marking() {
 	_prev_top_at_mark_start = _next_top_at_mark_start;
 	_next_top_at_mark_start = bottom();
 	_prev_marked_bytes = _next_marked_bytes;
 	_next_marked_bytes = 0;
 }
 
-inline bool HeapRegion::in_collection_set() const {
-	return G1CollectedHeap::heap()->is_in_cset(this);
+inline bool SemeruHeapRegion::in_collection_set() const {
+	return G1SemeruCollectedHeap::heap()->is_in_cset(this);
 }
 
 // Test if this object is in current Region.
 // 1) The value of oop is the start address of the object, count in HeapWords.
-// 2) The object can't span 2 HeapRegion in Semeru.
-// 3) Check if the HeapRegion->_bottom and obj are in same HeapRegion.
-// inline bool HeapRegion::is_in_heapregion(oop obj){
+// 2) The object can't span 2 SemeruHeapRegion in Semeru.
+// 3) Check if the SemeruHeapRegion->_bottom and obj are in same SemeruHeapRegion.
+// inline bool SemeruHeapRegion::is_in_heapregion(oop obj){
 //   return (((uintptr_t)this->bottom() ^ cast_from_oop<uintptr_t>(obj)  ) >> LogOfHRGrainWords) == 0;
 // }
 
@@ -311,11 +218,11 @@ inline bool HeapRegion::in_collection_set() const {
 
 
 template <class Closure, bool is_gc_active>
-bool HeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
+bool SemeruHeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
 																							Closure* cl,
-																							G1CollectedHeap* g1h) {
+																							G1SemeruCollectedHeap* g1h) {
 	assert(is_humongous(), "precondition");
-	HeapRegion* sr = humongous_start_region();
+	SemeruHeapRegion* sr = humongous_start_region();
 	oop obj = oop(sr->bottom());
 
 	// If concurrent and klass_or_null is NULL, then space has been
@@ -353,7 +260,7 @@ bool HeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
 
 
 /**
- * Tag : Scan a specific card(Dirty Card) of this HeapRegion
+ * Tag : Scan a specific card(Dirty Card) of this SemeruHeapRegion
  *  
  * The real action of handling the oop is based on the Closure definition.
  * 
@@ -361,20 +268,20 @@ bool HeapRegion::do_oops_on_card_in_humongous(MemRegion mr,
  * 		parsable, // not stale
  * 		old region,
  * 		card is valid,
- * 				=> Not exceed HeapRegion->scan_limit
+ * 				=> Not exceed SemeruHeapRegion->scan_limit
  * 				=> card is dirty
  */
 template <bool is_gc_active, class Closure>
-bool HeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
+bool SemeruHeapRegion::oops_on_card_seq_iterate_careful(MemRegion mr,
 																									Closure* cl) {
 	assert(MemRegion(bottom(), end()).contains(mr), "Card region not in heap region");
-	G1CollectedHeap* g1h = G1CollectedHeap::heap();
+	G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 
 	// Special handling for humongous regions.
 	if (is_humongous()) {
 		return do_oops_on_card_in_humongous<Closure, is_gc_active>(mr, cl, g1h);
 	}
-	assert(is_old() || is_archive(), "Wrongly trying to iterate over region %u type %s", _hrm_index, get_type_str());
+	assert(is_old() || is_archive(), "Wrongly trying to iterate over region %u type %s", _cpu_to_mem_init->_hrm_index, get_type_str());
 
 	// Because mr has been trimmed to what's been allocated in this
 	// region, the parts of the heap that are examined here are always

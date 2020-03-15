@@ -57,9 +57,9 @@
 #include "gc/g1/g1YCTypes.hpp"
 #include "gc/g1/g1YoungRemSetSamplingThread.hpp"
 #include "gc/g1/g1VMOperations.hpp"
-#include "gc/g1/heapRegion.inline.hpp"
+// #include "gc/g1/heapRegion.inline.hpp"
 #include "gc/g1/heapRegionRemSet.hpp"
-#include "gc/g1/heapRegionSet.inline.hpp"
+// #include "gc/g1/heapRegionSet.inline.hpp"
 #include "gc/shared/gcBehaviours.hpp"
 #include "gc/shared/gcHeapSummary.hpp"
 #include "gc/shared/gcId.hpp"
@@ -100,6 +100,9 @@
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
+#include "gc/g1/SemeruHeapRegion.inline.hpp"
+#include "gc/g1/SemeruHeapRegionSet.inline.hpp"
+
 
 #ifdef ASSERT
 // debug
@@ -125,11 +128,11 @@ size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 // 	G1SemeruCollectedHeap* _g1h;
 // 	G1CardTable* _g1_ct;
 
-// 	HeapRegion* region_for_card(jbyte* card_ptr) const {
+// 	SemeruHeapRegion* region_for_card(jbyte* card_ptr) const {
 // 		return _g1h->heap_region_containing(_g1_ct->addr_for(card_ptr));
 // 	}
 
-// 	bool will_become_free(HeapRegion* hr) const {
+// 	bool will_become_free(SemeruHeapRegion* hr) const {
 // 		// A region will be freed by free_collection_set if the region is in the
 // 		// collection set and has not had an evacuation failure.
 // 		return _g1h->is_in_cset(hr) && !hr->evacuation_failed();
@@ -140,7 +143,7 @@ size_t G1SemeruCollectedHeap::_humongous_object_threshold_in_words = 0;
 // 		_num_dirtied(0), _g1h(g1h), _g1_ct(g1h->card_table()) { }
 
 // 	bool do_card_ptr(jbyte* card_ptr, uint worker_i) {
-// 		HeapRegion* hr = region_for_card(card_ptr);
+// 		SemeruHeapRegion* hr = region_for_card(card_ptr);
 
 // 		// Should only dirty cards in regions that won't be freed.
 // 		if (!will_become_free(hr)) {
@@ -166,9 +169,9 @@ void G1SemeruRegionMappingChangedListener::on_commit(uint start_idx, size_t num_
 }
 
 
-HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
+SemeruHeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 																						 MemRegion mr) {
-	return new HeapRegion(hrs_index, bot(), mr);
+	return new SemeruHeapRegion(hrs_index, bot(), mr);
 }
 
 // //  Private methods.
@@ -179,12 +182,12 @@ HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 //  *  If allocate new region failed, try to expand the heap size to Xmx#G.
 //  *  Can't trigger GC here.
 //  */ 
-// HeapRegion* G1SemeruCollectedHeap::new_region(size_t word_size, HeapRegionType type, bool do_expand) {
-// 	assert(!is_humongous(word_size) || word_size <= HeapRegion::GrainWords,
+// SemeruHeapRegion* G1SemeruCollectedHeap::new_region(size_t word_size, HeapRegionType type, bool do_expand) {
+// 	assert(!is_humongous(word_size) || word_size <= SemeruHeapRegion::SemeruGrainWords,
 // 				 "the only time we use this to allocate a humongous region is "
 // 				 "when we are allocating a single humongous region");
 
-// 	HeapRegion* res = _hrm->allocate_free_region(type);
+// 	SemeruHeapRegion* res = _hrm->allocate_free_region(type);
 
 // 	if (res == NULL && do_expand && _expand_heap_after_alloc_failure) {
 // 		// Currently, only attempts to allocate GC alloc regions set
@@ -225,7 +228,7 @@ HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 // 																													 size_t word_size) {
 // 	assert(first != G1_NO_HRM_INDEX, "pre-condition");
 // 	assert(is_humongous(word_size), "word_size should be humongous");
-// 	assert(num_regions * HeapRegion::GrainWords >= word_size, "pre-condition");
+// 	assert(num_regions * SemeruHeapRegion::SemeruGrainWords >= word_size, "pre-condition");
 
 // 	// Index of last region in the series.
 // 	uint last = first + num_regions - 1;
@@ -239,16 +242,16 @@ HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 // 	// a specific order.
 // 	//
 // 	// [?] Why does the Refinement process can affect the humonguous object allocation ?
-// 	//		 It only transfer mutator dirty cards to HeapRegion ?
+// 	//		 It only transfer mutator dirty cards to SemeruHeapRegion ?
 // 	//			It can scan the thesee humonguous Regions ?
 // 	//
 
 // 	// The word size sum of all the regions we will allocate.
-// 	size_t word_size_sum = (size_t) num_regions * HeapRegion::GrainWords;
+// 	size_t word_size_sum = (size_t) num_regions * SemeruHeapRegion::SemeruGrainWords;
 // 	assert(word_size <= word_size_sum, "sanity");
 
 // 	// This will be the "starts humongous" region.
-// 	HeapRegion* first_hr = region_at(first);
+// 	SemeruHeapRegion* first_hr = region_at(first);
 // 	// The header of the new object will be placed at the bottom of
 // 	// the first region.
 // 	HeapWord* new_obj = first_hr->bottom();
@@ -294,7 +297,7 @@ HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 // 	_g1_policy->remset_tracker()->update_at_allocate(first_hr);
 // 	// Then, if there are any, we will set up the "continues
 // 	// humongous" regions.
-// 	HeapRegion* hr = NULL;
+// 	SemeruHeapRegion* hr = NULL;
 // 	for (uint i = first + 1; i <= last; ++i) {
 // 		hr = region_at(i);
 // 		hr->set_continues_humongous(first_hr);			// Mark the Regions as Humonguous 
@@ -351,7 +354,7 @@ HeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
  */
 size_t G1SemeruCollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
 	assert(is_humongous(word_size), "Object of size " SIZE_FORMAT " must be humongous here", word_size);
-	return align_up(word_size, HeapRegion::GrainWords) / HeapRegion::GrainWords;
+	return align_up(word_size, SemeruHeapRegion::SemeruGrainWords) / SemeruHeapRegion::SemeruGrainWords;
 }
 
 // // If could fit into free regions w/o expansion, try.
@@ -369,7 +372,7 @@ size_t G1SemeruCollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
 // 		// Only one region to allocate, try to use a fast path by directly allocating
 // 		// from the free lists. Do not try to expand here, we will potentially do that
 // 		// later.
-// 		HeapRegion* hr = new_region(word_size, HeapRegionType::Humongous, false /* do_expand */); //Single Region,same as Old Space path.
+// 		SemeruHeapRegion* hr = new_region(word_size, HeapRegionType::Humongous, false /* do_expand */); //Single Region,same as Old Space path.
 // 		if (hr != NULL) {
 // 			first = hr->hrm_index();
 // 		}
@@ -402,7 +405,7 @@ size_t G1SemeruCollectedHeap::humongous_obj_size_in_regions(size_t word_size) {
 
 // #ifdef ASSERT
 // 			for (uint i = first; i < first + obj_regions; ++i) {
-// 				HeapRegion* hr = region_at(i);
+// 				SemeruHeapRegion* hr = region_at(i);
 // 				assert(hr->is_free(), "sanity");
 // 				assert(hr->is_empty(), "sanity");
 // 				assert(is_on_master_free_list(hr), "sanity");
@@ -574,7 +577,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 	// Allocations in archive regions cannot be of a size that would be considered
 // 	// humongous even for a minimum-sized region, because G1 region sizes/boundaries
 // 	// may be different at archive-restore time.
-// 	return word_size >= humongous_threshold_for(HeapRegion::min_region_size_in_words());
+// 	return word_size >= humongous_threshold_for(SemeruHeapRegion::min_region_size_in_words());
 // }
 
 // HeapWord* G1SemeruCollectedHeap::archive_mem_allocate(size_t word_size) {
@@ -620,7 +623,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 
 // 	MemRegion reserved = _hrm->reserved();
 // 	HeapWord* prev_last_addr = NULL;
-// 	HeapRegion* prev_last_region = NULL;
+// 	SemeruHeapRegion* prev_last_region = NULL;
 
 // 	// Temporarily disable pretouching of heap pages. This interface is used
 // 	// when mmap'ing archived heap data in, so pre-touching is wasted.
@@ -652,7 +655,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 		// range ended, and adjust the start address so we don't try to allocate
 // 		// the same region again. If the current range is entirely within that
 // 		// region, skip it, just adjusting the recorded top.
-// 		HeapRegion* start_region = _hrm->addr_to_region(start_address);
+// 		SemeruHeapRegion* start_region = _hrm->addr_to_region(start_address);
 // 		if ((prev_last_region != NULL) && (start_region == prev_last_region)) {
 // 			start_address = start_region->end();
 // 			if (start_address > last_address) {
@@ -673,14 +676,14 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 		increase_used(word_size * HeapWordSize);
 // 		if (commits != 0) {
 // 			log_debug(gc, ergo, heap)("Attempt heap expansion (allocate archive regions). Total size: " SIZE_FORMAT "B",
-// 																HeapRegion::GrainWords * HeapWordSize * commits);
+// 																SemeruHeapRegion::SemeruGrainWords * HeapWordSize * commits);
 
 // 		}
 
 // 		// Mark each G1 region touched by the range as archive, add it to
 // 		// the old set, and set top.
-// 		HeapRegion* curr_region = _hrm->addr_to_region(start_address);
-// 		HeapRegion* last_region = _hrm->addr_to_region(last_address);
+// 		SemeruHeapRegion* curr_region = _hrm->addr_to_region(start_address);
+// 		SemeruHeapRegion* last_region = _hrm->addr_to_region(last_address);
 // 		prev_last_region = last_region;
 
 // 		while (curr_region != NULL) {
@@ -694,7 +697,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 			_hr_printer.alloc(curr_region);
 // 			_archive_set.add(curr_region);
 // 			HeapWord* top;
-// 			HeapRegion* next_region;
+// 			SemeruHeapRegion* next_region;
 // 			if (curr_region != last_region) {
 // 				top = curr_region->end();
 // 				next_region = _hrm->next_region_in_heap(curr_region);
@@ -721,7 +724,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 	assert(count != 0, "No MemRegions provided");
 // 	MemRegion reserved = _hrm->reserved();
 // 	HeapWord *prev_last_addr = NULL;
-// 	HeapRegion* prev_last_region = NULL;
+// 	SemeruHeapRegion* prev_last_region = NULL;
 
 // 	// For each MemRegion, create filler objects, if needed, in the G1 regions
 // 	// that contain the address range. The address range actually within the
@@ -739,8 +742,8 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 // 					 "Ranges not in ascending order: " PTR_FORMAT " <= " PTR_FORMAT ,
 // 					 p2i(start_address), p2i(prev_last_addr));
 
-// 		HeapRegion* start_region = _hrm->addr_to_region(start_address);
-// 		HeapRegion* last_region = _hrm->addr_to_region(last_address);
+// 		SemeruHeapRegion* start_region = _hrm->addr_to_region(start_address);
+// 		SemeruHeapRegion* last_region = _hrm->addr_to_region(last_address);
 // 		HeapWord* bottom_address = start_region->bottom();
 
 // 		// Check for a range beginning in the same region in which the
@@ -751,7 +754,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_slow(size_t word_size) {
 
 // 		// Verify that the regions were all marked as archive regions by
 // 		// alloc_archive_regions.
-// 		HeapRegion* curr_region = start_region;
+// 		SemeruHeapRegion* curr_region = start_region;
 // 		while (curr_region != NULL) {
 // 			guarantee(curr_region->is_archive(),
 // 								"Expected archive region at index %u", curr_region->hrm_index());
@@ -807,7 +810,7 @@ inline HeapWord* G1SemeruCollectedHeap::attempt_allocation(size_t min_word_size,
 // 	assert(count != 0, "No MemRegions provided");
 // 	MemRegion reserved = _hrm->reserved();
 // 	HeapWord* prev_last_addr = NULL;
-// 	HeapRegion* prev_last_region = NULL;
+// 	SemeruHeapRegion* prev_last_region = NULL;
 // 	size_t size_used = 0;
 // 	size_t uncommitted_regions = 0;
 
@@ -827,8 +830,8 @@ inline HeapWord* G1SemeruCollectedHeap::attempt_allocation(size_t min_word_size,
 // 		size_used += ranges[i].byte_size();
 // 		prev_last_addr = last_address;
 
-// 		HeapRegion* start_region = _hrm->addr_to_region(start_address);
-// 		HeapRegion* last_region = _hrm->addr_to_region(last_address);
+// 		SemeruHeapRegion* start_region = _hrm->addr_to_region(start_address);
+// 		SemeruHeapRegion* last_region = _hrm->addr_to_region(last_address);
 
 // 		// Check for ranges that start in the same G1 region in which the previous
 // 		// range ended, and adjust the start address so we don't try to free
@@ -845,7 +848,7 @@ inline HeapWord* G1SemeruCollectedHeap::attempt_allocation(size_t min_word_size,
 
 // 		// After verifying that each region was marked as an archive region by
 // 		// alloc_archive_regions, set it free and empty and uncommit it.
-// 		HeapRegion* curr_region = start_region;
+// 		SemeruHeapRegion* curr_region = start_region;
 // 		while (curr_region != NULL) {
 // 			guarantee(curr_region->is_archive(),
 // 								"Expected archive region at index %u", curr_region->hrm_index());
@@ -868,7 +871,7 @@ inline HeapWord* G1SemeruCollectedHeap::attempt_allocation(size_t min_word_size,
 
 // 	if (uncommitted_regions != 0) {
 // 		log_debug(gc, ergo, heap)("Attempt heap shrinking (uncommitted archive regions). Total size: " SIZE_FORMAT "B",
-// 															HeapRegion::GrainWords * HeapWordSize * uncommitted_regions);
+// 															SemeruHeapRegion::SemeruGrainWords * HeapWordSize * uncommitted_regions);
 // 	}
 // 	decrease_used(size_used);
 // }
@@ -935,7 +938,7 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_humongous(size_t word_size) 
 // 			result = humongous_obj_allocate(word_size);
 // 			if (result != NULL) {
 // 				size_t size_in_regions = humongous_obj_size_in_regions(word_size);
-// 				g1_policy()->add_bytes_allocated_in_old_since_last_gc(size_in_regions * HeapRegion::GrainBytes);
+// 				g1_policy()->add_bytes_allocated_in_old_since_last_gc(size_in_regions * SemeruHeapRegion::SemeruGrainBytes);
 // 				return result;
 // 			}
 
@@ -1035,11 +1038,11 @@ HeapWord* G1SemeruCollectedHeap::attempt_allocation_humongous(size_t word_size) 
 // 	ShouldNotReachHere();
 // }
 
-// class PostCompactionPrinterClosure: public HeapRegionClosure {
+// class PostCompactionPrinterClosure: public SemeruHeapRegionClosure {
 // private:
 // 	G1HRPrinter* _hr_printer;
 // public:
-// 	bool do_heap_region(HeapRegion* hr) {
+// 	bool do_heap_region(SemeruHeapRegion* hr) {
 // 		assert(!hr->is_young(), "not expecting to find young regions");
 // 		_hr_printer->post_compaction(hr);
 // 		return false;
@@ -1430,12 +1433,12 @@ void G1SemeruCollectedHeap::resize_heap_if_necessary() {
  * Tag : expand and commmit current heap until reach the limits setted by -Xmx#G/M/K
  * 
  * 		Inital committed size is setted by -Xms, the reserved size is setted by -Xmx.
- *  	Initialize the HeapRegion management at the same time.
+ *  	Initialize the SemeruHeapRegion management at the same time.
  */
 bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_workers, double* expand_time_ms) {
 	size_t aligned_expand_bytes = ReservedSpace::page_align_size_up(expand_bytes);	// Frist align up to page size.
 	aligned_expand_bytes = align_up(aligned_expand_bytes,
-																			 HeapRegion::SemeruGrainBytes);  // Second, align up to Regions size. 
+																			 SemeruHeapRegion::SemeruGrainBytes);  // Second, align up to Regions size. 
 
 	log_debug(gc, ergo, heap)("Expand the heap. requested expansion amount: " SIZE_FORMAT "B expansion amount: " SIZE_FORMAT "B",
 														expand_bytes, aligned_expand_bytes);
@@ -1446,7 +1449,7 @@ bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_worke
 	}
 
 	double expand_heap_start_time_sec = os::elapsedTime();
-	uint regions_to_expand = (uint)(aligned_expand_bytes / HeapRegion::SemeruGrainBytes);  // Expanding Region numbers.
+	uint regions_to_expand = (uint)(aligned_expand_bytes / SemeruHeapRegion::SemeruGrainBytes);  // Expanding Region numbers.
 	assert(regions_to_expand > 0, "Must expand by at least one region");
 
 	uint expanded_by = _hrm->expand_by(regions_to_expand, pretouch_workers);					// Do the expansion operation.
@@ -1455,7 +1458,7 @@ bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_worke
 	}
 
 	if (expanded_by > 0) {
-		size_t actual_expand_bytes = expanded_by * HeapRegion::GrainBytes;
+		size_t actual_expand_bytes = expanded_by * SemeruHeapRegion::SemeruGrainBytes;
 		assert(actual_expand_bytes <= aligned_expand_bytes, "post-condition");
 		g1_policy()->record_new_heap_size(num_regions());
 	} else {
@@ -1476,11 +1479,11 @@ bool G1SemeruCollectedHeap::expand(size_t expand_bytes, WorkGang* pretouch_worke
 // 	size_t aligned_shrink_bytes =
 // 		ReservedSpace::page_align_size_down(shrink_bytes);
 // 	aligned_shrink_bytes = align_down(aligned_shrink_bytes,
-// 																				 HeapRegion::GrainBytes);
-// 	uint num_regions_to_remove = (uint)(shrink_bytes / HeapRegion::GrainBytes);
+// 																				 SemeruHeapRegion::SemeruGrainBytes);
+// 	uint num_regions_to_remove = (uint)(shrink_bytes / SemeruHeapRegion::SemeruGrainBytes);
 
 // 	uint num_regions_removed = _hrm->shrink_by(num_regions_to_remove);
-// 	size_t shrunk_bytes = num_regions_removed * HeapRegion::GrainBytes;
+// 	size_t shrunk_bytes = num_regions_removed * SemeruHeapRegion::SemeruGrainBytes;
 
 
 // 	log_debug(gc, ergo, heap)("Shrink the heap. requested shrinking amount: " SIZE_FORMAT "B aligned shrinking amount: " SIZE_FORMAT "B attempted shrinking amount: " SIZE_FORMAT "B",
@@ -1539,7 +1542,7 @@ void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
 // 			guarantee(Heap_lock->owned_by_self(), "master old set MT safety protocol outside a safepoint");
 // 		}
 // 	}
-// 	bool is_correct_type(HeapRegion* hr) { return hr->is_old(); }
+// 	bool is_correct_type(SemeruHeapRegion* hr) { return hr->is_old(); }
 // 	const char* get_description() { return "Old Regions"; }
 // };
 
@@ -1549,7 +1552,7 @@ void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
 // 		guarantee(!Universe::is_fully_initialized() || SafepointSynchronize::is_at_safepoint(),
 // 							"May only change archive regions during initialization or safepoint.");
 // 	}
-// 	bool is_correct_type(HeapRegion* hr) { return hr->is_archive(); }
+// 	bool is_correct_type(SemeruHeapRegion* hr) { return hr->is_archive(); }
 // 	const char* get_description() { return "Archive Regions"; }
 // };
 
@@ -1573,7 +1576,7 @@ void G1SemeruCollectedHeap::shrink(size_t shrink_bytes) {
 // 								"master humongous set MT safety protocol outside a safepoint");
 // 		}
 // 	}
-// 	bool is_correct_type(HeapRegion* hr) { return hr->is_humongous(); }
+// 	bool is_correct_type(SemeruHeapRegion* hr) { return hr->is_humongous(); }
 // 	const char* get_description() { return "Humongous Regions"; }
 // };
 
@@ -1622,7 +1625,7 @@ G1SemeruCollectedHeap::G1SemeruCollectedHeap(G1SemeruCollectorPolicy* collector_
 
  //	_heap_sizing_policy = G1HeapSizingPolicy::create(this, _g1_policy->analytics());  //[?] Need to make it support semeru
 
- 	_humongous_object_threshold_in_words = humongous_threshold_for(HeapRegion::GrainWords);
+ 	_humongous_object_threshold_in_words = humongous_threshold_for(SemeruHeapRegion::SemeruGrainWords);
 
 // 	// Override the default _filler_array_max_size so that no humongous filler
 // 	// objects are created.
@@ -1695,7 +1698,7 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const cha
 		G1RegionToSpaceMapper::create_mapper(rs,
 																				 size,
 																				 page_size,
-																				 HeapRegion::SemeruGrainBytes,
+																				 SemeruHeapRegion::SemeruGrainBytes,
 																				 translation_factor,
 																				 mtGC);
 
@@ -1737,7 +1740,7 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper_from_rs(c
 		G1RegionToSpaceMapper::create_mapper(rs,
 																				 size,
 																				 page_size,
-																				 HeapRegion::SemeruGrainBytes,
+																				 SemeruHeapRegion::SemeruGrainBytes,
 																				 translation_factor,
 																				 mtGC);
 
@@ -1838,8 +1841,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 	// Ensure that the sizes are properly aligned.
-	Universe::check_alignment(init_byte_size, HeapRegion::SemeruGrainBytes, "g1 Semeru heap");  // Region size alignment
-	Universe::check_alignment(max_byte_size, HeapRegion::SemeruGrainBytes, "g1 Semeru heap");
+	Universe::check_alignment(init_byte_size, SemeruHeapRegion::SemeruGrainBytes, "g1 Semeru heap");  // Region size alignment
+	Universe::check_alignment(max_byte_size, SemeruHeapRegion::SemeruGrainBytes, "g1 Semeru heap");
 	//Universe::check_alignment(max_byte_size, heap_alignment, "g1 Semeru heap");		// useless here.
 
 
@@ -1967,7 +1970,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
  		G1RegionToSpaceMapper::create_heap_mapper(g1_rs,
  																							g1_rs.size(),
  																							page_size,
- 																							HeapRegion::SemeruGrainBytes,  // mapper for Semeru regions.
+ 																							SemeruHeapRegion::SemeruGrainBytes,  // mapper for Semeru regions.
  																							1,
  																							mtJavaHeap);
  	if(heap_storage == NULL) {
@@ -2046,11 +2049,11 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 	_g1_rem_set->initialize(max_reserved_capacity(), max_regions());
 
 // 	size_t max_cards_per_region = ((size_t)1 << (sizeof(CardIdx_t)*BitsPerByte-1)) - 1;  // (1<<4*8)-1 = 4G -1 ?
-// 	guarantee(HeapRegion::CardsPerRegion > 0, "make sure it's initialized");
-// 	guarantee(HeapRegion::CardsPerRegion < max_cards_per_region,
+// 	guarantee(SemeruHeapRegion::CardsPerRegion > 0, "make sure it's initialized");
+// 	guarantee(SemeruHeapRegion::CardsPerRegion < max_cards_per_region,
 // 						"too many cards per region");
 
-//	FreeRegionList::set_unrealistically_long_length(max_expandable_regions() + 1);  // This global variable can only be set once.
+	FreeSemeruRegionList::set_unrealistically_long_length(max_expandable_regions() + 1);  // This global variable can only be set once.
 
 	// do we initialize the  _reserved_semeru successfully ?
 	// 
@@ -2064,11 +2067,10 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	{
 		HeapWord* start = _hrm->reserved().start();
 		HeapWord* end = _hrm->reserved().end();
-		size_t granularity = HeapRegion::SemeruGrainBytes;    // Change to Semeru granulairty ??  => yes.
+		size_t granularity = SemeruHeapRegion::SemeruGrainBytes;    // Change to Semeru granulairty ??  => yes.
 
-		// Semeru memory server doesn't need the CSet.
-		// Not need the traditional CSet at lest.
-	//	_in_cset_fast_test.initialize(start, end, granularity);
+		// Semeru MS also may need to do fast test for each Region.
+		_in_cset_fast_test.initialize(start, end, granularity);
 
 
 	//	_humongous_reclaim_candidates.initialize(start, end, granularity);
@@ -2156,9 +2158,9 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 // 	//
 // 	// [?] What's the dummy Region,index 0 , used for ? sentinel ?
 // 	//
-// 	// Here we allocate the dummy HeapRegion that is required by the
+// 	// Here we allocate the dummy SemeruHeapRegion that is required by the
 // 	// G1AllocRegion class.
-// 	HeapRegion* dummy_region = _hrm->get_dummy_region();
+// 	SemeruHeapRegion* dummy_region = _hrm->get_dummy_region();
 
 // 	// We'll re-use the same region whether the alloc region will
 // 	// require BOT updates or not and, if it doesn't, then a non-young
@@ -2231,7 +2233,7 @@ void G1SemeruCollectedHeap::safepoint_synchronize_end() {
 }
 
 // size_t G1SemeruCollectedHeap::conservative_max_heap_alignment() {
-// 	return HeapRegion::max_region_size();
+// 	return SemeruHeapRegion::max_region_size();
 // }
 
 void G1SemeruCollectedHeap::post_initialize() {
@@ -2319,7 +2321,7 @@ SoftRefPolicy* G1SemeruCollectedHeap::soft_ref_policy() {
 }
 
 size_t G1SemeruCollectedHeap::capacity() const {
-	return _hrm->length() * HeapRegion::GrainBytes;
+	return _hrm->length() * SemeruHeapRegion::SemeruGrainBytes;
 }
 
 size_t G1SemeruCollectedHeap::unused_committed_regions_in_bytes() const {
@@ -2362,11 +2364,11 @@ size_t G1SemeruCollectedHeap::used_unlocked() const {
 	return _summary_bytes_used;
 }
 
-// class SumUsedClosure: public HeapRegionClosure {
+// class SumUsedClosure: public SemeruHeapRegionClosure {
 // 	size_t _used;
 // public:
 // 	SumUsedClosure() : _used(0) {}
-// 	bool do_heap_region(HeapRegion* r) {
+// 	bool do_heap_region(SemeruHeapRegion* r) {
 // 		_used += r->used();
 // 		return false;
 // 	}
@@ -2412,7 +2414,7 @@ size_t G1SemeruCollectedHeap::used_unlocked() const {
 // #ifndef PRODUCT
 // void G1SemeruCollectedHeap::allocate_dummy_regions() {
 // 	// Let's fill up most of the region
-// 	size_t word_size = HeapRegion::GrainWords - 1024;
+// 	size_t word_size = SemeruHeapRegion::SemeruGrainWords - 1024;
 // 	// And as a result the region we'll allocate will be humongous.
 // 	guarantee(is_humongous(word_size), "sanity");
 
@@ -2606,7 +2608,7 @@ bool G1SemeruCollectedHeap::is_in(const void* p) const {
 		// Given that we know that p is in the reserved space,
 		// heap_region_containing() should successfully
 		// return the containing region.
-		HeapRegion* hr = heap_region_containing(p);
+		SemeruHeapRegion* hr = heap_region_containing(p);
 		return hr->is_in(p);
 	} else {
 		return false;
@@ -2627,13 +2629,13 @@ bool G1SemeruCollectedHeap::is_in(const void* p) const {
 
 // Iteration functions.
 
-// Iterates an ObjectClosure over all objects within a HeapRegion.
+// Iterates an ObjectClosure over all objects within a SemeruHeapRegion.
 
-class SemeruIterateObjectClosureRegionClosure: public HeapRegionClosure {
+class SemeruIterateObjectClosureRegionClosure: public SemeruHeapRegionClosure {
 	ObjectClosure* _cl;
 public:
 	  SemeruIterateObjectClosureRegionClosure(ObjectClosure* cl) : _cl(cl) {}
-	bool do_heap_region(HeapRegion* r) {
+	bool do_heap_region(SemeruHeapRegion* r) {
 		if (!r->is_continues_humongous()) {
 			r->object_iterate(_cl);
 		}
@@ -2646,42 +2648,42 @@ void G1SemeruCollectedHeap::object_iterate(ObjectClosure* cl) {
 	heap_region_iterate(&blk);
 }
 
-void G1SemeruCollectedHeap::heap_region_iterate(HeapRegionClosure* cl) const {
+void G1SemeruCollectedHeap::heap_region_iterate(SemeruHeapRegionClosure* cl) const {
 	_hrm->iterate(cl);
 }
 
-void G1SemeruCollectedHeap::heap_region_par_iterate_from_worker_offset(HeapRegionClosure* cl,
+void G1SemeruCollectedHeap::heap_region_par_iterate_from_worker_offset(SemeruHeapRegionClosure* cl,
 																																 SemeruHeapRegionClaimer *hrclaimer,
 																																 uint worker_id) const {
 	_hrm->par_iterate(cl, hrclaimer, hrclaimer->offset_for_worker(worker_id));
 }
 
-// void G1SemeruCollectedHeap::heap_region_par_iterate_from_start(HeapRegionClosure* cl,
+// void G1SemeruCollectedHeap::heap_region_par_iterate_from_start(SemeruHeapRegionClosure* cl,
 // 																												 SemeruHeapRegionClaimer *hrclaimer) const {
 // 	_hrm->par_iterate(cl, hrclaimer, 0);
 // }
 
-// void G1SemeruCollectedHeap::collection_set_iterate(HeapRegionClosure* cl) {
+// void G1SemeruCollectedHeap::collection_set_iterate(SemeruHeapRegionClosure* cl) {
 // 	_collection_set.iterate(cl);
 // }
 
-// void G1SemeruCollectedHeap::collection_set_iterate_from(HeapRegionClosure *cl, uint worker_id) {
+// void G1SemeruCollectedHeap::collection_set_iterate_from(SemeruHeapRegionClosure *cl, uint worker_id) {
 // 	_collection_set.iterate_from(cl, worker_id, workers()->active_workers());
 // }
 
 HeapWord* G1SemeruCollectedHeap::block_start(const void* addr) const {
-	HeapRegion* hr = heap_region_containing(addr);
+	SemeruHeapRegion* hr = heap_region_containing(addr);
 	return hr->block_start(addr);
 }
 
 
 size_t G1SemeruCollectedHeap::block_size(const HeapWord* addr) const {
-	HeapRegion* hr = heap_region_containing(addr);
+	SemeruHeapRegion* hr = heap_region_containing(addr);
 	return hr->block_size(addr);
 }
 
 bool G1SemeruCollectedHeap::block_is_obj(const HeapWord* addr) const {
-	HeapRegion* hr = heap_region_containing(addr);
+	SemeruHeapRegion* hr = heap_region_containing(addr);
 	return hr->block_is_obj(addr);
 }
 
@@ -2690,11 +2692,11 @@ bool G1SemeruCollectedHeap::supports_tlab_allocation() const {
 }
 
 size_t G1SemeruCollectedHeap::tlab_capacity(Thread* ignored) const {
-	return (_g1_policy->young_list_target_length() - _survivor.length()) * HeapRegion::GrainBytes;
+	return (_g1_policy->young_list_target_length() - _survivor.length()) * SemeruHeapRegion::SemeruGrainBytes;
 }
 
 size_t G1SemeruCollectedHeap::tlab_used(Thread* ignored) const {
-	return _eden.length() * HeapRegion::GrainBytes;
+	return _eden.length() * SemeruHeapRegion::SemeruGrainBytes;
 }
 
 // For G1 TLABs should not contain humongous objects, so the maximum TLAB size
@@ -2708,11 +2710,11 @@ size_t G1SemeruCollectedHeap::max_tlab_size() const {
 // }
 
 size_t G1SemeruCollectedHeap::max_capacity() const {
- 	return _hrm->max_expandable_length() * HeapRegion::GrainBytes;
+ 	return _hrm->max_expandable_length() * SemeruHeapRegion::SemeruGrainBytes;
 }
 
 size_t G1SemeruCollectedHeap::max_reserved_capacity() const {
- 	return _hrm->max_length() * HeapRegion::GrainBytes;
+ 	return _hrm->max_length() * SemeruHeapRegion::SemeruGrainBytes;
 }
 
 jlong G1SemeruCollectedHeap::millis_since_last_gc() {
@@ -2756,38 +2758,38 @@ bool G1SemeruCollectedHeap::request_concurrent_phase(const char* phase) {
 	return _semeru_cm_thread->request_concurrent_phase(phase);
 }
 
-class SemeruPrintRegionClosure: public HeapRegionClosure {
+class SemeruPrintRegionClosure: public SemeruHeapRegionClosure {
 	outputStream* _st;
 public:
 	SemeruPrintRegionClosure(outputStream* st) : _st(st) {}
-	bool do_heap_region(HeapRegion* r) {
+	bool do_heap_region(SemeruHeapRegion* r) {
 		r->print_on(_st);
 		return false;
 	}
 };
 
-// bool G1SemeruCollectedHeap::is_obj_dead_cond(const oop obj,
-// 																			 const HeapRegion* hr,
-// 																			 const VerifyOption vo) const {
-// 	switch (vo) {
-// 	case VerifyOption_G1UsePrevMarking: return is_obj_dead(obj, hr);
-// 	case VerifyOption_G1UseNextMarking: return is_obj_ill(obj, hr);
-// 	case VerifyOption_G1UseFullMarking: return is_obj_dead_full(obj, hr);
-// 	default:                            ShouldNotReachHere();
-// 	}
-// 	return false; // keep some compilers happy
-// }
+bool G1SemeruCollectedHeap::is_obj_dead_cond(const oop obj,
+																			 const SemeruHeapRegion* hr,
+																			 const VerifyOption vo) const {
+	switch (vo) {
+	case VerifyOption_G1UsePrevMarking: return is_obj_dead(obj, hr);
+	case VerifyOption_G1UseNextMarking: return is_obj_ill(obj, hr);
+	case VerifyOption_G1UseFullMarking: return is_obj_dead_full(obj, hr);
+	default:                            ShouldNotReachHere();
+	}
+	return false; // keep some compilers happy
+}
 
-// bool G1SemeruCollectedHeap::is_obj_dead_cond(const oop obj,
-// 																			 const VerifyOption vo) const {
-// 	switch (vo) {
-// 	case VerifyOption_G1UsePrevMarking: return is_obj_dead(obj);
-// 	case VerifyOption_G1UseNextMarking: return is_obj_ill(obj);
-// 	case VerifyOption_G1UseFullMarking: return is_obj_dead_full(obj);
-// 	default:                            ShouldNotReachHere();
-// 	}
-// 	return false; // keep some compilers happy
-// }
+bool G1SemeruCollectedHeap::is_obj_dead_cond(const oop obj,
+																			 const VerifyOption vo) const {
+	switch (vo) {
+	case VerifyOption_G1UsePrevMarking: return is_obj_dead(obj);
+	case VerifyOption_G1UseNextMarking: return is_obj_ill(obj);
+	case VerifyOption_G1UseFullMarking: return is_obj_dead_full(obj);
+	default:                            ShouldNotReachHere();
+	}
+	return false; // keep some compilers happy
+}
 
 void G1SemeruCollectedHeap::print_heap_regions() const {
 	LogTarget(Trace, gc, heap, region) lt;
@@ -2805,13 +2807,13 @@ void G1SemeruCollectedHeap::print_on(outputStream* st) const {
 						p2i(_hrm->reserved().start()),
 						p2i(_hrm->reserved().end()));
 	st->cr();
-	st->print("  region size " SIZE_FORMAT "K, ", HeapRegion::GrainBytes / K);
+	st->print("  region size " SIZE_FORMAT "K, ", SemeruHeapRegion::SemeruGrainBytes / K);
 	uint young_regions = young_regions_count();
 	st->print("%u young (" SIZE_FORMAT "K), ", young_regions,
-						(size_t) young_regions * HeapRegion::GrainBytes / K);
+						(size_t) young_regions * SemeruHeapRegion::SemeruGrainBytes / K);
 	uint survivor_regions = survivor_regions_count();
 	st->print("%u survivors (" SIZE_FORMAT "K)", survivor_regions,
-						(size_t) survivor_regions * HeapRegion::GrainBytes / K);
+						(size_t) survivor_regions * SemeruHeapRegion::SemeruGrainBytes / K);
 	st->cr();
 	MetaspaceUtils::print_on(st);
 }
@@ -2872,13 +2874,13 @@ void G1SemeruCollectedHeap::print_tracing_info() const {
 #ifndef PRODUCT
 // Helpful for debugging RSet issues.
 
-class SemeruPrintRSetsClosure : public HeapRegionClosure {
+class SemeruPrintRSetsClosure : public SemeruHeapRegionClosure {
 private:
 	const char* _msg;
 	size_t _occupied_sum;
 
 public:
-	bool do_heap_region(HeapRegion* r) {
+	bool do_heap_region(SemeruHeapRegion* r) {
 		HeapRegionRemSet* hrrs = r->rem_set();
 		size_t occupied = hrrs->occupied();
 		_occupied_sum += occupied;
@@ -2922,14 +2924,14 @@ G1HeapSummary G1SemeruCollectedHeap::create_g1_heap_summary() {
 
 
 
-	size_t eden_used_bytes = heap()->eden_regions_count() * HeapRegion::GrainBytes;
-	size_t survivor_used_bytes = heap()->survivor_regions_count() * HeapRegion::GrainBytes;
+	size_t eden_used_bytes = heap()->eden_regions_count() * SemeruHeapRegion::SemeruGrainBytes;
+	size_t survivor_used_bytes = heap()->survivor_regions_count() * SemeruHeapRegion::SemeruGrainBytes;
 	//size_t heap_used = Heap_lock->owned_by_self() ? used() : used_unlocked();
 
 	size_t heap_used = Memory_Pool_lock->owned_by_self() ? used() : used_unlocked();
 
 	size_t eden_capacity_bytes =
-		(g1_policy()->young_list_target_length() * HeapRegion::GrainBytes) - survivor_used_bytes;
+		(g1_policy()->young_list_target_length() * SemeruHeapRegion::SemeruGrainBytes) - survivor_used_bytes;
 
 	VirtualSpaceSummary heap_summary = create_heap_space_summary();
 	return G1HeapSummary(heap_summary, heap_used, eden_used_bytes,
@@ -3073,171 +3075,185 @@ void G1SemeruCollectedHeap::do_concurrent_mark() {
 // 	return buffer_size * buffer_num + extra_cards;
 // }
 
-// bool G1SemeruCollectedHeap::is_potential_eager_reclaim_candidate(HeapRegion* r) const {
-// 	// We don't nominate objects with many remembered set entries, on
-// 	// the assumption that such objects are likely still live.
-// 	HeapRegionRemSet* rem_set = r->rem_set();
+bool G1SemeruCollectedHeap::is_potential_eager_reclaim_candidate(SemeruHeapRegion* r) const {
+	// We don't nominate objects with many remembered set entries, on
+	// the assumption that such objects are likely still live.
+	HeapRegionRemSet* rem_set = r->rem_set();
 
-// 	return G1EagerReclaimHumongousObjectsWithStaleRefs ?
-// 				 rem_set->occupancy_less_or_equal_than(G1RSetSparseRegionEntries) :
-// 				 G1EagerReclaimHumongousObjects && rem_set->is_empty();
-// }
+	return G1EagerReclaimHumongousObjectsWithStaleRefs ?
+				 rem_set->occupancy_less_or_equal_than(G1RSetSparseRegionEntries) :
+				 G1EagerReclaimHumongousObjects && rem_set->is_empty();
+}
 
-// class RegisterHumongousWithInCSetFastTestClosure : public HeapRegionClosure {
-//  private:
-// 	size_t _total_humongous;
-// 	size_t _candidate_humongous;
 
-// 	DirtyCardQueue _dcq;
 
-// 	bool humongous_region_is_candidate(G1SemeruCollectedHeap* g1h, HeapRegion* region) const {
-// 		assert(region->is_starts_humongous(), "Must start a humongous object");
 
-// 		oop obj = oop(region->bottom());
+/**
+ * Semeru MS : Add some Regions into Humongous CSet ?
+ *  
+ * 	Young, Old, Humongous all have seperate CSet ??
+ * 
+ * 
+ * 	[?] For each Region, we have one more dimension, Concurrent Scanned or NOT.
+ * 	=> for our scanning, do we care about the Young/Old/Humongous CSet ?
+ * 
+ * 
+ */
+class RegisterHumongousWithInCSetFastTestClosure : public SemeruHeapRegionClosure {
+ private:
+	size_t _total_humongous;
+	size_t _candidate_humongous;
 
-// 		// Dead objects cannot be eager reclaim candidates. Due to class
-// 		// unloading it is unsafe to query their classes so we return early.
-// 		if (g1h->is_obj_dead(obj, region)) {
-// 			return false;
-// 		}
+	DirtyCardQueue _dcq;
 
-// 		// If we do not have a complete remembered set for the region, then we can
-// 		// not be sure that we have all references to it.
-// 		if (!region->rem_set()->is_complete()) {
-// 			return false;
-// 		}
-// 		// Candidate selection must satisfy the following constraints
-// 		// while concurrent marking is in progress:
-// 		//
-// 		// * In order to maintain SATB invariants, an object must not be
-// 		// reclaimed if it was allocated before the start of marking and
-// 		// has not had its references scanned.  Such an object must have
-// 		// its references (including type metadata) scanned to ensure no
-// 		// live objects are missed by the marking process.  Objects
-// 		// allocated after the start of concurrent marking don't need to
-// 		// be scanned.
-// 		//
-// 		// * An object must not be reclaimed if it is on the concurrent
-// 		// mark stack.  Objects allocated after the start of concurrent
-// 		// marking are never pushed on the mark stack.
-// 		//
-// 		// Nominating only objects allocated after the start of concurrent
-// 		// marking is sufficient to meet both constraints.  This may miss
-// 		// some objects that satisfy the constraints, but the marking data
-// 		// structures don't support efficiently performing the needed
-// 		// additional tests or scrubbing of the mark stack.
-// 		//
-// 		// However, we presently only nominate is_typeArray() objects.
-// 		// A humongous object containing references induces remembered
-// 		// set entries on other regions.  In order to reclaim such an
-// 		// object, those remembered sets would need to be cleaned up.
-// 		//
-// 		// We also treat is_typeArray() objects specially, allowing them
-// 		// to be reclaimed even if allocated before the start of
-// 		// concurrent mark.  For this we rely on mark stack insertion to
-// 		// exclude is_typeArray() objects, preventing reclaiming an object
-// 		// that is in the mark stack.  We also rely on the metadata for
-// 		// such objects to be built-in and so ensured to be kept live.
-// 		// Frequent allocation and drop of large binary blobs is an
-// 		// important use case for eager reclaim, and this special handling
-// 		// may reduce needed headroom.
+	bool humongous_region_is_candidate(G1SemeruCollectedHeap* g1h, SemeruHeapRegion* region) const {
+		assert(region->is_starts_humongous(), "Must start a humongous object");
 
-// 		return obj->is_typeArray() &&
-// 					 g1h->is_potential_eager_reclaim_candidate(region);
-// 	}
+		oop obj = oop(region->bottom());
 
-//  public:
-// 	RegisterHumongousWithInCSetFastTestClosure()
-// 	: _total_humongous(0),
-// 		_candidate_humongous(0),
-// 		_dcq(&G1BarrierSet::dirty_card_queue_set()) {
-// 	}
+		// Dead objects cannot be eager reclaim candidates. Due to class
+		// unloading it is unsafe to query their classes so we return early.
+		if (g1h->is_obj_dead(obj, region)) {
+			return false;
+		}
 
-// 	virtual bool do_heap_region(HeapRegion* r) {
-// 		if (!r->is_starts_humongous()) {
-// 			return false;
-// 		}
-// 		G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
+		// If we do not have a complete remembered set for the region, then we can
+		// not be sure that we have all references to it.
+		if (!region->rem_set()->is_complete()) {
+			return false;
+		}
+		// Candidate selection must satisfy the following constraints
+		// while concurrent marking is in progress:
+		//
+		// * In order to maintain SATB invariants, an object must not be
+		// reclaimed if it was allocated before the start of marking and
+		// has not had its references scanned.  Such an object must have
+		// its references (including type metadata) scanned to ensure no
+		// live objects are missed by the marking process.  Objects
+		// allocated after the start of concurrent marking don't need to
+		// be scanned.
+		//
+		// * An object must not be reclaimed if it is on the concurrent
+		// mark stack.  Objects allocated after the start of concurrent
+		// marking are never pushed on the mark stack.
+		//
+		// Nominating only objects allocated after the start of concurrent
+		// marking is sufficient to meet both constraints.  This may miss
+		// some objects that satisfy the constraints, but the marking data
+		// structures don't support efficiently performing the needed
+		// additional tests or scrubbing of the mark stack.
+		//
+		// However, we presently only nominate is_typeArray() objects.
+		// A humongous object containing references induces remembered
+		// set entries on other regions.  In order to reclaim such an
+		// object, those remembered sets would need to be cleaned up.
+		//
+		// We also treat is_typeArray() objects specially, allowing them
+		// to be reclaimed even if allocated before the start of
+		// concurrent mark.  For this we rely on mark stack insertion to
+		// exclude is_typeArray() objects, preventing reclaiming an object
+		// that is in the mark stack.  We also rely on the metadata for
+		// such objects to be built-in and so ensured to be kept live.
+		// Frequent allocation and drop of large binary blobs is an
+		// important use case for eager reclaim, and this special handling
+		// may reduce needed headroom.
 
-// 		bool is_candidate = humongous_region_is_candidate(g1h, r);
-// 		uint rindex = r->hrm_index();
-// 		g1h->set_humongous_reclaim_candidate(rindex, is_candidate);
-// 		if (is_candidate) {
-// 			_candidate_humongous++;
-// 			g1h->register_humongous_region_with_cset(rindex);
-// 			// Is_candidate already filters out humongous object with large remembered sets.
-// 			// If we have a humongous object with a few remembered sets, we simply flush these
-// 			// remembered set entries into the DCQS. That will result in automatic
-// 			// re-evaluation of their remembered set entries during the following evacuation
-// 			// phase.
-// 			if (!r->rem_set()->is_empty()) {
-// 				guarantee(r->rem_set()->occupancy_less_or_equal_than(G1RSetSparseRegionEntries),
-// 									"Found a not-small remembered set here. This is inconsistent with previous assumptions.");
-// 				G1CardTable* ct = g1h->card_table();
-// 				HeapRegionRemSetIterator hrrs(r->rem_set());
-// 				size_t card_index;
-// 				while (hrrs.has_next(card_index)) {
-// 					jbyte* card_ptr = (jbyte*)ct->byte_for_index(card_index);
-// 					// The remembered set might contain references to already freed
-// 					// regions. Filter out such entries to avoid failing card table
-// 					// verification.
-// 					if (g1h->is_in_closed_subset(ct->addr_for(card_ptr))) {
-// 						if (*card_ptr != G1CardTable::dirty_card_val()) {
-// 							*card_ptr = G1CardTable::dirty_card_val();
-// 							_dcq.enqueue(card_ptr);
-// 						}
-// 					}
-// 				}
-// 				assert(hrrs.n_yielded() == r->rem_set()->occupied(),
-// 							 "Remembered set hash maps out of sync, cur: " SIZE_FORMAT " entries, next: " SIZE_FORMAT " entries",
-// 							 hrrs.n_yielded(), r->rem_set()->occupied());
-// 				// We should only clear the card based remembered set here as we will not
-// 				// implicitly rebuild anything else during eager reclaim. Note that at the moment
-// 				// (and probably never) we do not enter this path if there are other kind of
-// 				// remembered sets for this region.
-// 				r->rem_set()->clear_locked(true /* only_cardset */);
-// 				// Clear_locked() above sets the state to Empty. However we want to continue
-// 				// collecting remembered set entries for humongous regions that were not
-// 				// reclaimed.
-// 				r->rem_set()->set_state_complete();
-// 			}
-// 			assert(r->rem_set()->is_empty(), "At this point any humongous candidate remembered set must be empty.");
-// 		}
-// 		_total_humongous++;
+		return obj->is_typeArray() &&
+					 g1h->is_potential_eager_reclaim_candidate(region);
+	}
 
-// 		return false;
-// 	}
+ public:
+	RegisterHumongousWithInCSetFastTestClosure()
+	: _total_humongous(0),
+		_candidate_humongous(0),
+		_dcq(&G1BarrierSet::dirty_card_queue_set()) {
+	}
 
-// 	size_t total_humongous() const { return _total_humongous; }
-// 	size_t candidate_humongous() const { return _candidate_humongous; }
+	virtual bool do_heap_region(SemeruHeapRegion* r) {
+		if (!r->is_starts_humongous()) {
+			return false;
+		}
+		G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 
-// 	void flush_rem_set_entries() { _dcq.flush(); }
-// };
+		bool is_candidate = humongous_region_is_candidate(g1h, r);
+		uint rindex = r->hrm_index();
+		g1h->set_humongous_reclaim_candidate(rindex, is_candidate);
+		if (is_candidate) {
+			_candidate_humongous++;
+			g1h->register_humongous_region_with_cset(rindex);
+			// Is_candidate already filters out humongous object with large remembered sets.
+			// If we have a humongous object with a few remembered sets, we simply flush these
+			// remembered set entries into the DCQS. That will result in automatic
+			// re-evaluation of their remembered set entries during the following evacuation
+			// phase.
+			if (!r->rem_set()->is_empty()) {
+				guarantee(r->rem_set()->occupancy_less_or_equal_than(G1RSetSparseRegionEntries),
+									"Found a not-small remembered set here. This is inconsistent with previous assumptions.");
+				G1CardTable* ct = g1h->card_table();
+				HeapRegionRemSetIterator hrrs(r->rem_set());
+				size_t card_index;
+				while (hrrs.has_next(card_index)) {
+					jbyte* card_ptr = (jbyte*)ct->byte_for_index(card_index);
+					// The remembered set might contain references to already freed
+					// regions. Filter out such entries to avoid failing card table
+					// verification.
+					if (g1h->is_in_closed_subset(ct->addr_for(card_ptr))) {
+						if (*card_ptr != G1CardTable::dirty_card_val()) {
+							*card_ptr = G1CardTable::dirty_card_val();
+							_dcq.enqueue(card_ptr);
+						}
+					}
+				}
+				assert(hrrs.n_yielded() == r->rem_set()->occupied(),
+							 "Remembered set hash maps out of sync, cur: " SIZE_FORMAT " entries, next: " SIZE_FORMAT " entries",
+							 hrrs.n_yielded(), r->rem_set()->occupied());
+				// We should only clear the card based remembered set here as we will not
+				// implicitly rebuild anything else during eager reclaim. Note that at the moment
+				// (and probably never) we do not enter this path if there are other kind of
+				// remembered sets for this region.
+				r->rem_set()->clear_locked(true /* only_cardset */);
+				// Clear_locked() above sets the state to Empty. However we want to continue
+				// collecting remembered set entries for humongous regions that were not
+				// reclaimed.
+				r->rem_set()->set_state_complete();
+			}
+			assert(r->rem_set()->is_empty(), "At this point any humongous candidate remembered set must be empty.");
+		}
+		_total_humongous++;
 
-// void G1SemeruCollectedHeap::register_humongous_regions_with_cset() {
-// 	if (!G1EagerReclaimHumongousObjects) {
-// 		g1_policy()->phase_times()->record_fast_reclaim_humongous_stats(0.0, 0, 0);
-// 		return;
-// 	}
-// 	double time = os::elapsed_counter();
+		return false;
+	}
 
-// 	// Collect reclaim candidate information and register candidates with cset.
-// 	RegisterHumongousWithInCSetFastTestClosure cl;
-// 	heap_region_iterate(&cl);
+	size_t total_humongous() const { return _total_humongous; }
+	size_t candidate_humongous() const { return _candidate_humongous; }
 
-// 	time = ((double)(os::elapsed_counter() - time) / os::elapsed_frequency()) * 1000.0;
-// 	g1_policy()->phase_times()->record_fast_reclaim_humongous_stats(time,
-// 																																	cl.total_humongous(),
-// 																																	cl.candidate_humongous());
-// 	_has_humongous_reclaim_candidates = cl.candidate_humongous() > 0;
+	void flush_rem_set_entries() { _dcq.flush(); }
+};
 
-// 	// Finally flush all remembered set entries to re-check into the global DCQS.
-// 	cl.flush_rem_set_entries();
-// }
+void G1SemeruCollectedHeap::register_humongous_regions_with_cset() {
+	if (!G1EagerReclaimHumongousObjects) {
+		g1_policy()->phase_times()->record_fast_reclaim_humongous_stats(0.0, 0, 0);
+		return;
+	}
+	double time = os::elapsed_counter();
 
-// class VerifyRegionRemSetClosure : public HeapRegionClosure {
+	// Collect reclaim candidate information and register candidates with cset.
+	RegisterHumongousWithInCSetFastTestClosure cl;
+	heap_region_iterate(&cl);
+
+	time = ((double)(os::elapsed_counter() - time) / os::elapsed_frequency()) * 1000.0;
+	g1_policy()->phase_times()->record_fast_reclaim_humongous_stats(time,
+																																	cl.total_humongous(),
+																																	cl.candidate_humongous());
+	_has_humongous_reclaim_candidates = cl.candidate_humongous() > 0;
+
+	// Finally flush all remembered set entries to re-check into the global DCQS.
+	cl.flush_rem_set_entries();
+}
+
+// class VerifyRegionRemSetClosure : public SemeruHeapRegionClosure {
 // 	public:
-// 		bool do_heap_region(HeapRegion* hr) {
+// 		bool do_heap_region(SemeruHeapRegion* hr) {
 // 			if (!hr->is_archive() && !hr->is_continues_humongous()) {
 // 				hr->verify_rem_set();
 // 			}
@@ -3301,13 +3317,13 @@ void G1SemeruCollectedHeap::do_concurrent_mark() {
 // 	g1_policy()->phase_times()->record_root_region_scan_wait_time(wait_time_ms);
 // }
 
-// class G1PrintCollectionSetClosure : public HeapRegionClosure {
+// class G1PrintCollectionSetClosure : public SemeruHeapRegionClosure {
 // private:
 // 	G1HRPrinter* _hr_printer;
 // public:
-// 	G1PrintCollectionSetClosure(G1HRPrinter* hr_printer) : HeapRegionClosure(), _hr_printer(hr_printer) { }
+// 	G1PrintCollectionSetClosure(G1HRPrinter* hr_printer) : SemeruHeapRegionClosure(), _hr_printer(hr_printer) { }
 
-// 	virtual bool do_heap_region(HeapRegion* r) {
+// 	virtual bool do_heap_region(SemeruHeapRegion* r) {
 // 		_hr_printer->cset(r);
 // 		return false;
 // 	}
@@ -3502,7 +3518,7 @@ void G1SemeruCollectedHeap::do_concurrent_mark() {
 
 // 				register_humongous_regions_with_cset();
 
-// 				assert(_verifier->check_cset_fast_test(), "Inconsistency in the InCSetState table.");
+// 				assert(_verifier->check_cset_fast_test(), "Inconsistency in the SemeruInCSetState table.");
 
 // 				// We call this after finalize_cset() to
 // 				// ensure that the CSet has been finalized.
@@ -3975,7 +3991,7 @@ bool G1SemeruSTWSubjectToDiscoveryClosure::do_object_b(oop obj) {
 // 		oop obj = *p;
 // 		assert(obj != NULL, "the caller should have filtered out NULL values");
 
-// 		const InCSetState cset_state =_g1h->in_cset_state(obj);
+// 		const SemeruInCSetState cset_state =_g1h->in_cset_state(obj);
 // 		if (!cset_state.is_in_cset_or_humongous()) {
 // 			return;
 // 		}
@@ -4331,7 +4347,7 @@ bool G1SemeruSTWSubjectToDiscoveryClosure::do_object_b(oop obj) {
 // 		Tickspan copy_time;
 
 // 		for (uint i = _optional->current_index(); i < _optional->current_limit(); i++) {
-// 			HeapRegion* hr = _optional->region_at(i);
+// 			SemeruHeapRegion* hr = _optional->region_at(i);
 // 			G1ScanRSForOptionalClosure scan_opt_cl(&obj_cl);
 // 			pss->oops_into_optional_region(hr)->oops_do(&scan_opt_cl, root_cls->raw_strong_oops());
 // 			copy_time += trim_ticks(pss);
@@ -4515,8 +4531,8 @@ bool G1SemeruSTWSubjectToDiscoveryClosure::do_object_b(oop obj) {
 // 																							 create_g1_evac_summary(&_old_evac_stats));
 // }
 
-void G1SemeruCollectedHeap::free_region(HeapRegion* hr,
-																	FreeRegionList* free_list,
+void G1SemeruCollectedHeap::free_region(SemeruHeapRegion* hr,
+																	FreeSemeruRegionList* free_list,
 																	bool skip_remset,
 																	bool skip_hot_card_cache,
 																	bool locked) {
@@ -4546,8 +4562,8 @@ void G1SemeruCollectedHeap::free_region(HeapRegion* hr,
 	// free_list->add_ordered(hr);
 }
 
-void G1SemeruCollectedHeap::free_humongous_region(HeapRegion* hr,
-																						FreeRegionList* free_list) {
+void G1SemeruCollectedHeap::free_humongous_region(SemeruHeapRegion* hr,
+																						FreeSemeruRegionList* free_list) {
 	assert(hr->is_humongous(), "this is only for humongous regions");
 	assert(free_list != NULL, "pre-condition");
 	hr->clear_humongous();
@@ -4570,7 +4586,7 @@ void G1SemeruCollectedHeap::remove_from_old_sets(const uint old_regions_removed,
 
 }
 
-void G1SemeruCollectedHeap::prepend_to_freelist(FreeRegionList* list) {
+void G1SemeruCollectedHeap::prepend_to_freelist(FreeSemeruRegionList* list) {
 	assert(list != NULL, "list can't be null");
 	if (!list->is_empty()) {
 		MutexLockerEx x(FreeList_lock, Mutex::_no_safepoint_check_flag);
@@ -4587,7 +4603,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 
 // 	// Closure applied to all regions in the collection set to do work that needs to
 // 	// be done serially in a single thread.
-// 	class G1SerialFreeCollectionSetClosure : public HeapRegionClosure {
+// 	class G1SerialFreeCollectionSetClosure : public SemeruHeapRegionClosure {
 // 	private:
 // 		EvacuationInfo* _evacuation_info;
 // 		const size_t* _surviving_young_words;
@@ -4602,10 +4618,10 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 		size_t _failure_used_words;
 // 		size_t _failure_waste_words;
 
-// 		FreeRegionList _local_free_list;
+// 		FreeSemeruRegionList _local_free_list;
 // 	public:
 // 		G1SerialFreeCollectionSetClosure(EvacuationInfo* evacuation_info, const size_t* surviving_young_words) :
-// 			HeapRegionClosure(),
+// 			SemeruHeapRegionClosure(),
 // 			_evacuation_info(evacuation_info),
 // 			_surviving_young_words(surviving_young_words),
 // 			_before_used_bytes(0),
@@ -4616,7 +4632,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 			_local_free_list("Local Region List for CSet Freeing") {
 // 		}
 
-// 		virtual bool do_heap_region(HeapRegion* r) {
+// 		virtual bool do_heap_region(SemeruHeapRegion* r) {
 // 			G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 
 // 			assert(r->in_collection_set(), "Region %u should be in collection set.", r->hrm_index());
@@ -4651,7 +4667,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 				// Old gen regions do not cause an additional allocation: both the objects
 // 				// still in the region and the ones already moved are accounted for elsewhere.
 // 				if (r->is_young()) {
-// 					_bytes_allocated_in_old_since_last_gc += HeapRegion::GrainBytes;
+// 					_bytes_allocated_in_old_since_last_gc += SemeruHeapRegion::SemeruGrainBytes;
 // 				}
 // 				// The region is now considered to be old.
 // 				r->set_old();
@@ -4661,7 +4677,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 				size_t used_words = r->marked_bytes() / HeapWordSize;
 
 // 				_failure_used_words += used_words;
-// 				_failure_waste_words += HeapRegion::GrainWords - used_words;
+// 				_failure_waste_words += SemeruHeapRegion::SemeruGrainWords - used_words;
 
 // 				g1h->old_set_add(r);
 // 				_after_used_bytes += r->used();
@@ -4681,7 +4697,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 			G1Policy* policy = g1h->g1_policy();
 // 			policy->add_bytes_allocated_in_old_since_last_gc(_bytes_allocated_in_old_since_last_gc);
 
-// 			g1h->alloc_buffer_stats(InCSetState::Old)->add_failure_used_and_waste(_failure_used_words, _failure_waste_words);
+// 			g1h->alloc_buffer_stats(SemeruInCSetState::Old)->add_failure_used_and_waste(_failure_used_words, _failure_waste_words);
 // 		}
 // 	};
 
@@ -4698,7 +4714,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 		bool is_young;
 // 		bool evacuation_failed;
 
-// 		WorkItem(HeapRegion* r) {
+// 		WorkItem(SemeruHeapRegion* r) {
 // 			region_idx = r->hrm_index();
 // 			is_young = r->is_young();
 // 			evacuation_failed = r->evacuation_failed();
@@ -4718,7 +4734,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 	void do_parallel_work_for_region(uint region_idx, bool is_young, bool evacuation_failed) {
 // 		G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
 
-// 		HeapRegion* r = g1h->region_at(region_idx);
+// 		SemeruHeapRegion* r = g1h->region_at(region_idx);
 // 		assert(!g1h->is_on_master_free_list(r), "sanity");
 
 // 		Atomic::add(r->rem_set()->occupied_locked(), &_rs_lengths);
@@ -4732,14 +4748,14 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 		}
 // 	}
 
-// 	class G1PrepareFreeCollectionSetClosure : public HeapRegionClosure {
+// 	class G1PrepareFreeCollectionSetClosure : public SemeruHeapRegionClosure {
 // 	private:
 // 		size_t _cur_idx;
 // 		WorkItem* _work_items;
 // 	public:
-// 		G1PrepareFreeCollectionSetClosure(WorkItem* work_items) : HeapRegionClosure(), _cur_idx(0), _work_items(work_items) { }
+// 		G1PrepareFreeCollectionSetClosure(WorkItem* work_items) : SemeruHeapRegionClosure(), _cur_idx(0), _work_items(work_items) { }
 
-// 		virtual bool do_heap_region(HeapRegion* r) {
+// 		virtual bool do_heap_region(SemeruHeapRegion* r) {
 // 			_work_items[_cur_idx++] = WorkItem(r);
 // 			return false;
 // 		}
@@ -4863,20 +4879,20 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 	collection_set->clear();
 // }
 
-// class G1FreeHumongousRegionClosure : public HeapRegionClosure {
+// class G1FreeHumongousRegionClosure : public SemeruHeapRegionClosure {
 //  private:
-// 	FreeRegionList* _free_region_list;
+// 	FreeSemeruRegionList* _free_region_list;
 // 	HeapRegionSet* _proxy_set;
 // 	uint _humongous_objects_reclaimed;
 // 	uint _humongous_regions_reclaimed;
 // 	size_t _freed_bytes;
 //  public:
 
-// 	G1FreeHumongousRegionClosure(FreeRegionList* free_region_list) :
+// 	G1FreeHumongousRegionClosure(FreeSemeruRegionList* free_region_list) :
 // 		_free_region_list(free_region_list), _humongous_objects_reclaimed(0), _humongous_regions_reclaimed(0), _freed_bytes(0) {
 // 	}
 
-// 	virtual bool do_heap_region(HeapRegion* r) {
+// 	virtual bool do_heap_region(SemeruHeapRegion* r) {
 // 		if (!r->is_starts_humongous()) {
 // 			return false;
 // 		}
@@ -4954,7 +4970,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 					 BOOL_TO_STR(cm->is_marked_in_next_bitmap(obj)));
 // 		_humongous_objects_reclaimed++;
 // 		do {
-// 			HeapRegion* next = g1h->next_region_in_humongous(r);
+// 			SemeruHeapRegion* next = g1h->next_region_in_humongous(r);
 // 			_freed_bytes += r->used();
 // 			r->set_containing_set(NULL);
 // 			_humongous_regions_reclaimed++;
@@ -4989,7 +5005,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 
 // 	double start_time = os::elapsedTime();
 
-// 	FreeRegionList local_cleanup_list("Local Humongous Cleanup List");
+// 	FreeSemeruRegionList local_cleanup_list("Local Humongous Cleanup List");
 
 // 	G1FreeHumongousRegionClosure cl(&local_cleanup_list);
 // 	heap_region_iterate(&cl);
@@ -5000,7 +5016,7 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 	if (hrp->is_active()) {
 // 		FreeRegionListIterator iter(&local_cleanup_list);
 // 		while (iter.more_available()) {
-// 			HeapRegion* hr = iter.get_next();
+// 			SemeruHeapRegion* hr = iter.get_next();
 // 			hrp->cleanup(hr);
 // 		}
 // 	}
@@ -5012,9 +5028,9 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 																																		cl.humongous_objects_reclaimed());
 // }
 
-// class G1AbandonCollectionSetClosure : public HeapRegionClosure {
+// class G1AbandonCollectionSetClosure : public SemeruHeapRegionClosure {
 // public:
-// 	virtual bool do_heap_region(HeapRegion* r) {
+// 	virtual bool do_heap_region(SemeruHeapRegion* r) {
 // 		assert(r->in_collection_set(), "Region %u must have been in collection set", r->hrm_index());
 // 		G1SemeruCollectedHeap::heap()->clear_in_cset(r);
 // 		r->set_young_index_in_cset(-1);
@@ -5030,23 +5046,23 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 // 	collection_set->stop_incremental_building();
 // }
 
-// bool G1SemeruCollectedHeap::is_old_gc_alloc_region(HeapRegion* hr) {
+// bool G1SemeruCollectedHeap::is_old_gc_alloc_region(SemeruHeapRegion* hr) {
 // 	return _allocator->is_retained_old_region(hr);
 // }
 
-// void G1SemeruCollectedHeap::set_region_short_lived_locked(HeapRegion* hr) {
+// void G1SemeruCollectedHeap::set_region_short_lived_locked(SemeruHeapRegion* hr) {
 // 	_eden.add(hr);										// Add newly allocated Region into G1SemeruCollectedHeap->_eden list
 // 	_g1_policy->set_region_eden(hr);	// Set Region as Eden Space.
 // }
 
 // #ifdef ASSERT
 
-// class NoYoungRegionsClosure: public HeapRegionClosure {
+// class NoYoungRegionsClosure: public SemeruHeapRegionClosure {
 // private:
 // 	bool _success;
 // public:
 // 	NoYoungRegionsClosure() : _success(true) { }
-// 	bool do_heap_region(HeapRegion* r) {
+// 	bool do_heap_region(SemeruHeapRegion* r) {
 // 		if (r->is_young()) {
 // 			log_error(gc, verify)("Region [" PTR_FORMAT ", " PTR_FORMAT ") tagged as young",
 // 														p2i(r->bottom()), p2i(r->end()));
@@ -5069,13 +5085,13 @@ void G1SemeruCollectedHeap::decrement_summary_bytes(size_t bytes) {
 
 // #endif // ASSERT
 
-// class TearDownRegionSetsClosure : public HeapRegionClosure {
+// class TearDownRegionSetsClosure : public SemeruHeapRegionClosure {
 // 	HeapRegionSet *_old_set;
 
 // public:
 // 	TearDownRegionSetsClosure(HeapRegionSet* old_set) : _old_set(old_set) { }
 
-// 	bool do_heap_region(HeapRegion* r) {
+// 	bool do_heap_region(SemeruHeapRegion* r) {
 // 		if (r->is_old()) {
 // 			_old_set->remove(r);
 // 		} else if(r->is_young()) {
@@ -5125,7 +5141,7 @@ void G1SemeruCollectedHeap::set_used(size_t bytes) {
 	_summary_bytes_used = bytes;
 }
 
-// class RebuildRegionSetsClosure : public HeapRegionClosure {
+// class RebuildRegionSetsClosure : public SemeruHeapRegionClosure {
 // private:
 // 	bool _free_list_only;
 
@@ -5146,7 +5162,7 @@ void G1SemeruCollectedHeap::set_used(size_t bytes) {
 // 		}
 // 	}
 
-// 	bool do_heap_region(HeapRegion* r) {
+// 	bool do_heap_region(SemeruHeapRegion* r) {
 // 		if (r->is_empty()) {
 // 			assert(r->rem_set()->is_empty(), "Empty regions should have empty remembered sets.");
 // 			// Add free regions to the free list
@@ -5197,7 +5213,7 @@ void G1SemeruCollectedHeap::set_used(size_t bytes) {
 // }
 
 bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
-	HeapRegion* hr = heap_region_containing(p);
+	SemeruHeapRegion* hr = heap_region_containing(p);
 	return hr->is_in(p);
 }
 
@@ -5207,26 +5223,26 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 //  * Tag : Allocate a new Region for Mutator - Eden Space 
 //  * 
 //  */ 
-// HeapRegion* G1SemeruCollectedHeap::new_mutator_alloc_region(size_t word_size,
+// SemeruHeapRegion* G1SemeruCollectedHeap::new_mutator_alloc_region(size_t word_size,
 // 																											bool force) {
 // 	assert_heap_locked_or_at_safepoint(true /* should_be_vm_thread */);
 // 	bool should_allocate = g1_policy()->should_allocate_mutator_region();
 // 	if (force || should_allocate) {
-// 		HeapRegion* new_alloc_region = new_region(word_size,
+// 		SemeruHeapRegion* new_alloc_region = new_region(word_size,
 // 																							HeapRegionType::Eden,
 // 																							false /* do_expand */);    // Eden Space.
 // 		if (new_alloc_region != NULL) {
 // 			set_region_short_lived_locked(new_alloc_region);			// Set Region as Eden Space
 // 			_hr_printer.alloc(new_alloc_region, !should_allocate);
 // 			_verifier->check_bitmaps("Mutator Region Allocation", new_alloc_region);
-// 			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);			// [?] Set HeapRegion Remember set status?
+// 			_g1_policy->remset_tracker()->update_at_allocate(new_alloc_region);			// [?] Set SemeruHeapRegion Remember set status?
 // 			return new_alloc_region;
 // 		}
 // 	}
 // 	return NULL;
 // }
 
-// void G1SemeruCollectedHeap::retire_mutator_alloc_region(HeapRegion* alloc_region,
+// void G1SemeruCollectedHeap::retire_mutator_alloc_region(SemeruHeapRegion* alloc_region,
 // 																									size_t allocated_bytes) {
 // 	assert_heap_locked_or_at_safepoint(true /* should_be_vm_thread */);
 // 	assert(alloc_region->is_eden(), "all mutator alloc regions should be eden");
@@ -5242,7 +5258,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 
 // // Methods for the GC alloc regions
 
-// bool G1SemeruCollectedHeap::has_more_regions(InCSetState dest) {
+// bool G1SemeruCollectedHeap::has_more_regions(SemeruInCSetState dest) {
 // 	if (dest.is_old()) {
 // 		return true;
 // 	} else {
@@ -5250,7 +5266,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 	}
 // }
 
-// HeapRegion* G1SemeruCollectedHeap::new_gc_alloc_region(size_t word_size, InCSetState dest) {
+// SemeruHeapRegion* G1SemeruCollectedHeap::new_gc_alloc_region(size_t word_size, SemeruInCSetState dest) {
 // 	assert(FreeList_lock->owned_by_self(), "pre-condition");
 
 // 	if (!has_more_regions(dest)) {
@@ -5264,7 +5280,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 		type = HeapRegionType::Old;
 // 	}
 
-// 	HeapRegion* new_alloc_region = new_region(word_size,
+// 	SemeruHeapRegion* new_alloc_region = new_region(word_size,
 // 																						type,
 // 																						true /* do_expand */);
 
@@ -5284,9 +5300,9 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 	return NULL;
 // }
 
-// void G1SemeruCollectedHeap::retire_gc_alloc_region(HeapRegion* alloc_region,
+// void G1SemeruCollectedHeap::retire_gc_alloc_region(SemeruHeapRegion* alloc_region,
 // 																						 size_t allocated_bytes,
-// 																						 InCSetState dest) {
+// 																						 SemeruInCSetState dest) {
 // 	g1_policy()->record_bytes_copied_during_gc(allocated_bytes);
 // 	if (dest.is_old()) {
 // 		old_set_add(alloc_region);
@@ -5299,14 +5315,14 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 	_hr_printer.retire(alloc_region);
 // }
 
-// HeapRegion* G1SemeruCollectedHeap::alloc_highest_free_region() {
+// SemeruHeapRegion* G1SemeruCollectedHeap::alloc_highest_free_region() {
 // 	bool expanded = false;
 // 	uint index = _hrm->find_highest_free(&expanded);
 
 // 	if (index != G1_NO_HRM_INDEX) {
 // 		if (expanded) {
 // 			log_debug(gc, ergo, heap)("Attempt heap expansion (requested address range outside heap bounds). region size: " SIZE_FORMAT "B",
-// 																HeapRegion::GrainWords * HeapWordSize);
+// 																SemeruHeapRegion::SemeruGrainWords * HeapWordSize);
 // 		}
 // 		_hrm->allocate_free_regions_starting_at(index, 1);
 // 		return region_at(index);
@@ -5324,13 +5340,13 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 		T heap_oop = RawAccess<>::oop_load(p);
 // 		if (!CompressedOops::is_null(heap_oop)) {
 // 			oop obj = CompressedOops::decode_not_null(heap_oop);
-// 			HeapRegion* hr = _g1h->heap_region_containing(obj);
+// 			SemeruHeapRegion* hr = _g1h->heap_region_containing(obj);
 // 			assert(!hr->is_continues_humongous(),
 // 						 "trying to add code root " PTR_FORMAT " in continuation of humongous region " HR_FORMAT
 // 						 " starting at " HR_FORMAT,
 // 						 p2i(_nm), HR_FORMAT_PARAMS(hr), HR_FORMAT_PARAMS(hr->humongous_start_region()));
 
-// 			// HeapRegion::add_strong_code_root_locked() avoids adding duplicate entries.
+// 			// SemeruHeapRegion::add_strong_code_root_locked() avoids adding duplicate entries.
 // 			hr->add_strong_code_root_locked(_nm);
 // 		}
 // 	}
@@ -5351,7 +5367,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // 		T heap_oop = RawAccess<>::oop_load(p);
 // 		if (!CompressedOops::is_null(heap_oop)) {
 // 			oop obj = CompressedOops::decode_not_null(heap_oop);
-// 			HeapRegion* hr = _g1h->heap_region_containing(obj);
+// 			SemeruHeapRegion* hr = _g1h->heap_region_containing(obj);
 // 			assert(!hr->is_continues_humongous(),
 // 						 "trying to remove code root " PTR_FORMAT " in continuation of humongous region " HR_FORMAT
 // 						 " starting at " HR_FORMAT,
@@ -5372,7 +5388,7 @@ bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
 // Returns true if the reference points to an object that
 // can move in an incremental collection.
 bool G1SemeruCollectedHeap::is_scavengable(oop obj) {
-	HeapRegion* hr = heap_region_containing(obj);
+	SemeruHeapRegion* hr = heap_region_containing(obj);
 	return !hr->is_pinned();
 }
 

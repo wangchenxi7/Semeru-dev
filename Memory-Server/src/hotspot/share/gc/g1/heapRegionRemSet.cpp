@@ -39,6 +39,10 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/growableArray.hpp"
 
+// Semeru
+#include "gc/g1/SemeruHeapRegion.inline.hpp"
+
+
 const char* HeapRegionRemSet::_state_strings[] =  {"Untracked", "Updating", "Complete"};
 const char* HeapRegionRemSet::_short_state_strings[] =  {"UNTRA", "UPDAT", "CMPLT"};
 
@@ -630,6 +634,7 @@ HeapRegionRemSet::HeapRegionRemSet(G1BlockOffsetTable* bot,
 {
 }
 
+
 void HeapRegionRemSet::clear_fcc() {
 	G1FromCardCache::clear(_hr->hrm_index());
 }
@@ -652,6 +657,19 @@ void HeapRegionRemSet::setup_remset_size() {
  * Semeru
  *  
  */
+
+HeapRegionRemSet::HeapRegionRemSet(G1BlockOffsetTable* bot,
+																	 SemeruHeapRegion* hr)
+	: _bot(bot),
+		_code_roots(),
+		_m(Mutex::leaf, FormatBuffer<128>("HeapRegionRemSet lock #%u", hr->hrm_index()), true, Monitor::_safepoint_check_never),
+		_other_regions(&_m),
+		_hr(NULL),
+		_semeru_hr(hr),
+		_state(Untracked)
+{
+}
+
 
 // Semeru Region's RemSet.
 void HeapRegionRemSet::setup_semeru_remset_size() {

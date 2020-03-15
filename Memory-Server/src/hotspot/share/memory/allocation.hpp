@@ -195,7 +195,7 @@ void FreeHeap(void* p);
 template <MEMFLAGS F> class CHeapObj ALLOCATION_SUPER_CLASS_SPEC {
  public:
   ALWAYSINLINE void* operator new(size_t size) throw() {
-    return (void*)AllocateHeap(size, F);           // [?] Allocate object into C-Heap ?
+    return (void*)AllocateHeap(size, F);           // [x] Allocate object into C-Heap
   }
 
   ALWAYSINLINE void* operator new(size_t size,

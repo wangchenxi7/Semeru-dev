@@ -33,9 +33,9 @@
 #include "gc/g1/g1RegionMarkStatsCache.inline.hpp"
 #include "gc/g1/g1StringDedup.hpp"
 #include "gc/g1/g1ThreadLocalData.hpp"
-#include "gc/g1/heapRegion.inline.hpp"
+// #include "gc/g1/heapRegion.inline.hpp"
 #include "gc/g1/heapRegionRemSet.hpp"
-#include "gc/g1/heapRegionSet.inline.hpp"
+// #include "gc/g1/heapRegionSet.inline.hpp"
 #include "gc/shared/gcId.hpp"
 #include "gc/shared/gcTimer.hpp"
 #include "gc/shared/gcTrace.hpp"
@@ -68,6 +68,8 @@
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
 #include <unistd.h>
+#include "gc/g1/SemeruHeapRegion.inline.hpp"
+#include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 
 
 
@@ -254,8 +256,8 @@ void G1SemeruCMMarkStack::set_empty() {
 // 1) _cm_scanned_regions and _fresh_evicted_regions are setted as the same length.
 // 
 G1SemeruCMCSetRegions::G1SemeruCMCSetRegions(uint const max_regions) :
-	_cm_scanned_regions(NEW_C_HEAP_ARRAY(HeapRegion*, max_regions, mtGC)),
-	_freshly_evicted_regions(NEW_C_HEAP_ARRAY(HeapRegion*, max_regions, mtGC)),
+	_cm_scanned_regions(NEW_C_HEAP_ARRAY(SemeruHeapRegion*, max_regions, mtGC)),
+	_freshly_evicted_regions(NEW_C_HEAP_ARRAY(SemeruHeapRegion*, max_regions, mtGC)),
 	_max_regions(max_regions),
 	_num_cm_scanned_regions(0),
 	_num_freshly_evicted_regions(0),
@@ -268,8 +270,8 @@ G1SemeruCMCSetRegions::G1SemeruCMCSetRegions(uint const max_regions) :
 
 
 G1SemeruCMCSetRegions::~G1SemeruCMCSetRegions() {
-	FREE_C_HEAP_ARRAY(HeapRegion*, _max_regions);		// free the _cm_scanned_regions, the first array
-	FREE_C_HEAP_ARRAY(HeapRegion*, _max_regions);		// free the _freshly_evicted_regions, the second array
+	FREE_C_HEAP_ARRAY(SemeruHeapRegion*, _max_regions);		// free the _cm_scanned_regions, the first array
+	FREE_C_HEAP_ARRAY(SemeruHeapRegion*, _max_regions);		// free the _freshly_evicted_regions, the second array
 }
 
 
@@ -281,7 +283,7 @@ void G1SemeruCMCSetRegions::reset() {
 }
 
 /**
- * Tag : Add a HeapRegion into CM-Scanned Region set.
+ * Tag : Add a SemeruHeapRegion into CM-Scanned Region set.
  * 
  * 	Scan the received  region index CSet from CPU server
  *  and insert the found cm-scanned Regions into the list.
@@ -290,7 +292,7 @@ void G1SemeruCMCSetRegions::reset() {
  * 			Why do we need to check the safepoint ??
  * 
  */
-void G1SemeruCMCSetRegions::add_cm_scanned_regions(HeapRegion* hr) {
+void G1SemeruCMCSetRegions::add_cm_scanned_regions(SemeruHeapRegion* hr) {
 	assert_at_safepoint();	// is this necessary ??
 	size_t idx = Atomic::add((size_t)1, &_num_cm_scanned_regions) - 1;  // -1, to get the original index value.
 	assert(idx < _max_regions, "Trying to add more root regions than there is space " SIZE_FORMAT, 
@@ -299,7 +301,7 @@ void G1SemeruCMCSetRegions::add_cm_scanned_regions(HeapRegion* hr) {
 }
 
 // add a received Region into freshly evicted regions.
-void G1SemeruCMCSetRegions::add_freshly_evicted_regions(HeapRegion* hr) {
+void G1SemeruCMCSetRegions::add_freshly_evicted_regions(SemeruHeapRegion* hr) {
 	assert_at_safepoint();	// is this necessary ??
 	size_t idx = Atomic::add((size_t)1, &_num_freshly_evicted_regions) - 1;  // -1, to get the original index value.
 	assert(idx < _num_freshly_evicted_regions, "Trying to add more root regions than there is space " SIZE_FORMAT, 
@@ -335,7 +337,7 @@ void G1SemeruCMCSetRegions::prepare_for_scan() {
  * Multiple-Thread Safe.
  *  
  */
-HeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
+SemeruHeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 	if (_should_abort_compact) {
 		// If someone has set the should_abort flag, we return NULL to
 		// force the caller to bail out of their loop.
@@ -354,7 +356,7 @@ HeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 }
 
 
-HeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
+SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 	if (_should_abort_scan) {
 		// If someone has set the should_abort flag, we return NULL to
 		// force the caller to bail out of their loop.
@@ -518,15 +520,15 @@ bool G1SemeruCMCSetRegions::wait_until_scan_finished() {
 
 // void G1SemeruCMCSetRegions::estimate_dset_region_for_scanned_cset(){
 // 	size_t src_ind = 0, dest_ind = 0;
-// 	HeapRegion* region_iter = _cm_scanned_regions[src_ind];
-// 	HeapRegion* dest_region = _cm_scanned_regions[dest_ind];			// initia value
+// 	SemeruHeapRegion* region_iter = _cm_scanned_regions[src_ind];
+// 	SemeruHeapRegion* dest_region = _cm_scanned_regions[dest_ind];			// initia value
 // 	size_t offset_within_dest_region = 0;
 // 	size_t waste_threshold = G1CardTable::card_size;		// size can be wasted. 
 
 // 	// Loop for the soruce Region.
 // 	while(src_ind < _num_cm_scanned_regions){
 
-// 		if( offset_within_dest_region += region_iter->marked_alive_bytes() < HeapRegion::SemeruGrainBytes){
+// 		if( offset_within_dest_region += region_iter->marked_alive_bytes() < SemeruHeapRegion::SemeruGrainBytes){
 // 			// The whole Region fit into a Region.
 // 			region_iter->_dest_region_ms = dest_region;
 // 			region_iter->_dest_offset_ms	=	offset_within_dest_region;
@@ -773,7 +775,7 @@ void G1SemeruConcurrentMark::clear_statistics_in_region(uint region_idx) {
 	_region_mark_stats[region_idx].clear();
 }
 
-void G1SemeruConcurrentMark::clear_statistics(HeapRegion* r) {
+void G1SemeruConcurrentMark::clear_statistics(SemeruHeapRegion* r) {
 	uint const region_idx = r->hrm_index();
 	if (r->is_humongous()) {
 		assert(r->is_starts_humongous(), "Got humongous continues region here");
@@ -792,7 +794,7 @@ static void clear_mark_if_set(G1CMBitMap* bitmap, HeapWord* addr) {
 	}
 }
 
-void G1SemeruConcurrentMark::humongous_object_eagerly_reclaimed(HeapRegion* r) {
+void G1SemeruConcurrentMark::humongous_object_eagerly_reclaimed(SemeruHeapRegion* r) {
 	assert_at_safepoint_on_vm_thread();
 
 	// Need to clear all mark bits of the humongous object.
@@ -905,15 +907,15 @@ public:
 
 private:
 	// Heap region closure used for clearing the given mark bitmap.
-	class G1SemeruClearBitmapHRClosure : public HeapRegionClosure {
+	class G1SemeruClearBitmapHRClosure : public SemeruHeapRegionClosure {
 	private:
 		G1CMBitMap* _bitmap;
 		G1SemeruConcurrentMark* _semeru_cm;
 	public:
-		G1SemeruClearBitmapHRClosure(G1CMBitMap* bitmap, G1SemeruConcurrentMark* cm) : HeapRegionClosure(), _bitmap(bitmap), _semeru_cm(cm) {
+		G1SemeruClearBitmapHRClosure(G1CMBitMap* bitmap, G1SemeruConcurrentMark* cm) : SemeruHeapRegionClosure(), _bitmap(bitmap), _semeru_cm(cm) {
 		}
 
-		virtual bool do_heap_region(HeapRegion* r) {
+		virtual bool do_heap_region(SemeruHeapRegion* r) {
 			size_t const chunk_size_in_words = G1SemeruClearBitMapTask::chunk_size() / HeapWordSize;
 
 			HeapWord* cur = r->bottom();
@@ -967,7 +969,7 @@ public:
 void G1SemeruConcurrentMark::clear_bitmap(G1CMBitMap* bitmap, WorkGang* workers, bool may_yield) {
 	assert(may_yield || SafepointSynchronize::is_at_safepoint(), "Non-yielding bitmap clear only allowed at safepoint.");
 
-	size_t const num_bytes_to_clear = (HeapRegion::GrainBytes * _semeru_h->num_regions()) / G1CMBitMap::heap_map_factor();
+	size_t const num_bytes_to_clear = (SemeruHeapRegion::SemeruGrainBytes * _semeru_h->num_regions()) / G1CMBitMap::heap_map_factor();
 	size_t const num_chunks = align_up(num_bytes_to_clear, G1SemeruClearBitMapTask::chunk_size()) / G1SemeruClearBitMapTask::chunk_size();
 
 	uint const num_workers = (uint)MIN2(num_chunks, (size_t)workers->active_workers());
@@ -1002,9 +1004,9 @@ void G1SemeruConcurrentMark::clear_prev_bitmap(WorkGang* workers) {
 	clear_bitmap(_prev_mark_bitmap, workers, false);
 }
 
-class NoteStartOfMarkHRClosure : public HeapRegionClosure {
+class NoteStartOfMarkHRClosure : public SemeruHeapRegionClosure {
 public:
-	bool do_heap_region(HeapRegion* r) {
+	bool do_heap_region(SemeruHeapRegion* r) {
 		r->note_start_of_marking();
 		return false;
 	}
@@ -1216,7 +1218,7 @@ uint G1SemeruConcurrentMark::calc_active_marking_workers() {
  * 		Not push the makred objects into task_queue.
  * 
  */
-void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
+void G1SemeruConcurrentMark::scan_root_region(SemeruHeapRegion* hr, uint worker_id) {
 	assert(hr->is_old() || (hr->is_survivor() && hr->next_top_at_mark_start() == hr->bottom()),
 				 "Root regions must be old or survivor but region %u is %s", hr->hrm_index(), hr->get_type_str());
 	G1RootRegionScanClosure cl(_semeru_h, this, worker_id);
@@ -1236,7 +1238,7 @@ void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
 /**
  * Tag : Concurrent Marking - Root Region Scan phase
  * 
- * One GC thread per HeapRegion.
+ * One GC thread per SemeruHeapRegion.
  * 
  */
 // class G1SemeruCMRootRegionScanTask : public AbstractGangTask {
@@ -1250,7 +1252,7 @@ void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
 // 					 "this should only be done by a conc GC thread");
 
 // 		G1SemeruCMRootRegions* root_regions = _semeru_cm->root_regions();
-// 		HeapRegion* hr = root_regions->claim_next();
+// 		SemeruHeapRegion* hr = root_regions->claim_next();
 // 		while (hr != NULL) {
 // 			_semeru_cm->scan_root_region(hr, worker_id);
 // 			hr = root_regions->claim_next();
@@ -1263,13 +1265,13 @@ void G1SemeruConcurrentMark::scan_root_region(HeapRegion* hr, uint worker_id) {
 /**
  * Semeru Memory Server --	Scan a single Region. 
  * 		Concurrent scavenge,
- * 		Start from a HeapRegion's Target Object Queue.
- * 		Mark the alive objects in the HeapRegion's alive_bitmap.
+ * 		Start from a SemeruHeapRegion's Target Object Queue.
+ * 		Mark the alive objects in the SemeruHeapRegion's alive_bitmap.
  * 
- * 	[?] How to assign the HeapRegion to the Semeru CM Task ?
+ * 	[?] How to assign the SemeruHeapRegion to the Semeru CM Task ?
  * 
  */
-void G1SemeruConcurrentMark::semeru_concurrent_mark_a_region( HeapRegion* region_to_scan) {
+void G1SemeruConcurrentMark::semeru_concurrent_mark_a_region( SemeruHeapRegion* region_to_scan) {
 	_restart_for_overflow = false;		// freshly scan, not Remark
 
 	_num_concurrent_workers = calc_active_marking_workers();
@@ -1297,7 +1299,7 @@ void G1SemeruConcurrentMark::semeru_concurrent_mark_a_region( HeapRegion* region
  * 		
  * 	
  */
-void G1SemeruConcurrentMark::semeru_stw_compact_a_region( HeapRegion* region_to_compact) {
+void G1SemeruConcurrentMark::semeru_stw_compact_a_region( SemeruHeapRegion* region_to_compact) {
 
 	//debug
 	tty->print("%s, Not implement yet. \n", __func__);
@@ -1476,7 +1478,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 
 	G1SemeruPrintRegionLivenessInfoClosure _cl;
 
-	class G1SemeruUpdateRemSetTrackingBeforeRebuild : public HeapRegionClosure {
+	class G1SemeruUpdateRemSetTrackingBeforeRebuild : public SemeruHeapRegionClosure {
 		G1SemeruCollectedHeap* _semeru_h;
 		G1SemeruConcurrentMark* _semeru_cm;
 
@@ -1494,8 +1496,8 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 		 * 
 		 * Update all Old Region's top_at_rebuild_start.
 		 */
-		void update_remset_before_rebuild(HeapRegion* hr) {
-			G1RemSetTrackingPolicy* tracking_policy = _semeru_h->g1_policy()->remset_tracker();
+		void update_remset_before_rebuild(SemeruHeapRegion* hr) {
+			G1SemeruRemSetTrackingPolicy* tracking_policy = _semeru_h->g1_policy()->semeru_remset_tracker();
 
 			bool selected_for_rebuild;
 			if (hr->is_humongous()) {
@@ -1515,7 +1517,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 
 		// Distribute the given words across the humongous object starting with hr and
 		// note end of marking.
-		void distribute_marked_bytes(HeapRegion* hr, size_t marked_words) {
+		void distribute_marked_bytes(SemeruHeapRegion* hr, size_t marked_words) {
 			uint const region_idx = hr->hrm_index();
 			size_t const obj_size_in_words = (size_t)oop(hr->bottom())->size();
 			uint const num_regions_in_humongous = (uint)G1SemeruCollectedHeap::humongous_obj_size_in_regions(obj_size_in_words);
@@ -1527,8 +1529,8 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 						 obj_size_in_words, marked_words);
 
 			for (uint i = region_idx; i < (region_idx + num_regions_in_humongous); i++) {
-				HeapRegion* const r = _semeru_h->region_at(i);
-				size_t const words_to_add = MIN2(HeapRegion::GrainWords, marked_words);
+				SemeruHeapRegion* const r = _semeru_h->region_at(i);
+				size_t const words_to_add = MIN2(SemeruHeapRegion::SemeruGrainWords, marked_words);
 
 				log_trace(gc, marking)("Adding " SIZE_FORMAT " words to humongous region %u (%s)",
 															 words_to_add, i, r->get_type_str());
@@ -1540,7 +1542,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 						 marked_words, num_regions_in_humongous);
 		}
 
-		void update_marked_bytes(HeapRegion* hr) {
+		void update_marked_bytes(SemeruHeapRegion* hr) {
 			uint const region_idx = hr->hrm_index();
 			size_t const marked_words = _semeru_cm->liveness(region_idx);
 			// The marking attributes the object's size completely to the humongous starts
@@ -1559,7 +1561,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 			}
 		}
 
-		void add_marked_bytes_and_note_end(HeapRegion* hr, size_t marked_bytes) {
+		void add_marked_bytes_and_note_end(SemeruHeapRegion* hr, size_t marked_bytes) {
 			hr->add_to_marked_bytes(marked_bytes);
 			_cl->do_heap_region(hr);
 			hr->note_end_of_marking();
@@ -1569,7 +1571,7 @@ class G1SemeruUpdateRemSetTrackingBeforeRebuildTask : public AbstractGangTask {
 		G1SemeruUpdateRemSetTrackingBeforeRebuild(G1SemeruCollectedHeap* g1h, G1SemeruConcurrentMark* cm, G1SemeruPrintRegionLivenessInfoClosure* cl) :
 			_semeru_h(g1h), _semeru_cm(cm), _cl(cl), _num_regions_selected_for_rebuild(0) { }
 
-		virtual bool do_heap_region(HeapRegion* r) {
+		virtual bool do_heap_region(SemeruHeapRegion* r) {
 			update_remset_before_rebuild(r);
 			update_marked_bytes(r);
 
@@ -1596,13 +1598,19 @@ public:
 	static const uint RegionsPerThread = 384;
 };
 
-class G1SemeruUpdateRemSetTrackingAfterRebuild : public HeapRegionClosure {
+class G1SemeruUpdateRemSetTrackingAfterRebuild : public SemeruHeapRegionClosure {
 	G1SemeruCollectedHeap* _semeru_h;
 public:
 	G1SemeruUpdateRemSetTrackingAfterRebuild(G1SemeruCollectedHeap* g1h) : _semeru_h(g1h) { }
 
-	virtual bool do_heap_region(HeapRegion* r) {
-		_semeru_h->g1_policy()->remset_tracker()->update_after_rebuild(r);
+	virtual bool do_heap_region(SemeruHeapRegion* r) {
+
+		//debug
+		tty->print("%s, Error, not implemented yet. \n",__func__);
+
+		//_semeru_h->g1_policy()->remset_tracker()->update_after_rebuild(r);
+		
+		
 		return false;
 	}
 };
@@ -1720,16 +1728,16 @@ void G1SemeruConcurrentMark::remark() {
 
 class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 	// Per-region work during the Cleanup pause.
-	class G1ReclaimEmptyRegionsClosure : public HeapRegionClosure {
+	class G1ReclaimEmptyRegionsClosure : public SemeruHeapRegionClosure {
 		G1SemeruCollectedHeap* _semeru_h;
 		size_t _freed_bytes;
-		FreeRegionList* _local_cleanup_list;
+		FreeSemeruRegionList* _local_cleanup_list;
 		uint _old_regions_removed;
 		uint _humongous_regions_removed;
 
 	public:
 		G1ReclaimEmptyRegionsClosure(G1SemeruCollectedHeap* g1h,
-																 FreeRegionList* local_cleanup_list) :
+																 FreeSemeruRegionList* local_cleanup_list) :
 			_semeru_h(g1h),
 			_freed_bytes(0),
 			_local_cleanup_list(local_cleanup_list),
@@ -1740,7 +1748,7 @@ class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 		const uint old_regions_removed() { return _old_regions_removed; }
 		const uint humongous_regions_removed() { return _humongous_regions_removed; }
 
-		bool do_heap_region(HeapRegion *hr) {
+		bool do_heap_region(SemeruHeapRegion *hr) {
 			if (hr->used() > 0 && hr->max_live_bytes() == 0 && !hr->is_young() && !hr->is_archive()) {
 				_freed_bytes += hr->used();
 				hr->set_containing_set(NULL);
@@ -1761,11 +1769,11 @@ class G1SemeruReclaimEmptyRegionsTask : public AbstractGangTask {
 	};
 
 	G1SemeruCollectedHeap* _semeru_h;
-	FreeRegionList* _cleanup_list;
+	FreeSemeruRegionList* _cleanup_list;
 	SemeruHeapRegionClaimer _hrclaimer;
 
 public:
-	G1SemeruReclaimEmptyRegionsTask(G1SemeruCollectedHeap* g1h, FreeRegionList* cleanup_list, uint n_workers) :
+	G1SemeruReclaimEmptyRegionsTask(G1SemeruCollectedHeap* g1h, FreeSemeruRegionList* cleanup_list, uint n_workers) :
 		AbstractGangTask("G1 Cleanup"),
 		_semeru_h(g1h),
 		_cleanup_list(cleanup_list),
@@ -1773,7 +1781,7 @@ public:
 	}
 
 	void work(uint worker_id) {
-		FreeRegionList local_cleanup_list("Local Cleanup List");
+		FreeSemeruRegionList local_cleanup_list("Local Cleanup List");
 		G1ReclaimEmptyRegionsClosure cl(_semeru_h, &local_cleanup_list);
 		_semeru_h->heap_region_par_iterate_from_worker_offset(&cl, &_hrclaimer, worker_id);
 		assert(cl.is_complete(), "Shouldn't have aborted!");
@@ -1792,7 +1800,7 @@ public:
 
 void G1SemeruConcurrentMark::reclaim_empty_regions() {
 	WorkGang* workers = _semeru_h->workers();
-	FreeRegionList empty_regions_list("Empty Regions After Mark List");
+	FreeSemeruRegionList empty_regions_list("Empty Regions After Mark List");
 
 	G1SemeruReclaimEmptyRegionsTask cl(_semeru_h, &empty_regions_list, workers->active_workers());
 	workers->run_task(&cl);
@@ -1800,11 +1808,11 @@ void G1SemeruConcurrentMark::reclaim_empty_regions() {
 	if (!empty_regions_list.is_empty()) {
 		log_debug(gc)("Reclaimed %u empty regions", empty_regions_list.length());
 		// Now print the empty regions list.
-		G1HRPrinter* hrp = _semeru_h->hr_printer();
+		G1SemeruHRPrinter* hrp = _semeru_h->hr_printer();
 		if (hrp->is_active()) {
-			FreeRegionListIterator iter(&empty_regions_list);
+			FreeSemeruRegionListIterator iter(&empty_regions_list);
 			while (iter.more_available()) {
-				HeapRegion* hr = iter.get_next();
+				SemeruHeapRegion* hr = iter.get_next();
 				hrp->cleanup(hr);
 			}
 		}
@@ -2239,7 +2247,16 @@ void G1SemeruConcurrentMark::report_object_count(bool mark_completed) {
 }
 
 
+/**
+ * Semeru MS : we only have 1 SemeruHeapRegion->_alive_bitmap right now,
+ * do NOT do the swap. And keep the prev_top_at_mark_start to be NULL/bottom.
+ *  
+ */
 void G1SemeruConcurrentMark::swap_mark_bitmaps() {
+
+	//debug
+	guarantee(false, "can't reach here. Not Support dual marking bitmap now.");
+
 	G1CMBitMap* temp = _prev_mark_bitmap;
 	_prev_mark_bitmap = _next_mark_bitmap;
 	_next_mark_bitmap = temp;
@@ -2435,57 +2452,6 @@ void G1SemeruConcurrentMark::clear_range_in_prev_bitmap(MemRegion mr) {
 }
 
 
-/**
- * Semeru Memory Server - Cliam a Region from the Old Space to Concurrent Mark.
- *  
- * 		There is a global pointer, _finger, to the scavenge.
- * 
- */
-// HeapRegion*
-// G1SemeruConcurrentMark::claim_region(uint worker_id) {
-// 	// "checkpoint" the finger
-// 	HeapWord* finger = _finger;
-
-// 	while (finger < _heap.end()) {
-// 		assert(_semeru_h->is_in_g1_reserved(finger), "invariant");
-
-// 		HeapRegion* curr_region = _semeru_h->heap_region_containing(finger);
-// 		// Make sure that the reads below do not float before loading curr_region.
-// 		OrderAccess::loadload();
-// 		// Above heap_region_containing may return NULL as we always scan claim
-// 		// until the end of the heap. In this case, just jump to the next region.
-// 		HeapWord* end = curr_region != NULL ? curr_region->end() : finger + HeapRegion::GrainWords;
-
-// 		// Is the gap between reading the finger and doing the CAS too long?
-// 		HeapWord* res = Atomic::cmpxchg(end, &_finger, finger);
-// 		if (res == finger && curr_region != NULL) {
-// 			// we succeeded
-// 			HeapWord*   bottom        = curr_region->bottom();
-// 			HeapWord*   limit         = curr_region->next_top_at_mark_start();
-
-// 			// notice that _finger == end cannot be guaranteed here since,
-// 			// someone else might have moved the finger even further
-// 			assert(_finger >= end, "the finger should have moved forward");
-
-// 			if (limit > bottom) {
-// 				return curr_region;
-// 			} else {
-// 				assert(limit == bottom,
-// 							 "the region limit should be at bottom");
-// 				// we return NULL and the caller should try calling
-// 				// claim_region() again.
-// 				return NULL;
-// 			}
-// 		} else {
-// 			assert(_finger > finger, "the finger should have moved forward");
-// 			// read it again
-// 			finger = _finger;
-// 		}
-// 	}
-
-// 	return NULL;
-// }
-
 
 /**
  * Semeru Memory Server 
@@ -2498,9 +2464,9 @@ void G1SemeruConcurrentMark::clear_range_in_prev_bitmap(MemRegion mr) {
  * 		=> This means that each concurrent thread tracing a claimed entirely,
  * 
  * 
- * [x] Multiple concurrent threads may race for the same HeapRegion parallelly ?  NO at present.
- * 		=> In current design, the HeapRegion is quite big. 
- * 		 		Everytime, reclaim a single HeapRegion and scan it parallelly, if there are multiple concurrent marking threads.	
+ * [x] Multiple concurrent threads may race for the same SemeruHeapRegion parallelly ?  NO at present.
+ * 		=> In current design, the SemeruHeapRegion is quite big. 
+ * 		 		Everytime, reclaim a single SemeruHeapRegion and scan it parallelly, if there are multiple concurrent marking threads.	
  * 
  * [x] The _curr_region can be NULL. Because it may be reseted to NULL after finishing scaning it. 
  * 
@@ -2509,10 +2475,10 @@ void G1SemeruConcurrentMark::clear_range_in_prev_bitmap(MemRegion mr) {
  * 	=> 	1) its scavenge may finished latter. 
  * 			2) It's scavenge my be aborted ?	 
  */
-HeapRegion*
+SemeruHeapRegion*
 G1SemeruConcurrentMark::claim_region(uint worker_id) {
 
-	HeapRegion* curr_region	= NULL;
+	SemeruHeapRegion* curr_region	= NULL;
 
 	// When cliam a Region, it's only decieded by CPU server's current state.
 	// Have to volatile.
@@ -2611,9 +2577,9 @@ void G1SemeruConcurrentMark::verify_no_cset_oops() {
 	// Verify the global finger
 	HeapWord* global_finger = finger();
 	if (global_finger != NULL && global_finger < _heap.end()) {
-		// Since we always iterate over all regions, we might get a NULL HeapRegion
+		// Since we always iterate over all regions, we might get a NULL SemeruHeapRegion
 		// here.
-		HeapRegion* global_hr = _semeru_h->heap_region_containing(global_finger);
+		SemeruHeapRegion* global_hr = _semeru_h->heap_region_containing(global_finger);
 		guarantee(global_hr == NULL || global_finger == global_hr->bottom(),
 							"global finger: " PTR_FORMAT " region: " HR_FORMAT,
 							p2i(global_finger), HR_FORMAT_PARAMS(global_hr));
@@ -2626,7 +2592,7 @@ void G1SemeruConcurrentMark::verify_no_cset_oops() {
 		HeapWord* task_finger = task->finger();
 		if (task_finger != NULL && task_finger < _heap.end()) {
 			// See above note on the global finger verification.
-			HeapRegion* task_hr = _semeru_h->heap_region_containing(task_finger);
+			SemeruHeapRegion* task_hr = _semeru_h->heap_region_containing(task_finger);
 			guarantee(task_hr == NULL || task_finger == task_hr->bottom() ||
 								!task_hr->in_collection_set(),
 								"task finger: " PTR_FORMAT " region: " HR_FORMAT,
@@ -2767,14 +2733,13 @@ G1SemeruCMOopClosure::G1SemeruCMOopClosure(G1SemeruCollectedHeap* semeru_h,
  * OR only assign the first region to _curr_region only
  *  
  */
-void G1SemeruCMTask::setup_for_region(HeapRegion* hr) {
+void G1SemeruCMTask::setup_for_region(SemeruHeapRegion* hr) {
 	assert(hr != NULL,
 				"claim_region() should have filtered out NULL regions");
 	_curr_region  = hr;
 
 	// Current scanning region's alive_bitmap and dest_bitmap 
 	_alive_bitmap	=	hr->alive_bitmap();
-	_dest_bitmap	=	hr->dest_bitmap();
 
 	_region_limit	=	hr->next_top_at_mark_start();  // Semeru memory server abandoned the _finger, updat _region_limit only.
 
@@ -2784,7 +2749,7 @@ void G1SemeruCMTask::setup_for_region(HeapRegion* hr) {
 
 
 void G1SemeruCMTask::update_region_limit() {
-	HeapRegion* hr            = _curr_region;
+	SemeruHeapRegion* hr            = _curr_region;
 	HeapWord* bottom          = hr->bottom();
 	HeapWord* limit           = hr->next_top_at_mark_start(); // All the newly allocated objects after the CM start will be handled seperately.
 
@@ -2820,7 +2785,7 @@ void G1SemeruCMTask::update_region_limit() {
  *  	Update the region limit for current MARKING region.
  */
 // void G1SemeruCMTask::update_marking_region_limit() {
-// 	HeapRegion* hr            = _curr_region;   // both CM marking and STW compaction use the same pointer?
+// 	SemeruHeapRegion* hr            = _curr_region;   // both CM marking and STW compaction use the same pointer?
 // 	HeapWord* bottom          = hr->bottom();
 // 	HeapWord* limit           = hr->next_top_at_mark_start(); // All the newly allocated objects after the CM start will be handled seperately.
 
@@ -2858,7 +2823,7 @@ void G1SemeruCMTask::update_region_limit() {
 /**
  * Semeru Memory Server
  *  	Compaction doesn't need such a pointer, need to evacuate all the alive objects in current Region.
- * 		Which is HeapRegion->top
+ * 		Which is SemeruHeapRegion->top
  */
 
 
@@ -3492,7 +3457,7 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 // 			assert(_curr_region  == NULL, "invariant");
 // 			assert(_finger       == NULL, "invariant");
 // 			assert(_region_limit == NULL, "invariant");
-// 			HeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
+// 			SemeruHeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
 // 			if (claimed_region != NULL) {
 // 				// Yes, we managed to claim one
 // 				setup_for_region(claimed_region);
@@ -3772,8 +3737,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				
 				assert(_curr_region->used()!=0, "%s, Can't be empty humongous Region. ", __func__);
 
-				// 1) Humongous object is larger than HeapRegion size/2
-				// 2) Humongous object allocation is always HeapRegion alignment.
+				// 1) Humongous object is larger than SemeruHeapRegion size/2
+				// 2) Humongous object allocation is always SemeruHeapRegion alignment.
 				// 3) One humongous object can spread several continous HeapRegions.
 				if ( _curr_region->is_starts_humongous() &&  
 							_alive_bitmap->is_marked(_curr_region->bottom())) {
@@ -3869,7 +3834,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			//assert(_curr_region  == NULL, "invariant");
 			assert(_finger       == NULL, "invariant");
 			assert(_region_limit == NULL, "invariant");
-			HeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
+			SemeruHeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
 				setup_for_region(claimed_region);
@@ -4190,7 +4155,7 @@ G1SemeruPrintRegionLivenessInfoClosure::G1SemeruPrintRegionLivenessInfoClosure(c
 													G1PPRL_SUM_ADDR_FORMAT("reserved")
 													G1PPRL_SUM_BYTE_FORMAT("region-size"),
 													p2i(g1_reserved.start()), p2i(g1_reserved.end()),
-													HeapRegion::GrainBytes);
+													SemeruHeapRegion::SemeruGrainBytes);
 	log_trace(gc, liveness)(G1PPRL_LINE_PREFIX);
 	log_trace(gc, liveness)(G1PPRL_LINE_PREFIX
 													G1PPRL_TYPE_H_FORMAT
@@ -4220,7 +4185,7 @@ G1SemeruPrintRegionLivenessInfoClosure::G1SemeruPrintRegionLivenessInfoClosure(c
 													"(bytes)", "", "(bytes)");
 }
 
-bool G1SemeruPrintRegionLivenessInfoClosure::do_heap_region(HeapRegion* r) {
+bool G1SemeruPrintRegionLivenessInfoClosure::do_heap_region(SemeruHeapRegion* r) {
 	if (!log_is_enabled(Trace, gc, liveness)) {
 		return false;
 	}

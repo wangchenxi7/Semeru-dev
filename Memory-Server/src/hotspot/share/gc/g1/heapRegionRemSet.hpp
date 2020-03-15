@@ -42,6 +42,9 @@ class PerRegionTable;
 class SparsePRT;
 class nmethod;
 
+//Semeru
+class SemeruHeapRegion;
+
 // The "_coarse_map" is a bitmap with one bit for each region, where set
 // bits indicate that the corresponding region may contain some pointer
 // into the owning region.
@@ -182,6 +185,8 @@ private:
 
 	HeapRegion* _hr;							// Points to attached HeapRegion.
 
+	SemeruHeapRegion* _semeru_hr;	// Semeru hr.
+
 	void clear_fcc();
 
 public:
@@ -190,6 +195,8 @@ public:
 	static void setup_remset_size();
 
 	// Semeru
+
+	HeapRegionRemSet(G1BlockOffsetTable* bot, SemeruHeapRegion* hr);
 	static void setup_semeru_remset_size();
 
 	bool cardset_is_empty() const {

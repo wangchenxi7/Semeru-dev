@@ -32,9 +32,9 @@
 #include "gc/g1/g1OopClosures.inline.hpp"
 #include "gc/g1/g1Policy.hpp"
 #include "gc/g1/g1RegionMarkStatsCache.inline.hpp"
-#include "gc/g1/g1RemSetTrackingPolicy.hpp"
+// #include "gc/g1/g1RemSetTrackingPolicy.hpp"
 #include "gc/g1/heapRegionRemSet.hpp"
-#include "gc/g1/heapRegion.hpp"
+// #include "gc/g1/heapRegion.hpp"
 #include "gc/shared/suspendibleThreadSet.hpp"
 #include "gc/shared/taskqueue.inline.hpp"
 #include "utilities/bitMap.inline.hpp"
@@ -44,6 +44,9 @@
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/g1ParScanThreadState.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.inline.hpp"
+#include "gc/g1/SemeruHeapRegion.hpp"
+#include "gc/g1/g1SemeruRemSetTrackingPolicy.hpp"
+
 
 // inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
 //   return !_semeru_h->is_obj_ill(obj);
@@ -83,7 +86,7 @@ inline bool G1SemeruCMSubjectToDiscoveryClosure::do_object_b(oop obj) {
 
 
 inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, oop const obj) {
-  HeapRegion* const hr = _semeru_h->heap_region_containing(obj);
+  SemeruHeapRegion* const hr = _semeru_h->heap_region_containing(obj);
   return mark_in_next_bitmap(worker_id, hr, obj);
 }
 
@@ -95,7 +98,7 @@ inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, oo
  *  Tell the region that there are new allocated objects since last Concurrent Full Marking ?
  * 
  */
-inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, HeapRegion* const hr, oop const obj) {
+inline bool G1SemeruConcurrentMark::mark_in_next_bitmap(uint const worker_id, SemeruHeapRegion* const hr, oop const obj) {
   assert(hr != NULL, "just checking");
   assert(hr->is_in_reserved(obj), "Attempting to mark object at " PTR_FORMAT " that is not contained in the given region %u", p2i(obj), hr->hrm_index());
 
@@ -185,18 +188,25 @@ inline HeapWord* G1SemeruConcurrentMark::top_at_rebuild_start(uint region) const
  * [?] RemSet Rebuild is a concurrent procedure, the top may be changed after the scan for this region ?
  * 
  */
-inline void G1SemeruConcurrentMark::update_top_at_rebuild_start(HeapRegion* r) {
+inline void G1SemeruConcurrentMark::update_top_at_rebuild_start(SemeruHeapRegion* r) {
   uint const region = r->hrm_index();
   assert(region < _semeru_h->max_regions(), "Tried to access TARS for region %u out of bounds", region);
   assert(_top_at_rebuild_starts[region] == NULL,
          "TARS for region %u has already been set to " PTR_FORMAT " should be NULL",
          region, p2i(_top_at_rebuild_starts[region]));
-  G1RemSetTrackingPolicy* tracker = _semeru_h->g1_policy()->remset_tracker();
-  if (tracker->needs_scan_for_rebuild(r)) {   // except for Young, Free and Closed-Achrive HeapRegions.
-    _top_at_rebuild_starts[region] = r->top();
-  } else {
-    // Leave TARS at NULL.
-  }
+
+
+  //debug
+  tty->print("%s, Current function is not implemented!! \n", __func__);
+
+  // G1RemSetTrackingPolicy* tracker = _semeru_h->g1_policy()->remset_tracker();
+  // if (tracker->needs_scan_for_rebuild(r)) {   // except for Young, Free and Closed-Achrive HeapRegions.
+  //   _top_at_rebuild_starts[region] = r->top();
+  // } else {
+  //   // Leave TARS at NULL.
+  // }
+
+
 }
 
 
@@ -455,12 +465,12 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
 
 
 /**
- * Semeru Memory Server - Concurrently mark an object alive in HeapRegion->alive_bitmap
+ * Semeru Memory Server - Concurrently mark an object alive in SemeruHeapRegion->alive_bitmap
  *  
  *  [x] There may be multiple Semeru CM Threads marking the alive objects here ?
  *    => yes. The Multiple-Thread Safe && de-duplication are guaranteed by the alive_bitmap marking.
  *        Only the thread successfully mark the bit, can push the grey objects into G1SemeruCMTask->_semeru_task_queue.
- *    => Which means : 1) mark object alive (grey) in HeapRegion->alive_bitmap
+ *    => Which means : 1) mark object alive (grey) in SemeruHeapRegion->alive_bitmap
  *                     2) Enqueue the marked object into G1SemeruCMTask->_semeru_task_queue (to scan its fields.)
  * 
  * 

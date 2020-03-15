@@ -28,6 +28,8 @@
 #include "gc/g1/heapRegion.hpp"
 #include "memory/virtualspace.hpp"
 
+//Semeru
+#include "gc/g1/SemeruHeapRegion.hpp"
 
 /**
  * [?] Allocate bitmap space from storage to cover the MemRegion, heap. 
@@ -54,6 +56,7 @@ void G1CMBitMap::clear_region(HeapRegion* region) {
  }
 }
 
+
 #ifdef ASSERT
 void G1CMBitMap::check_mark(HeapWord* addr) {
   assert(G1CollectedHeap::heap()->is_in_exact(addr),
@@ -61,3 +64,16 @@ void G1CMBitMap::check_mark(HeapWord* addr) {
          p2i(this), p2i(addr));
 }
 #endif
+
+
+//
+// Semeru
+//
+
+void G1CMBitMap::clear_region(SemeruHeapRegion* region) {
+ if (!region->is_empty()) {
+   MemRegion mr(region->bottom(), region->top());
+   clear_range(mr);
+ }
+}
+

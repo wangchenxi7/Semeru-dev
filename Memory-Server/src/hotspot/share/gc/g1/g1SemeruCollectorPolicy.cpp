@@ -34,6 +34,7 @@
 
 // Semeru
 #include "gc/g1/g1SemeruCollectorPolicy.hpp"
+#include "gc/g1/SemeruHeapRegion.hpp"
 
 /**
  * [?]We need to rewrite these  control parameters for Semeru
@@ -55,7 +56,7 @@ _semeru_heap_alignment(0) {    // Initialize the alignment size in initialize_al
   // the region size on the heap size, but the heap size should be
   // aligned with the region size. To get around this we use the
   // unaligned values for the heap.
-  HeapRegion::setup_semeru_heap_region_size(SemeruMemPoolInitialSize, SemeruMemPoolMaxSize);
+  SemeruHeapRegion::setup_semeru_heap_region_size(SemeruMemPoolInitialSize, SemeruMemPoolMaxSize);
   HeapRegionRemSet::setup_semeru_remset_size();
 
   // Semeru
@@ -67,7 +68,7 @@ void G1SemeruCollectorPolicy::initialize_alignments() {
 
   // Some parameters for original heap  control.
   // If hese parameters are not static, can we just rewrite their value to Semeru paratmers. 
-  _space_alignment = HeapRegion::GrainBytes;
+  _space_alignment = SemeruHeapRegion::SemeruGrainBytes;
   size_t card_table_alignment = CardTableRS::ct_max_alignment_constraint();
   size_t page_size = UseLargePages ? os::large_page_size() : os::vm_page_size();
   
@@ -75,7 +76,7 @@ void G1SemeruCollectorPolicy::initialize_alignments() {
   //_heap_alignment = MAX3(card_table_alignment, _space_alignment, page_size);
 
   // Semeru patarmeters 
-  _semeru_heap_alignment = MAX3(card_table_alignment, HeapRegion::SemeruGrainBytes, page_size);
+  _semeru_heap_alignment = MAX3(card_table_alignment, SemeruHeapRegion::SemeruGrainBytes, page_size);
   log_info(heap)("%s, _semeru_heap_alignment is 0x%llx ", __func__, 
                               (unsigned long long)_semeru_heap_alignment);
 

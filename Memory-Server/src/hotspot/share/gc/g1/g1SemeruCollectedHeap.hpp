@@ -39,12 +39,12 @@
 #include "gc/g1/g1HeapTransition.hpp"
 #include "gc/g1/g1HeapVerifier.hpp"
 #include "gc/g1/g1HRPrinter.hpp"
-#include "gc/g1/g1InCSetState.hpp"
+//#include "gc/g1/g1InCSetState.hpp"
 #include "gc/g1/g1MonitoringSupport.hpp"
 #include "gc/g1/g1SurvivorRegions.hpp"
 #include "gc/g1/g1YCTypes.hpp"
 //#include "gc/g1/heapRegionManager.hpp"
-#include "gc/g1/heapRegionSet.hpp"
+//#include "gc/g1/heapRegionSet.hpp"
 #include "gc/g1/heterogeneousHeapRegionManager.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/collectedHeap.hpp"
@@ -59,7 +59,11 @@
 #include "gc/g1/g1SemeruConcurrentMark.hpp"
 #include "gc/g1/SemeruHeapRegionManager.hpp"  // G1SemeruCollectedHeap --> SemeruHeapRegionManager, the invoke sequence.
 #include "gc/shared/rdmaStructure.inline.hpp"
-#include "gc/g1/g1SemeruSTWCompact.hpp"       // share all concurrent thread resource of g1SemeruConcurrentMark
+#include "gc/g1/g1SemeruSTWCompact.hpp"       //
+#include "gc/g1/SemeruHeapRegionSet.hpp"
+#include "gc/g1/g1SemeruHRPrinter.hpp"
+#include "gc/g1/g1SemeruInCSetState.hpp"
+
 
 // A "G1SemeruCollectedHeap" is an implementation of a java memory pool in HotSpot for CPU server.
 // It uses the modified "Garbage First" heap organization and algorithm, which
@@ -67,7 +71,7 @@
 // heap subsets that will yield large amounts of garbage.
 
 // Forward declarations
-class HeapRegion;
+//class HeapRegion;
 class GenerationSpec;
 class G1ParScanThreadState;
 class G1ParScanThreadStateSet;
@@ -104,8 +108,10 @@ class G1EvacSummary;
 
 // Semeru
 // Used for the declaration in G1SemeruSTWIsAliveClosure.
+class SemeruHeapRegion;
 class G1SemeruCollectedHeap;
 class G1SemeruCollectorPolicy;
+class G1SemeruConcurrentMark;
 class G1SemeruConcurrentMarkThread;
 
 
@@ -311,31 +317,31 @@ private:
   // [?] What's the purpose of this ??
   G1MonitoringSupport* _g1mm;
 
-//   // Records whether the region at the given index is (still) a
-//   // candidate for eager reclaim.  Only valid for humongous start
-//   // regions; other regions have unspecified values.  Humongous start
-//   // regions are initialized at start of collection pause, with
-//   // candidates removed from the set as they are found reachable from
-//   // roots or the young generation.
-//   class HumongousReclaimCandidates : public G1BiasedMappedArray<bool> {
-//    protected:
-//     bool default_value() const { return false; }
-//    public:
-//     void clear() { G1BiasedMappedArray<bool>::clear(); }
-//     void set_candidate(uint region, bool value) {
-//       set_by_index(region, value);
-//     }
-//     bool is_candidate(uint region) {
-//       return get_by_index(region);
-//     }
-//   };
+  // Records whether the region at the given index is (still) a
+  // candidate for eager reclaim.  Only valid for humongous start
+  // regions; other regions have unspecified values.  Humongous start
+  // regions are initialized at start of collection pause, with
+  // candidates removed from the set as they are found reachable from
+  // roots or the young generation.
+  class HumongousReclaimCandidates : public G1BiasedMappedArray<bool> {
+   protected:
+    bool default_value() const { return false; }
+   public:
+    void clear() { G1BiasedMappedArray<bool>::clear(); }
+    void set_candidate(uint region, bool value) {
+      set_by_index(region, value);
+    }
+    bool is_candidate(uint region) {
+      return get_by_index(region);
+    }
+  };
 
-//   HumongousReclaimCandidates _humongous_reclaim_candidates;
-//   // Stores whether during humongous object registration we found candidate regions.
-//   // If not, we can skip a few steps.
-//   bool _has_humongous_reclaim_candidates;
+  HumongousReclaimCandidates _humongous_reclaim_candidates;
+  // Stores whether during humongous object registration we found candidate regions.
+  // If not, we can skip a few steps.
+  bool _has_humongous_reclaim_candidates;
 
-  G1HRPrinter _hr_printer;
+  G1SemeruHRPrinter _hr_printer;
 
 //   // It decides whether an explicit GC should start a concurrent cycle
 //   // instead of doing a STW GC. Currently, a concurrent cycle is
@@ -451,12 +457,12 @@ private:
 
   G1CollectionSet _collection_set;    // Collection Set for Semeru Memory server, dicided by CPU server.
 
-  // // Try to allocate a single non-humongous HeapRegion sufficient for
+  // // Try to allocate a single non-humongous SemeruHeapRegion sufficient for
   // // an allocation of the given word_size. If do_expand is true,
   // // attempt to expand the heap if necessary to satisfy the allocation
   // // request. 'type' takes the type of region to be allocated. (Use constants
   // // Old, Eden, Humongous, Survivor defined in HeapRegionType.)
-  // HeapRegion* new_region(size_t word_size, HeapRegionType type, bool do_expand);
+  // SemeruHeapRegion* new_region(size_t word_size, HeapRegionType type, bool do_expand);
 
 
   // Initialize a contiguous set of free regions of length num_regions
@@ -534,15 +540,15 @@ private:
 //   // These methods are the "callbacks" from the G1AllocRegion class.
 
 //   // For mutator alloc regions.
-//   HeapRegion* new_mutator_alloc_region(size_t word_size, bool force);
-//   void retire_mutator_alloc_region(HeapRegion* alloc_region,
+//   SemeruHeapRegion* new_mutator_alloc_region(size_t word_size, bool force);
+//   void retire_mutator_alloc_region(SemeruHeapRegion* alloc_region,
 //                                    size_t allocated_bytes);
 
 //   // For GC alloc regions.
-//   bool has_more_regions(InCSetState dest);
-//   HeapRegion* new_gc_alloc_region(size_t word_size, InCSetState dest);
-//   void retire_gc_alloc_region(HeapRegion* alloc_region,
-//                               size_t allocated_bytes, InCSetState dest);
+//   bool has_more_regions(SemeruInCSetState dest);
+//   SemeruHeapRegion* new_gc_alloc_region(size_t word_size, SemeruInCSetState dest);
+//   void retire_gc_alloc_region(SemeruHeapRegion* alloc_region,
+//                               size_t allocated_bytes, SemeruInCSetState dest);
 
   // - if explicit_gc is true, the GC is for a System.gc() etc,
   //   otherwise it's for a failed allocation.
@@ -640,54 +646,56 @@ private:
   // Expand the garbage-first heap by at least the given size (in bytes!).
   // Returns true if the heap was expanded by the requested amount;
   // false otherwise.
-  // (Rounds up to a HeapRegion boundary.)
+  // (Rounds up to a SemeruHeapRegion boundary.)
   bool expand(size_t expand_bytes, WorkGang* pretouch_workers = NULL, double* expand_time_ms = NULL);
 
 //   // Returns the PLAB statistics for a given destination.
-//   inline G1EvacStats* alloc_buffer_stats(InCSetState dest);
+//   inline G1EvacStats* alloc_buffer_stats(SemeruInCSetState dest);
 
 //   // Determines PLAB size for a given destination.
-//   inline size_t desired_plab_sz(InCSetState dest);
+//   inline size_t desired_plab_sz(SemeruInCSetState dest);
 
 //   // Do anything common to GC's.
 //   void gc_prologue(bool full);
 //   void gc_epilogue(bool full);
 
-//   // Does the given region fulfill remembered set based eager reclaim candidate requirements?
-//   bool is_potential_eager_reclaim_candidate(HeapRegion* r) const;
+  // Does the given region fulfill remembered set based eager reclaim candidate requirements?
+  bool is_potential_eager_reclaim_candidate(SemeruHeapRegion* r) const;
 
-//   // Modify the reclaim candidate set and test for presence.
-//   // These are only valid for starts_humongous regions.
-//   inline void set_humongous_reclaim_candidate(uint region, bool value);
-//   inline bool is_humongous_reclaim_candidate(uint region);
+  // Modify the reclaim candidate set and test for presence.
+  // These are only valid for starts_humongous regions.
+  inline void set_humongous_reclaim_candidate(uint region, bool value);
+  inline bool is_humongous_reclaim_candidate(uint region);
 
-//   // Remove from the reclaim candidate set.  Also remove from the
-//   // collection set so that later encounters avoid the slow path.
-//   inline void set_humongous_is_live(oop obj);
+  // Remove from the reclaim candidate set.  Also remove from the
+  // collection set so that later encounters avoid the slow path.
+  inline void set_humongous_is_live(oop obj);
 
-//   // Register the given region to be part of the collection set.
-//   inline void register_humongous_region_with_cset(uint index);
-//   // Register regions with humongous objects (actually on the start region) in
-//   // the in_cset_fast_test table.
-//   void register_humongous_regions_with_cset();
-//   // We register a region with the fast "in collection set" test. We
-//   // simply set to true the array slot corresponding to this region.
-//   void register_young_region_with_cset(HeapRegion* r) {
-//     _in_cset_fast_test.set_in_young(r->hrm_index());
-//   }
-//   void register_old_region_with_cset(HeapRegion* r) {
-//     _in_cset_fast_test.set_in_old(r->hrm_index());
-//   }
-//   void register_optional_region_with_cset(HeapRegion* r) {
-//     _in_cset_fast_test.set_optional(r->hrm_index());
-//   }
-//   void clear_in_cset(const HeapRegion* hr) {
-//     _in_cset_fast_test.clear(hr);
-//   }
 
-//   void clear_cset_fast_test() {
-//     _in_cset_fast_test.clear();
-//   }
+
+  // Register the given region to be part of the collection set.
+  inline void register_humongous_region_with_cset(uint index);
+  // Register regions with humongous objects (actually on the start region) in
+  // the in_cset_fast_test table.
+  void register_humongous_regions_with_cset();
+  // We register a region with the fast "in collection set" test. We
+  // simply set to true the array slot corresponding to this region.
+  void register_freshly_evict_region_with_cset(SemeruHeapRegion* r) {
+    _in_cset_fast_test.set_in_freshly_evict(r->hrm_index());
+  }
+  void register_scanned_region_with_cset(SemeruHeapRegion* r) {
+    _in_cset_fast_test.set_in_scanned(r->hrm_index());
+  }
+  void register_optional_region_with_cset(SemeruHeapRegion* r) {
+    _in_cset_fast_test.set_optional(r->hrm_index());
+  }
+  void clear_in_cset(const SemeruHeapRegion* hr) {
+    _in_cset_fast_test.clear(hr);
+  }
+
+  void clear_cset_fast_test() {
+    _in_cset_fast_test.clear();
+  }
 
 //   bool is_user_requested_concurrent_full_gc(GCCause::Cause cause);
 
@@ -715,14 +723,15 @@ private:
     return _old_marking_cycles_completed;
   }
 
-  G1HRPrinter* hr_printer() { return &_hr_printer; }
+  G1SemeruHRPrinter* hr_printer() { return &_hr_printer; }
 
   // Allocates a new heap region instance.
-  HeapRegion* new_heap_region(uint hrs_index, MemRegion mr);
+  SemeruHeapRegion* new_heap_region(uint hrs_index, MemRegion mr);
+
 
 //   // Allocate the highest free region in the reserved heap. This will commit
 //   // regions as necessary.
-//   HeapRegion* alloc_highest_free_region();
+//   SemeruHeapRegion* alloc_highest_free_region();
 
   // Frees a non-humongous region by initializing its contents and
   // adding it to the free list that's passed as a parameter (this is
@@ -733,8 +742,8 @@ private:
   // be freed up. The assumption is that this will be done later.
   // The locked parameter indicates if the caller has already taken
   // care of proper synchronization. This may allow some optimizations.
-  void free_region(HeapRegion* hr,
-                   FreeRegionList* free_list,
+  void free_region(SemeruHeapRegion* hr,
+                   FreeSemeruRegionList* free_list,
                    bool skip_remset,
                    bool skip_hot_card_cache = false,
                    bool locked = false);
@@ -752,8 +761,8 @@ private:
   // list later).
   // The method assumes that only a single thread is ever calling
   // this for a particular region at once.
-  void free_humongous_region(HeapRegion* hr,
-                             FreeRegionList* free_list);
+  void free_humongous_region(SemeruHeapRegion* hr,
+                             FreeSemeruRegionList* free_list);
 
 //   // Facility for allocating in 'archive' regions in high heap memory and
 //   // recording the allocated ranges. These should all be called from the
@@ -803,7 +812,7 @@ private:
  private:
 
   // Shrink the garbage-first heap by at most the given size (in bytes!).
-  // (Rounds down to a HeapRegion boundary.)
+  // (Rounds down to a SemeruHeapRegion boundary.)
   void shrink(size_t expand_bytes);
 //   void shrink_helper(size_t expand_bytes);
 
@@ -1177,23 +1186,23 @@ public:
   uint num_used_regions() const { return num_regions() - num_free_regions(); }
 
 #ifdef ASSERT
-  bool is_on_master_free_list(HeapRegion* hr) {
+  bool is_on_master_free_list(SemeruHeapRegion* hr) {
     return _hrm->is_free(hr);
   }
 #endif // ASSERT
 
-//   inline void old_set_add(HeapRegion* hr);
-//   inline void old_set_remove(HeapRegion* hr);
+//   inline void old_set_add(SemeruHeapRegion* hr);
+//   inline void old_set_remove(SemeruHeapRegion* hr);
 
-//   inline void archive_set_add(HeapRegion* hr);
+//   inline void archive_set_add(SemeruHeapRegion* hr);
 
 //   size_t non_young_capacity_bytes() {
-//     return (old_regions_count() + _archive_set.length() + humongous_regions_count()) * HeapRegion::GrainBytes;
+//     return (old_regions_count() + _archive_set.length() + humongous_regions_count()) * SemeruHeapRegion::SemeruGrainBytes;
 //   }
 
 //   // Determine whether the given region is one that we are using as an
 //   // old GC alloc region.
-//   bool is_old_gc_alloc_region(HeapRegion* hr);
+//   bool is_old_gc_alloc_region(SemeruHeapRegion* hr);
 
   // Perform a collection of the heap; intended for use in implementing
   // "System.gc".  This probably implies as full a collection as the
@@ -1209,7 +1218,7 @@ public:
 //   bool evacuation_failed() { return _evacuation_failed; }
 
   void remove_from_old_sets(const uint old_regions_removed, const uint humongous_regions_removed);
-  void prepend_to_freelist(FreeRegionList* list);
+  void prepend_to_freelist(FreeSemeruRegionList* list);
   void decrement_summary_bytes(size_t bytes);
 
   virtual bool is_in(const void* p) const;
@@ -1221,7 +1230,7 @@ public:
 
   // Return "TRUE" iff the given object address is within the collection
   // set. Assumes that the reference points into the heap.
-  inline bool is_in_cset(const HeapRegion *hr);
+  inline bool is_in_cset(const SemeruHeapRegion *hr);
   inline bool is_in_cset(oop obj);
   inline bool is_in_cset(HeapWord* addr);
 
@@ -1231,11 +1240,11 @@ public:
   // This array is used for a quick test on whether a reference points into
   // the collection set or not. Each of the array's elements denotes whether the
   // corresponding region is in the collection set or not.
-  G1InCSetStateFastTestBiasedMappedArray _in_cset_fast_test;
+  G1SemeruInCSetStateFastTestBiasedMappedArray _in_cset_fast_test;
 
 public:
 
-//   inline InCSetState in_cset_state(const oop obj);
+  inline SemeruInCSetState in_cset_state(const oop obj);
 
   // Return "TRUE" iff the given object address is in the reserved
   // region of g1.
@@ -1268,15 +1277,15 @@ public:
 
   // Iterate over heap regions, in address order, terminating the
   // iteration early if the "do_heap_region" method returns "true".
-  void heap_region_iterate(HeapRegionClosure* blk) const;
+  void heap_region_iterate(SemeruHeapRegionClosure* blk) const;
 
   // Return the region with the given index. It assumes the index is valid.
-  inline HeapRegion* region_at(uint index) const;
-  inline HeapRegion* region_at_or_null(uint index) const;
+  inline SemeruHeapRegion* region_at(uint index) const;
+  inline SemeruHeapRegion* region_at_or_null(uint index) const;
 
 //   // Return the next region (by index) that is part of the same
 //   // humongous object that hr is part of.
-//   inline HeapRegion* next_region_in_humongous(HeapRegion* hr) const;
+//   inline SemeruHeapRegion* next_region_in_humongous(SemeruHeapRegion* hr) const;
 
   // Calculate the region index of the given address. Given address must be
   // within the heap.
@@ -1290,30 +1299,30 @@ public:
   // The _from_worker_offset version uses the SemeruHeapRegionClaimer and
   // the worker id to calculate a start offset to prevent all workers to
   // start from the point.
-  void heap_region_par_iterate_from_worker_offset(HeapRegionClosure* cl,
+  void heap_region_par_iterate_from_worker_offset(SemeruHeapRegionClosure* cl,
                                                   SemeruHeapRegionClaimer* hrclaimer,
                                                   uint worker_id) const;
 
-//   void heap_region_par_iterate_from_start(HeapRegionClosure* cl,
+//   void heap_region_par_iterate_from_start(SemeruHeapRegionClosure* cl,
 //                                           SemeruHeapRegionClaimer* hrclaimer) const;
 
 //   // Iterate over the regions (if any) in the current collection set.
-//   void collection_set_iterate(HeapRegionClosure* blk);
+//   void collection_set_iterate(SemeruHeapRegionClosure* blk);
 
 //   // Iterate over the regions (if any) in the current collection set. Starts the
 //   // iteration over the entire collection set so that the start regions of a given
 //   // worker id over the set active_workers are evenly spread across the set of
 //   // collection set regions.
-//   void collection_set_iterate_from(HeapRegionClosure *blk, uint worker_id);
+//   void collection_set_iterate_from(SemeruHeapRegionClosure *blk, uint worker_id);
 
-  // Returns the HeapRegion that contains addr. addr must not be NULL.
+  // Returns the SemeruHeapRegion that contains addr. addr must not be NULL.
   template <class T>
-  inline HeapRegion* heap_region_containing(const T addr) const;
+  inline SemeruHeapRegion* heap_region_containing(const T addr) const;
 
-  // Returns the HeapRegion that contains addr, or NULL if that is an uncommitted
+  // Returns the SemeruHeapRegion that contains addr, or NULL if that is an uncommitted
   // region. addr must not be NULL.
   template <class T>
-  inline HeapRegion* heap_region_containing_or_null(const T addr) const;
+  inline SemeruHeapRegion* heap_region_containing_or_null(const T addr) const;
 
   // A CollectedHeap is divided into a dense sequence of "blocks"; that is,
   // each address in the (reserved) heap is a member of exactly
@@ -1382,7 +1391,7 @@ public:
   // asserted to be this type.
   static G1SemeruCollectedHeap* heap();
 
-//   void set_region_short_lived_locked(HeapRegion* hr);
+//   void set_region_short_lived_locked(SemeruHeapRegion* hr);
 //   // add appropriate methods for any other surv rate groups
 
   const G1SurvivorRegions* survivor() const { return &_survivor; }
@@ -1416,7 +1425,7 @@ public:
   // the region to which the object belongs. An object is dead
   // iff a) it was not allocated since the last mark, b) it
   // is not marked, and c) it is not in an archive region.
-  bool is_obj_dead(const oop obj, const HeapRegion* hr) const {
+  bool is_obj_dead(const oop obj, const SemeruHeapRegion* hr) const {
     return
       hr->is_obj_dead(obj, _semeru_cm->prev_mark_bitmap()) &&
       !hr->is_archive();
@@ -1425,25 +1434,28 @@ public:
   // This function returns true when an object has been
   // around since the previous marking and hasn't yet
   // been marked during this marking, and is not in an archive region.
-  bool is_obj_ill(const oop obj, const HeapRegion* hr) const {
+  //
+  // [?] Why call this object ill ? Because if it's not allocated sin_next_marking, it shoule be marked ? 
+  //
+  bool is_obj_ill(const oop obj, const SemeruHeapRegion* hr) const {
     return
       !hr->obj_allocated_since_next_marking(obj) &&
       !is_marked_next(obj) &&
       !hr->is_archive();
   }
 
-//   // Determine if an object is dead, given only the object itself.
-//   // This will find the region to which the object belongs and
-//   // then call the region version of the same function.
+  // Determine if an object is dead, given only the object itself.
+  // This will find the region to which the object belongs and
+  // then call the region version of the same function.
 
-//   // Added if it is NULL it isn't dead.
+  // Added if it is NULL it isn't dead.
 
   inline bool is_obj_dead(const oop obj) const;
 
   inline bool is_obj_ill(const oop obj) const;
 
-//   inline bool is_obj_dead_full(const oop obj, const HeapRegion* hr) const;
-//   inline bool is_obj_dead_full(const oop obj) const;
+  inline bool is_obj_dead_full(const oop obj, const SemeruHeapRegion* hr) const;
+  inline bool is_obj_dead_full(const oop obj) const;
 
   G1SemeruConcurrentMark* concurrent_mark() const { return _semeru_cm; }
 
@@ -1514,17 +1526,17 @@ public:
 
   virtual WorkGang* get_safepoint_workers() { return _workers; }
 
-//   // The methods below are here for convenience and dispatch the
-//   // appropriate method depending on value of the given VerifyOption
-//   // parameter. The values for that parameter, and their meanings,
-//   // are the same as those above.
+  // The methods below are here for convenience and dispatch the
+  // appropriate method depending on value of the given VerifyOption
+  // parameter. The values for that parameter, and their meanings,
+  // are the same as those above.
 
-//   bool is_obj_dead_cond(const oop obj,
-//                         const HeapRegion* hr,
-//                         const VerifyOption vo) const;
+  bool is_obj_dead_cond(const oop obj,
+                        const SemeruHeapRegion* hr,
+                        const VerifyOption vo) const;
 
-//   bool is_obj_dead_cond(const oop obj,
-//                         const VerifyOption vo) const;
+  bool is_obj_dead_cond(const oop obj,
+                        const VerifyOption vo) const;
 
   G1HeapSummary create_g1_heap_summary();
 //   G1EvacSummary create_g1_evac_summary(G1EvacStats* stats);

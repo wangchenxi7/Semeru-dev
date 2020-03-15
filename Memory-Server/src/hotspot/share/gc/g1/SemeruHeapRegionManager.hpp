@@ -28,26 +28,27 @@
 #include "gc/g1/g1BiasedArray.hpp"
 //#include "gc/g1/g1CollectorPolicy.hpp"
 #include "gc/g1/g1RegionToSpaceMapper.hpp"
-#include "gc/g1/heapRegionSet.hpp"
+//#include "gc/g1/heapRegionSet.hpp"
 #include "gc/shared/collectorPolicy.hpp"
 #include "services/memoryUsage.hpp"
 
 // Semeru
 #include "gc/g1/g1SemeruCollectorPolicy.hpp"
+#include "gc/g1/SemeruHeapRegionSet.hpp"
 
-class HeapRegion;
-class HeapRegionClosure;
+class SemeruHeapRegion;
+class SemeruHeapRegionClosure;
 class SemeruHeapRegionClaimer;
-class FreeRegionList;
+class FreeSemeruRegionList;
 class WorkGang;
 
-class G1SemeruHeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
+class G1SemeruHeapRegionTable : public G1BiasedMappedArray<SemeruHeapRegion*> {
  protected:
-  virtual HeapRegion* default_value() const { return NULL; }
+  virtual SemeruHeapRegion* default_value() const { return NULL; }
 };
 
 // This class keeps track of the actual heap memory, auxiliary data
-// and its metadata (i.e., HeapRegion instances) and the list of free regions.
+// and its metadata (i.e., SemeruHeapRegion instances) and the list of free regions.
 //
 // This allows maximum flexibility for deciding what to commit or uncommit given
 // a request from outside.
@@ -58,9 +59,9 @@ class G1SemeruHeapRegionTable : public G1BiasedMappedArray<HeapRegion*> {
 // regions that are consecutive in the array should also be adjacent in the
 // address space (i.e., region(i).end() == region(i+1).bottom().
 //
-// We create a HeapRegion when we commit the region's address space
+// We create a SemeruHeapRegion when we commit the region's address space
 // for the first time. When we uncommit the address space of a
-// region we retain the HeapRegion to be able to re-use it in the
+// region we retain the SemeruHeapRegion to be able to re-use it in the
 // future (in case we recommit it).
 //
 // We keep track of three lengths:
@@ -100,7 +101,7 @@ class SemeruHeapRegionManager: public CHeapObj<mtGC> {
    // The number of regions committed in the heap.
   uint _num_committed;
 
-  // Internal only. The highest heap region +1 we allocated a HeapRegion instance for.
+  // Internal only. The highest heap region +1 we allocated a SemeruHeapRegion instance for.
   uint _allocated_heapregions_length;
 
   HeapWord* heap_bottom() const { return _regions.bottom_address_mapped(); }
@@ -128,7 +129,7 @@ class SemeruHeapRegionManager: public CHeapObj<mtGC> {
 
 protected:
   G1SemeruHeapRegionTable _regions;           // <region_index, heapRegion*>. Records the committed Regions.
-  FreeRegionList _free_list;                  // The un-committed free Regions.
+  FreeSemeruRegionList _free_list;                  // The un-committed free Regions.
   
   G1RegionToSpaceMapper* _heap_mapper;   
 
@@ -139,24 +140,17 @@ protected:
 
   void make_regions_available(uint index, uint num_regions = 1, WorkGang* pretouch_gang = NULL);
   void uncommit_regions(uint index, size_t num_regions = 1);
-  // Allocate a new HeapRegion for the given index.
-  HeapRegion* new_heap_region(uint hrm_index);
+  // Allocate a new SemeruHeapRegion for the given index.
+  SemeruHeapRegion* new_heap_region(uint hrm_index);
 #ifdef ASSERT
 public:
-  bool is_free(HeapRegion* hr) const;
+  bool is_free(SemeruHeapRegion* hr) const;
 #endif
 public:
   // Empty constructor, we'll initialize it with the initialize() method.
   SemeruHeapRegionManager();
 
-  // virtual void initialize(G1RegionToSpaceMapper* heap_storage,
-  //                         G1RegionToSpaceMapper* prev_bitmap,
-  //                         G1RegionToSpaceMapper* next_bitmap,
-  //                         G1RegionToSpaceMapper* alive_bitmap,
-  //                         G1RegionToSpaceMapper* dest_bitmap,
-  //                         G1RegionToSpaceMapper* bot,
-  //                         G1RegionToSpaceMapper* cardtable,
-  //                         G1RegionToSpaceMapper* card_counts);
+
 
   virtual void initialize(G1RegionToSpaceMapper* heap_storage,
                           G1RegionToSpaceMapper* bot,
@@ -175,44 +169,45 @@ public:
   virtual void prepare_for_full_collection_end() {}
 
   // Return the "dummy" region used for G1AllocRegion. This is currently a hardwired
-  // new HeapRegion that owns HeapRegion at index 0. Since at the moment we commit
+  // new SemeruHeapRegion that owns SemeruHeapRegion at index 0. Since at the moment we commit
   // the heap from the lowest address, this region (and its associated data
   // structures) are available and we do not need to check further.
-  virtual HeapRegion* get_dummy_region() { return new_heap_region(0); }
+  virtual SemeruHeapRegion* get_dummy_region() { return new_heap_region(0); }
 
-  // Return the HeapRegion at the given index. Assume that the index
+  // Return the SemeruHeapRegion at the given index. Assume that the index
   // is valid.
-  inline HeapRegion* at(uint index) const;
+  inline SemeruHeapRegion* at(uint index) const;
 
-  // Return the HeapRegion at the given index, NULL if the index
+  // Return the SemeruHeapRegion at the given index, NULL if the index
   // is for an unavailable region.
-  inline HeapRegion* at_or_null(uint index) const;
+  inline SemeruHeapRegion* at_or_null(uint index) const;
 
   // Returns whether the given region is available for allocation.
   bool is_available(uint region) const;
 
   // Return the next region (by index) that is part of the same
   // humongous object that hr is part of.
-  inline HeapRegion* next_region_in_humongous(HeapRegion* hr) const;
+  inline SemeruHeapRegion* next_region_in_humongous(SemeruHeapRegion* hr) const;
 
   // If addr is within the committed space return its corresponding
-  // HeapRegion, otherwise return NULL.
-  inline HeapRegion* addr_to_region(HeapWord* addr) const;
+  // SemeruHeapRegion, otherwise return NULL.
+  inline SemeruHeapRegion* addr_to_region(HeapWord* addr) const;
 
   // Insert the given region into the free region list.
-  inline void insert_into_free_list(HeapRegion* hr);
+  inline void insert_into_free_list(SemeruHeapRegion* hr);
 
   // Insert the given region list into the global free region list.
-  void insert_list_into_free_list(FreeRegionList* list) {
+  void insert_list_into_free_list(FreeSemeruRegionList* list) {
     _free_list.add_ordered(list);
   }
+
 
   /**
    * Tag : Request a Free Region from SemeruHeapRegionManager->_free_list
    *  
    */
-  virtual HeapRegion* allocate_free_region(HeapRegionType type) {
-    HeapRegion* hr = _free_list.remove_region(!type.is_young());
+  virtual SemeruHeapRegion* allocate_free_region(HeapRegionType type) {
+    SemeruHeapRegion* hr = _free_list.remove_region(!type.is_young());
 
     if (hr != NULL) {
       assert(hr->next() == NULL, "Single region should not have next");
@@ -234,7 +229,7 @@ public:
   }
 
   size_t total_free_bytes() const {
-    return num_free_regions() * HeapRegion::GrainBytes;
+    return num_free_regions() * SemeruHeapRegion::SemeruGrainBytes;
   }
 
   // Return the number of available (uncommitted) regions.
@@ -255,7 +250,7 @@ public:
 
   // Expand the sequence to reflect that the heap has grown. Either create new
   // HeapRegions, or re-use existing ones. Returns the number of regions the
-  // sequence was expanded by. If a HeapRegion allocation fails, the resulting
+  // sequence was expanded by. If a SemeruHeapRegion allocation fails, the resulting
   // number of regions might be smaller than what's desired.
   virtual uint expand_by(uint num_regions, WorkGang* pretouch_workers);
 
@@ -271,7 +266,7 @@ public:
   // start index of that set, or G1_NO_HRM_INDEX.
   virtual uint find_contiguous_empty_or_unavailable(size_t num) { return find_contiguous(num, false); }
 
-  HeapRegion* next_region_in_heap(const HeapRegion* r) const;
+  SemeruHeapRegion* next_region_in_heap(const SemeruHeapRegion* r) const;
 
   // Find the highest free or uncommitted region in the reserved heap,
   // and if uncommitted, commit it. If none are available, return G1_NO_HRM_INDEX.
@@ -285,9 +280,9 @@ public:
 
   // Apply blk->do_heap_region() on all committed regions in address order,
   // terminating the iteration early if do_heap_region() returns true.
-  void iterate(HeapRegionClosure* blk) const;
+  void iterate(SemeruHeapRegionClosure* blk) const;
 
-  void par_iterate(HeapRegionClosure* blk, SemeruHeapRegionClaimer* hrclaimer, const uint start_index) const;
+  void par_iterate(SemeruHeapRegionClosure* blk, SemeruHeapRegionClaimer* hrclaimer, const uint start_index) const;
 
   // Uncommit up to num_regions_to_remove regions that are completely free.
   // Return the actual number of uncommitted regions.
