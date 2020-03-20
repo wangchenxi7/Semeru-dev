@@ -115,6 +115,7 @@ public:
     assert(commit_size > instance_size, "Committed size is too small. ");
 
     // discard the parameter, size, which is defined by sizeof(clas)
+    // [XX] Commit the space directly. Witout reserving procedure.
     return (void*)commit_at(commit_size, mtGC, requested_addr);
   }
 

@@ -535,7 +535,7 @@ G1RegionToSpaceMapper* SemeruHeapRegion::create_alive_bitmap_storage(size_t regi
 
 	// Create and reserve the bitmap
 	G1RegionToSpaceMapper* alive_bitmap_storage =
-			semeru_h->create_aux_memory_mapper_from_rs("Alive Bitmap", per_region_bitmap_size, 
+			semeru_h->create_aux_memory_mapper_from_rs("Semeru Alive Bitmap", per_region_bitmap_size, 
                                                                 G1CMBitMap::heap_map_factor(), 
 																						                    ALIVE_BITMAP_OFFSET + per_region_bitmap_size*region_idnex );
 

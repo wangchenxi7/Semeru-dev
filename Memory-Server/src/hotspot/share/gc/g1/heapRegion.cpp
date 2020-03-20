@@ -317,11 +317,6 @@ void HeapRegion::initialize(MemRegion mr,
 
   G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
 
-  // Assign the commit alive/dest_bitmap size to the HeapRegion->_alive/_dest_bitmap
-  //G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
-  
-  //_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
-
   hr_clear(false /*par*/, false /*clear_space*/);
   set_top(bottom());
 }

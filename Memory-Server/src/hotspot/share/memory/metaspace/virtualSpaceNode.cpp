@@ -85,7 +85,7 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed) 
     _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
   assert_is_aligned(bytes, Metaspace::reserve_alignment());
   bool large_pages = should_commit_large_pages_when_reserving(bytes);
-  char* requested_addr = (char*)(SEMERU_START_ADDR +  KLASS_INSTANCE_OFFSET ); // Reserve all the space 
+  char* requested_addr = (char*)(SEMERU_START_ADDR +  KLASS_INSTANCE_OFFSET + (VirtualSpaceNode_index++)*bytes ); // Reserve all the space 
   assert(bytes == KLASS_INSTANCE_OFFSET_SIZE_LIMIT, "Reserve the whole klass space now.");
 
   _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages, requested_addr, map_fixed);    // Allocate new ReservedSpace for the VirtualSpaceNode.
@@ -100,6 +100,12 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed) 
                                                               VirtualSpaceNode_index-1, (unsigned long long)_rs.base(),
                                                               (unsigned long long)_rs.base()+_rs.size(),(unsigned long long)_rs.size());
 
+    //Debug
+    tty->print("%s, Commit the Klass metaspace[0x%lx, 0x%lx] for RDMA buffer registeration.\n",__func__,
+                               (size_t)requested_addr, (size_t)(requested_addr + bytes) );
+    // Set this ReservedSpace as special to do pre-commit.
+    // The commit operation will be done in  VirtualSpaceNode::initialize()
+    _rs._pre_commit = true;    
 
     MemTracker::record_virtual_memory_type((address)_rs.base(), mtClass);
   }
@@ -561,10 +567,17 @@ bool VirtualSpaceNode::initialize() {
   // ReservedSpaces marked as special will have the entire memory
   // pre-committed. Setting a committed size will make sure that
   // committed_size and actual_committed_size agrees.
-  size_t pre_committed_size = _rs.special() ? _rs.size() : 0;
+  //size_t pre_committed_size = _rs.special() ? _rs.size() : 0;
+
+  // Semeru Debug
+  if(_rs._pre_commit){
+    tty->print("%s, Do pre-commit for RDMA buffer registeration. \n",__func__);
+  }
+  size_t pre_committed_size = _rs.special() | _rs._pre_commit ? _rs.size() : 0;
 
   bool result = virtual_space()->initialize_with_granularity(_rs, pre_committed_size,
       Metaspace::commit_alignment());
+      
   if (result) {
     assert(virtual_space()->committed_size() == virtual_space()->actual_committed_size(),
         "Checking that the pre-committed memory was registered by the VirtualSpace");

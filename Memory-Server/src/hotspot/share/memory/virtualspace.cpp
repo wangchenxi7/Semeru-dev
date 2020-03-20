@@ -39,10 +39,10 @@
 
 // Dummy constructor
 ReservedSpace::ReservedSpace() : _base(NULL), _size(0), _noaccess_prefix(0),
-    _alignment(0), _special(false), _fd_for_heap(-1), _executable(false) {
+    _alignment(0), _special(false), _fd_for_heap(-1), _executable(false), _pre_commit(false) {
 }
 
-ReservedSpace::ReservedSpace(size_t size, size_t preferred_page_size) : _fd_for_heap(-1) {
+ReservedSpace::ReservedSpace(size_t size, size_t preferred_page_size) : _fd_for_heap(-1),  _pre_commit(false){
   bool has_preferred_page_size = preferred_page_size != 0;
   // Want to use large pages where possible and pad with small pages.
   size_t page_size = has_preferred_page_size ? preferred_page_size : os::page_size_for_region_unaligned(size, 1);
@@ -67,14 +67,28 @@ ReservedSpace::ReservedSpace(size_t size, size_t preferred_page_size) : _fd_for_
 
 ReservedSpace::ReservedSpace(size_t size, size_t alignment,
                              bool large,
-                             char* requested_address) : _fd_for_heap(-1) {
+                             char* requested_address) : _fd_for_heap(-1),  _pre_commit(false) {
   initialize(size, alignment, large, requested_address, false);
 }
 
 ReservedSpace::ReservedSpace(size_t size, size_t alignment,
                              bool large,
-                             bool executable) : _fd_for_heap(-1) {
+                             bool executable) : _fd_for_heap(-1), _pre_commit(false) {
   initialize(size, alignment, large, NULL, executable);
+}
+
+// For this constructor, it curves a range of memory from already reserved space.
+// No need to request it from OS.
+ReservedSpace::ReservedSpace(char* base, size_t size, size_t alignment,
+                             bool special, bool executable) : _fd_for_heap(-1),_pre_commit(false) {
+  assert((size % os::vm_allocation_granularity()) == 0,
+         "size not allocation aligned");
+  _base = base;
+  _size = size;
+  _alignment = alignment;
+  _noaccess_prefix = 0;
+  _special = special;
+  _executable = executable;
 }
 
 
@@ -82,7 +96,7 @@ ReservedSpace::ReservedSpace(size_t size, size_t alignment,
 // Allocate ReservedSpace at fixed address.
 ReservedSpace::ReservedSpace(size_t size, size_t alignment,
                              bool large,
-                             char* requested_address, bool map_fixed) : _fd_for_heap(-1) {
+                             char* requested_address, bool map_fixed) : _fd_for_heap(-1), _pre_commit(false) {
   if(map_fixed){
     // 1) Add MAP_FIXED to mmap flags.
     initialize_semeru(size, alignment, large, requested_address, false , false); // not heap_init,
@@ -93,19 +107,8 @@ ReservedSpace::ReservedSpace(size_t size, size_t alignment,
 }
 
 
-// For this constructor, it curves a range of memory from already reserved space.
-// No need to request it from OS.
-ReservedSpace::ReservedSpace(char* base, size_t size, size_t alignment,
-                             bool special, bool executable) : _fd_for_heap(-1) {
-  assert((size % os::vm_allocation_granularity()) == 0,
-         "size not allocation aligned");
-  _base = base;
-  _size = size;
-  _alignment = alignment;
-  _noaccess_prefix = 0;
-  _special = special;
-  _executable = executable;
-}
+
+
 
 // Helper method
 static void unmap_or_release_memory(char* base, size_t size, bool is_file_mapped) {

@@ -378,17 +378,27 @@ uint SemeruHeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* 
 		cur = idx_last_found + num_last_found + 1;
 	}
 
-	//
-	// Debug. Commit the rest of TargetObjQueue space for RDMA buffer registration purpose.
+	// Debug - Padding for registering RDMA Buffer
+	// 1) Padding the un-reserved Target_obj_queue
+	// Commit the rest of TargetObjQueue space for RDMA buffer registration purpose.
 	// 				The space needed to be padded is [ num_regions * TASKQUEUE_SIZE * , TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE]
 	// Get the static pointer of the specific instantiation, CHeapRDMAObj<StarTask, ALLOC_TARGET_OBJ_QUEUE>
 	char* start_addr_to_padding	=	CHeapRDMAObj<StarTask, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr ;
 	size_t size_to_be_padded	=	(size_t)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE) -	(size_t)start_addr_to_padding;
-	G1SemeruCollectedHeap::heap()->_debug_rdma_padding = new(size_to_be_padded, start_addr_to_padding) rdma_padding();
-	tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for debug. \n",__func__,
+	G1SemeruCollectedHeap::heap()->_debug_rdma_padding_target_obj_queue = new(size_to_be_padded, start_addr_to_padding) rdma_padding();
+	tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for target_obj_queue. \n",__func__,
 																																			(size_t)start_addr_to_padding,
 																																			(size_t)(start_addr_to_padding + size_to_be_padded));
 
+	// 2) Padding for unused alive_bitmap
+	//
+	size_t per_region_bitmap_size = G1CMBitMap::compute_size(SemeruHeapRegion::SemeruGrainBytes);
+	start_addr_to_padding = (char*)(SEMERU_START_ADDR + ALIVE_BITMAP_OFFSET +  num_regions*per_region_bitmap_size  );
+	size_to_be_padded	=	(size_t)(ALIVE_BITMAP_SIZE -  num_regions*per_region_bitmap_size);
+	G1SemeruCollectedHeap::heap()->_debug_rdma_padding_alive_bitmap = new(size_to_be_padded, start_addr_to_padding) rdma_padding();
+	tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for alive_bitmap. \n",__func__,
+																																			(size_t)start_addr_to_padding,
+																																			(size_t)(start_addr_to_padding + size_to_be_padded));
 
 	verify_optional();
 	return expanded;

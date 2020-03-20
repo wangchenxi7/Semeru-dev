@@ -40,7 +40,7 @@ class ReservedSpace {
   size_t _size;     // byte size 
   size_t _noaccess_prefix;
   size_t _alignment;
-  bool   _special;
+  bool   _special;          // pre-commit the whole reserved space ?
   int    _fd_for_heap;      // [?] What's this for ?
  private:
   bool   _executable;       // [?] For Reserved space, this is always false ?
@@ -63,6 +63,10 @@ class ReservedSpace {
 
 
  public:
+
+  // Fields
+  bool _pre_commit;  // debug fields. For RDMA buffer registeration.
+
   // Constructor
   ReservedSpace();
   // Initialize the reserved space with the given size. If preferred_page_size
@@ -111,6 +115,7 @@ class ReservedSpace {
   bool contains(const void* p) const {
     return (base() <= ((char*)p)) && (((char*)p) < (base() + size()));
   }
+
 };
 
 ReservedSpace
