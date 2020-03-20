@@ -929,6 +929,8 @@ size_t Metaspace::_reserve_alignment = 0;
 
 VirtualSpaceList* Metaspace::_space_list = NULL;
 VirtualSpaceList* Metaspace::_class_space_list = NULL;
+// Semeru
+VirtualSpaceList* Metaspace::_semeru_space_list = NULL;
 
 ChunkManager* Metaspace::_chunk_manager_metadata = NULL;
 ChunkManager* Metaspace::_chunk_manager_class = NULL;
@@ -1274,11 +1276,22 @@ void Metaspace::global_initialize() {
   word_size = align_up(word_size, Metaspace::reserve_alignment_words());
 
   // Initialize the list of virtual spaces.
-  _space_list = new VirtualSpaceList(word_size);
+  _space_list = new VirtualSpaceList(word_size);      // Allocate the VirtualSpaceNode 
   _chunk_manager_metadata = new ChunkManager(false/*metaspace*/);
 
   if (!_space_list->initialization_succeeded()) {
     vm_exit_during_initialization("Unable to setup metadata virtual space list.", NULL);
+  }
+
+    // Semeru Metaspac
+  if(SemeruEnableMemPool){
+    // Reserve the whole klass space for Semeru MS.
+    _semeru_space_list = new VirtualSpaceList(KLASS_INSTANCE_OFFSET_SIZE_LIMIT/HeapWordSize, true); // map_fixed
+
+    if (!_semeru_space_list->initialization_succeeded()) {
+      vm_exit_during_initialization("Unable to setup Semeru metadata virtual space list.", NULL);
+    }
+
   }
 
   _tracer = new MetaspaceTracer();
@@ -1305,20 +1318,32 @@ size_t Metaspace::align_word_size_up(size_t word_size) {
 
 
 /**
- * Allocate data into Metaspace
+ *  Allocate a klass instance into Metaspace(->_space_list/_class_space_list)
+ *  [x] Here only allocate the space. Don't do the initialization.
  * 
- * [?] What's range of the metaspace ??
  * 
  * Parameters
- *    loader_data : 
+ *    loader_data : The ClassLoader, used to load, allocate and build the one type of klass instance.
  *    word_size   : ? alignment to word ?
  *    MetaspaceObj: ClassType or Not, only 2 types of object in metaspace ?? 
  * 
  * e.g.
- *  1) klass instance.
- *      1.1) loader_data ? 
- *  2) NonClassType ? 
- *      What's this ?
+ *  1) Metaspaceobj::Type   :
+ *     #define METASPACE_OBJ_TYPES_DO(f) \
+ *        f(Class) \
+ *        f(Symbol) \
+ *        f(TypeArrayU1) \
+ *        f(TypeArrayU2) \
+ *        f(TypeArrayU4) \
+ *        f(TypeArrayU8) \
+ *        f(TypeArrayOther) \
+ *        f(Method) \
+ *        f(ConstMethod) \
+ *        f(MethodData) \
+ *        f(ConstantPool) \
+ *        f(ConstantPoolCache) \
+ *        f(Annotations) \
+ *        f(MethodCounters)
  * 
  */
 MetaWord* Metaspace::allocate(ClassLoaderData* loader_data, size_t word_size,
@@ -1494,7 +1519,7 @@ void ClassLoaderMetaspace::initialize_first_chunk(Metaspace::MetaspaceType type,
 }
 
 /**
- *  Tag : ClassLoaderMetaspace gets chunk from glocal Metaspace.
+ *  Tag : ClassLoaderMetaspace gets chunk from glocal Metaspace(->_space_list/_class_space_list).
  *  If compressedOop
  *      get chunks from Metaspace->_chunk_manager_class 
  *  Or
@@ -1529,6 +1554,7 @@ void ClassLoaderMetaspace::initialize(Mutex* lock, Metaspace::MetaspaceType type
   DEBUG_ONLY(Atomic::inc(&g_internal_statistics.num_metaspace_births));
 
   // Allocate SpaceManager for metadata objects.
+  // [x] Manage the acquired VirtualSpaceNode from the Metaspace->_space_list.
   _vsm = new SpaceManager(Metaspace::NonClassType, type, lock);
 
   if (Metaspace::using_class_space()) {  // Only used for CompressedOop mode.
@@ -1539,7 +1565,7 @@ void ClassLoaderMetaspace::initialize(Mutex* lock, Metaspace::MetaspaceType type
   MutexLockerEx cl(MetaspaceExpand_lock, Mutex::_no_safepoint_check_flag);
 
   // Allocate chunk for metadata objects
-  initialize_first_chunk(type, Metaspace::NonClassType);  // get chunk from global freelist ? Metaspace->_space_list ?
+  initialize_first_chunk(type, Metaspace::NonClassType);  // get chunk from global freelist : Metaspace->_space_list.
 
   // Allocate chunk for class metadata objects
   if (Metaspace::using_class_space()) {

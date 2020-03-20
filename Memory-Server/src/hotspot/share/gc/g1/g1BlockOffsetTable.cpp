@@ -33,6 +33,10 @@
 #include "services/memTracker.hpp"
 
 
+// Semeru
+#include "gc/g1/SemeruHeapRegion.hpp"
+
+
 
 //////////////////////////////////////////////////////////////////////
 // G1BlockOffsetTable
@@ -82,6 +86,24 @@ G1BlockOffsetTablePart::G1BlockOffsetTablePart(G1BlockOffsetTable* array, G1Cont
   _space(gsp)
 {
 }
+
+// Semeru
+G1BlockOffsetTablePart::G1BlockOffsetTablePart(G1BlockOffsetTable* array, SemeruHeapRegion* gsp) :
+  _next_offset_threshold(NULL),
+  _next_offset_index(0),
+  DEBUG_ONLY(_object_can_span(false) COMMA)
+  _bot(array),
+  _space(NULL),
+  _semeru_space(gsp)
+{
+
+  // Debug
+  tty->print("%s, Error , G1BlockOffsetTablePart doesn't support SemeruHeapRegion yet. \n",__func__);
+
+}
+
+
+
 
 // The arguments follow the normal convention of denoting
 // a right-open interval: [start, end)

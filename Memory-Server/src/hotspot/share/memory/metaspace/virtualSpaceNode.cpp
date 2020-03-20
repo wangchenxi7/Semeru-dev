@@ -41,6 +41,11 @@
 
 namespace metaspace {
 
+// Semeru
+// Initialize static variables
+size_t VirtualSpaceNode::VirtualSpaceNode_index = 0;
+
+
 // Decide if large pages should be committed when the memory is reserved.
 static bool should_commit_large_pages_when_reserving(size_t bytes) {
   if (UseLargePages && UseLargePagesInMetaspace && !os::can_commit_large_page_memory()) {
@@ -60,6 +65,7 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes) :
     _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
   assert_is_aligned(bytes, Metaspace::reserve_alignment());
   bool large_pages = should_commit_large_pages_when_reserving(bytes);
+  
   _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);    // Allocate new ReservedSpace for the VirtualSpaceNode.
 
   if (_rs.is_reserved()) {
@@ -68,13 +74,46 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes) :
     assert_is_aligned(_rs.base(), Metaspace::reserve_alignment());
     assert_is_aligned(_rs.size(), Metaspace::reserve_alignment());
 
-    //debug
-    log_debug(heap)("Allocate Metaspace::VirtualSpaceNode [0x%llx, 0x%llx], size: 0x%llx bytes ", 
-                            (unsigned long long)_rs.base(),(unsigned long long)_rs.base()+_rs.size(),(unsigned long long)_rs.size());
+    MemTracker::record_virtual_memory_type((address)_rs.base(), mtClass);
+  }
+
+}
+
+// Semeru
+// byte_size is the size of the associated virtualspace.
+VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed) :
+    _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
+  assert_is_aligned(bytes, Metaspace::reserve_alignment());
+  bool large_pages = should_commit_large_pages_when_reserving(bytes);
+  char* requested_addr = (char*)(SEMERU_START_ADDR +  KLASS_INSTANCE_OFFSET ); // Reserve all the space 
+  assert(bytes == KLASS_INSTANCE_OFFSET_SIZE_LIMIT, "Reserve the whole klass space now.");
+
+  _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages, requested_addr, map_fixed);    // Allocate new ReservedSpace for the VirtualSpaceNode.
+
+  if (_rs.is_reserved()) {
+    assert(_rs.base() != NULL, "Catch if we get a NULL address");
+    assert(_rs.size() != 0, "Catch if we get a 0 size");
+    assert_is_aligned(_rs.base(), Metaspace::reserve_alignment());
+    assert_is_aligned(_rs.size(), Metaspace::reserve_alignment());
+
+    log_debug(semeru, alloc)("%s, Allocate Metaspace::VirtualSpaceNode[0x%lx] : [0x%llx, 0x%llx], size: 0x%llx bytes ", __func__,
+                                                              VirtualSpaceNode_index-1, (unsigned long long)_rs.base(),
+                                                              (unsigned long long)_rs.base()+_rs.size(),(unsigned long long)_rs.size());
+
 
     MemTracker::record_virtual_memory_type((address)_rs.base(), mtClass);
   }
+  #ifdef ASSERT
+  else{
+    //debug
+    assert(false, "error in allocate VirutalSpaceNode. \n");
+  }
+  #endif
+
 }
+
+
+
 
 void VirtualSpaceNode::purge(ChunkManager* chunk_manager) {
   DEBUG_ONLY(this->verify();)
@@ -467,7 +506,13 @@ Metachunk* VirtualSpaceNode::take_from_committed(size_t chunk_word_size) {
 }
 
 
-// Expand the virtual space (commit more of the reserved space)
+
+/**
+ * Expand the virtual space (commit more of the reserved space)
+ * 
+ * Tag : Commit more space from the this VirtualSpaceNode. 
+ * 
+ */ 
 bool VirtualSpaceNode::expand_by(size_t min_words, size_t preferred_words) {
   size_t min_bytes = min_words * BytesPerWord;
   size_t preferred_bytes = preferred_words * BytesPerWord;
@@ -524,7 +569,7 @@ bool VirtualSpaceNode::initialize() {
     assert(virtual_space()->committed_size() == virtual_space()->actual_committed_size(),
         "Checking that the pre-committed memory was registered by the VirtualSpace");
 
-    set_top((MetaWord*)virtual_space()->low());
+    set_top((MetaWord*)virtual_space()->low()); // adjust _top to pre_committed_size.
   }
 
   // Initialize Occupancy Map.

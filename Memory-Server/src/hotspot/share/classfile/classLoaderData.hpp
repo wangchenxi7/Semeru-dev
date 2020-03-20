@@ -77,6 +77,10 @@ class ClassLoaderData : public CHeapObj<mtClass> {
    * The space to store the klass instance.
    * [?] metaspace::allocate() allocates object into this ChunkedHandleList ???
    * 
+   * 
+   * [?] What's the conenction between _metaspace and _klasses ?
+   * 
+   * 
    */
   class ChunkedHandleList {
     struct Chunk : public CHeapObj<mtClass> {

@@ -836,6 +836,11 @@ void SystemDictionaryShared::allocate_shared_jar_manifest_array(int size, TRAPS)
   }
 }
 
+/**
+ * [?] all the protection_domain, jar_url, manifest will be allocated into the Metaspace ? 
+ * 
+ *  
+ */
 void SystemDictionaryShared::allocate_shared_data_arrays(int size, TRAPS) {
   allocate_shared_protection_domain_array(size, CHECK);
   allocate_shared_jar_url_array(size, CHECK);

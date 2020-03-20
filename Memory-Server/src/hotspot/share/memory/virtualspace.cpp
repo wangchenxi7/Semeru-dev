@@ -77,6 +77,22 @@ ReservedSpace::ReservedSpace(size_t size, size_t alignment,
   initialize(size, alignment, large, NULL, executable);
 }
 
+
+// Semeru 
+// Allocate ReservedSpace at fixed address.
+ReservedSpace::ReservedSpace(size_t size, size_t alignment,
+                             bool large,
+                             char* requested_address, bool map_fixed) : _fd_for_heap(-1) {
+  if(map_fixed){
+    // 1) Add MAP_FIXED to mmap flags.
+    initialize_semeru(size, alignment, large, requested_address, false , false); // not heap_init,
+  }else{
+    // 2) requested_address is just a hint
+    initialize(size, alignment, large, requested_address, false);
+  }
+}
+
+
 // For this constructor, it curves a range of memory from already reserved space.
 // No need to request it from OS.
 ReservedSpace::ReservedSpace(char* base, size_t size, size_t alignment,
@@ -258,7 +274,7 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
 
 
 /**
- * Semeru
+ * Semeru - Allocate Semeru Heap and Resiter the heap as RDMA buffer.
  * 
  * Get virtual memory from OS for the Semeru Memory pool.
  * 1) Start at fixed address, requested_address.
@@ -271,7 +287,7 @@ pthread_t rdma_cma_thread;    // a global variable.
 
 void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
                                char* requested_address,
-                               bool executable) {
+                               bool executable, bool heap_init) {
   const size_t granularity = os::vm_allocation_granularity();    // 4KB ?
   assert((size & (granularity - 1)) == 0,
          "size not aligned to os::vm_allocation_granularity()");
@@ -404,8 +420,8 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
   //
   // Semeru RDMA support
   //    Build && initialize the RDMA model.
-  //
-	if(requested_address != NULL && base == requested_address ){
+  //[x] Only register the space as RDMA buffer for the Semeru heap.
+	if(heap_init && requested_address != NULL && base == requested_address ){
 		// Confirming the reserved heap is at the start address we are expected.
 		//assert(base == requested_addr, "Allocated addr != requested_addr");
 
@@ -888,7 +904,8 @@ ReservedHeapSpace::ReservedHeapSpace(size_t size, size_t alignment, char* heap_s
 
   // The normal path : non-determined start addr; non-compressed oop heap.
   // size, allocation alignment, large_page, heap_start, executable.
-  initialize_semeru(size, alignment, false, heap_start_addr, false);  
+  // This is the ReservedSpace::initialize_semeru() function.
+  initialize_semeru(size, alignment, false, heap_start_addr, false, true);  // The Semeru heap initializaiton.
 
   assert(markOopDesc::encode_pointer_as_mark(_base)->decode_pointer() == _base,
          "area must be distinguishable from marks for mark-sweep");

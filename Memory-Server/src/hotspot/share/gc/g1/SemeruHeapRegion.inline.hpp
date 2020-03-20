@@ -25,7 +25,7 @@
 #ifndef SHARE_VM_GC_G1_SEMERU_HEAPREGION_INLINE_HPP
 #define SHARE_VM_GC_G1_SEMERU_HEAPREGION_INLINE_HPP
 
-#include "gc/g1/g1BlockOffsetTable.inline.hpp"
+//#include "gc/g1/g1BlockOffsetTable.inline.hpp"
 //#include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1ConcurrentMarkBitMap.inline.hpp"
 //#include "gc/g1/heapRegion.hpp"
@@ -40,8 +40,129 @@
 #include "gc/g1/heapRegion.inline.hpp"		// Use some functions defined in here.
 #include "gc/g1/SemeruHeapRegion.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
+#include "gc/g1/g1SemeruBlockOffsetTable.inline.hpp"
 
 
+//
+// Functions for G1SemeruContiguousSpace
+//
+
+
+
+
+
+// Degrade functions from G1SemeruContiguousSpace to sub-class, G1SmeruHeapRegion.
+//
+
+inline HeapWord* SemeruHeapRegion::block_start(const void* p) {
+	return _sync_mem_cpu->_bot_part.block_start(p);
+}
+
+inline HeapWord* SemeruHeapRegion::block_start_const(const void* p) const {
+	return _sync_mem_cpu->_bot_part.block_start_const(p);
+}
+
+
+
+
+
+/**
+ * Tag : allocate object into a G1 Heap region
+ * 
+ * [?] Is this region thread local ??
+ * 
+ * Can't find any lock ?
+ * 
+ * 
+ * x.Region Architecture:
+ * G1SemeruContiguousSpace   ----> CompactibleSpace  ---> Space  --> CHeapObj
+ *  =>top(Allocate pointer)                          =>_bottom
+ *                                                   =>_end
+ * 
+ */
+inline HeapWord* SemeruHeapRegion::allocate_impl(size_t min_word_size,
+																									size_t desired_word_size,
+																									size_t* actual_size) {
+	HeapWord* obj = top();
+	size_t available = pointer_delta(end(), obj);
+	size_t want_to_allocate = MIN2(available, desired_word_size);
+	if (want_to_allocate >= min_word_size) {
+		HeapWord* new_top = obj + want_to_allocate;
+		set_top(new_top);
+		assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
+		*actual_size = want_to_allocate;
+		return obj;
+	} else {
+		return NULL;
+	}
+}
+
+
+/**
+ * Tag : concurrent object allocation in a G1 Heap Region
+ * 		=> Allocate into current Region, or return NULL.
+ * While loop + Atomic::cmpxchg(new_val, mem/dest_var, cmp/old_val)
+ * 
+ */
+inline HeapWord* SemeruHeapRegion::par_allocate_impl(size_t min_word_size,
+																											size_t desired_word_size,
+																											size_t* actual_size) {
+	do {
+		HeapWord* obj = top();
+		size_t available = pointer_delta(end(), obj);
+		size_t want_to_allocate = MIN2(available, desired_word_size);
+		if (want_to_allocate >= min_word_size) {
+			HeapWord* new_top = obj + want_to_allocate;
+			HeapWord* result = Atomic::cmpxchg(new_top, top_addr(), obj);
+			// result can be one of two:
+			//  the old top value: the exchange succeeded
+			//  otherwise: the new value of the top is returned.
+			if (result == obj) {
+				assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
+				*actual_size = want_to_allocate;
+				return obj;
+			}
+		} else {
+			return NULL;
+		}
+	} while (true);
+}
+
+inline HeapWord* SemeruHeapRegion::allocate(size_t min_word_size,
+																						 size_t desired_word_size,
+																						 size_t* actual_size) {
+	HeapWord* res = allocate_impl(min_word_size, desired_word_size, actual_size);
+	if (res != NULL) {
+		_sync_mem_cpu->_bot_part.alloc_block(res, *actual_size);
+	}
+	return res;
+}
+
+inline HeapWord* SemeruHeapRegion::allocate(size_t word_size) {
+	size_t temp;
+	return allocate(word_size, word_size, &temp);
+}
+
+inline HeapWord* SemeruHeapRegion::par_allocate(size_t word_size) {
+	size_t temp;
+	return par_allocate(word_size, word_size, &temp);
+}
+
+// Because of the requirement of keeping "_offsets" up to date with the
+// allocations, we sequentialize these with a lock.  Therefore, best if
+// this is used for larger LAB allocations only.
+inline HeapWord* SemeruHeapRegion::par_allocate(size_t min_word_size,
+																								 size_t desired_word_size,
+																								 size_t* actual_size) {
+	MutexLocker x(&_par_alloc_lock);
+	return allocate(min_word_size, desired_word_size, actual_size);
+}
+
+
+
+//
+// Functions for SemeruHeapRegion
+//
 
 
 

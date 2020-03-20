@@ -24,7 +24,7 @@
 
 #include "precompiled.hpp"
 #include "code/nmethod.hpp"
-#include "gc/g1/g1BlockOffsetTable.inline.hpp"
+//#include "gc/g1/g1BlockOffsetTable.inline.hpp"
 //#include "gc/g1/g1CollectedHeap.inline.hpp"
 #include "gc/g1/g1CollectionSet.hpp"
 #include "gc/g1/g1HeapRegionTraceType.hpp"
@@ -51,6 +51,87 @@
 // Semeru
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/SemeruHeapRegion.inline.hpp"
+#include "gc/g1/g1SemeruBlockOffsetTable.inline.hpp"
+
+
+
+
+
+
+// void G1SemeruContiguousSpace::clear(bool mangle_space) {
+//   //set_top(bottom());
+//   CompactibleSpace::clear(mangle_space);
+//   reset_bot();
+// }
+
+// #ifndef PRODUCT
+// void G1SemeruContiguousSpace::mangle_unused_area() {
+//   mangle_unused_area_complete();
+// }
+
+// void G1SemeruContiguousSpace::mangle_unused_area_complete() {
+//   SpaceMangler::mangle_region(MemRegion(top(), end()));
+// }
+// #endif
+
+// void G1SemeruContiguousSpace::print() const {
+//   print_short();
+//   tty->print_cr(" [" INTPTR_FORMAT ", " INTPTR_FORMAT ", "
+//                 INTPTR_FORMAT ", " INTPTR_FORMAT ")",
+//                 p2i(bottom()), p2i(top()), p2i(_bot_part.threshold()), p2i(end()));
+// }
+
+// HeapWord* G1SemeruContiguousSpace::initialize_threshold() {
+//   return _bot_part.initialize_threshold();
+// }
+
+// HeapWord* G1SemeruContiguousSpace::cross_threshold(HeapWord* start,
+//                                                     HeapWord* end) {
+//   _bot_part.alloc_block(start, end);
+//   return _bot_part.threshold();
+// }
+
+// void G1SemeruContiguousSpace::safe_object_iterate(ObjectClosure* blk) {
+//   object_iterate(blk);
+// }
+
+// void G1SemeruContiguousSpace::object_iterate(ObjectClosure* blk) {
+//   HeapWord* p = bottom();
+//   while (p < top()) {
+//     if (block_is_obj(p)) {
+//       blk->do_object(oop(p));
+//     }
+//     p += block_size(p);
+//   }
+// }
+
+G1SemeruContiguousSpace::G1SemeruContiguousSpace(G1SemeruBlockOffsetTable* bot) :
+  //_bot_part(bot, this),
+  _par_alloc_lock(Mutex::leaf, "OffsetTableContigSpace par alloc lock", true)
+{
+}
+
+void G1SemeruContiguousSpace::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
+  CompactibleSpace::initialize(mr, clear_space, mangle_space);
+  //_top = bottom();
+  //set_saved_mark_word(NULL);
+  //reset_bot();
+}
+
+
+
+
+
+
+
+
+
+
+
+//
+// Functions for SemeruHeapRegion.
+//
+
 
 
 size_t SemeruHeapRegion::max_region_size() {
@@ -70,6 +151,62 @@ int    SemeruHeapRegion::SemeruLogOfHRGrainWords = 0;
 size_t SemeruHeapRegion::SemeruGrainBytes        = 0;   // Semeru allocation alignment && Region size.
 size_t SemeruHeapRegion::SemeruGrainWords        = 0;      
 size_t SemeruHeapRegion::SemeruCardsPerRegion    = 0;  
+
+
+
+//
+// Override G1SemeruContiguousSpace's function
+//
+
+
+HeapWord* SemeruHeapRegion::initialize_threshold() {
+  return _sync_mem_cpu->_bot_part.initialize_threshold();
+}
+
+HeapWord* SemeruHeapRegion::cross_threshold(HeapWord* start,
+                                                    HeapWord* end) {
+  _sync_mem_cpu->_bot_part.alloc_block(start, end);
+  return _sync_mem_cpu->_bot_part.threshold();
+}
+
+void SemeruHeapRegion::clear(bool mangle_space) {
+  set_top(bottom());
+  CompactibleSpace::clear(mangle_space);
+  reset_bot();
+}
+
+#ifndef PRODUCT
+void SemeruHeapRegion::mangle_unused_area() {
+  mangle_unused_area_complete();
+}
+
+void SemeruHeapRegion::mangle_unused_area_complete() {
+  SpaceMangler::mangle_region(MemRegion(top(), end()));
+}
+#endif
+
+
+
+void SemeruHeapRegion::object_iterate(ObjectClosure* blk) {
+  HeapWord* p = bottom();
+  while (p < top()) {
+    if (block_is_obj(p)) {
+      blk->do_object(oop(p));
+    }
+    p += block_size(p);  // [?] What's the meaning of block ?
+  }
+}
+
+
+
+void SemeruHeapRegion::safe_object_iterate(ObjectClosure* blk) {
+  object_iterate(blk);
+}
+
+
+
+
+
 
 
 
@@ -256,7 +393,7 @@ void SemeruHeapRegion::set_starts_humongous(HeapWord* obj_top, size_t fill_size)
   _cpu_to_mem_gc->_type.set_starts_humongous();
   _cpu_to_mem_gc->_humongous_start_region = this;
 
-  _bot_part.set_for_starts_humongous(obj_top, fill_size);
+  _sync_mem_cpu->_bot_part.set_for_starts_humongous(obj_top, fill_size);
 }
 
 void SemeruHeapRegion::set_continues_humongous(SemeruHeapRegion* first_hr) {
@@ -268,7 +405,7 @@ void SemeruHeapRegion::set_continues_humongous(SemeruHeapRegion* first_hr) {
   _cpu_to_mem_gc->_type.set_continues_humongous();
   _cpu_to_mem_gc->_humongous_start_region = first_hr;
 
-  _bot_part.set_object_can_span(true);
+  _sync_mem_cpu->_bot_part.set_object_can_span(true);
 }
 
 void SemeruHeapRegion::clear_humongous() {
@@ -277,7 +414,7 @@ void SemeruHeapRegion::clear_humongous() {
   assert(capacity() == SemeruHeapRegion::SemeruGrainBytes, "pre-condition");
   _cpu_to_mem_gc->_humongous_start_region = NULL;
 
-  _bot_part.set_object_can_span(false);
+  _sync_mem_cpu->_bot_part.set_object_can_span(false);
 }
 
 
@@ -289,9 +426,9 @@ void SemeruHeapRegion::clear_humongous() {
  * 
  */
 SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
-                       G1BlockOffsetTable* bot,
+                       G1SemeruBlockOffsetTable* bot,
                        MemRegion mr) :
-    G1ContiguousSpace(bot),
+    G1SemeruContiguousSpace(bot),
     _cpu_to_mem_init(NULL),
     _cpu_to_mem_gc(NULL),
     _mem_to_cpu_gc(NULL),
@@ -316,11 +453,11 @@ SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
   // Initialize the RDMA meta data space
   _cpu_to_mem_init = new(hrm_index) CPUToMemoryAtInit(hrm_index);
 
-
   _cpu_to_mem_gc = new(hrm_index) CPUToMemoryAtGC(hrm_index);
 
-
   _mem_to_cpu_gc = new(hrm_index) MemoryToCPUAtGC(hrm_index);
+
+  _sync_mem_cpu = new(hrm_index) SyncBetweenMemoryAndCPU(hrm_index, bot, this);
 
 
   // Other fields
@@ -328,23 +465,24 @@ SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
   // DEBUG 
   tty->print("%s, Warning : the _rem_set can't be used in Semeru MS. Fix here.", __func__);
 
-  initialize(mr);
+  initialize(mr, hrm_index, false, SpaceDecorator::Mangle);
+
 }
 
-
+/**
+ *  Aborted initialization function. 
+ */
 void SemeruHeapRegion::initialize(MemRegion mr, bool clear_space, bool mangle_space) {
   //assert(_rem_set->is_empty(), "Remembered set must be empty");
 
   //debug
-  if(_rem_set == NULL ){
-    tty->print("%s, Warning, _rem_set is disabled in Smemru MS. \n", __func__);
-  }
+  guarantee(false, "Error, Can NOT reach here in Semeru MS. Aborted.");
 
 
-  G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
+  // G1SemeruContiguousSpace::initialize(mr, clear_space, mangle_space);
 
-  hr_clear(false /*par*/, false /*clear_space*/);
-  set_top(bottom());
+  // hr_clear(false /*par*/, false /*clear_space*/);
+  // set_top(bottom());
 }
 
 
@@ -365,8 +503,12 @@ void SemeruHeapRegion::initialize(MemRegion mr,
     tty->print("%s, Warning, _rem_set is disabled in Smemru MS. \n", __func__);
   }
 
+  G1SemeruContiguousSpace::initialize(mr, clear_space, mangle_space);
+  
+  set_top(bottom()); // Initialzie _top.
+  set_saved_mark_word(NULL);
+  reset_bot();
 
-  G1ContiguousSpace::initialize(mr, clear_space, mangle_space);
 
   // Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
@@ -374,7 +516,7 @@ void SemeruHeapRegion::initialize(MemRegion mr,
   _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
 
   hr_clear(false /*par*/, false /*clear_space*/);
-  set_top(bottom());
+
 }
 
 
@@ -636,11 +778,6 @@ void SemeruHeapRegion::verify_strong_code_roots(VerifyOption vo, bool* failures)
 void SemeruHeapRegion::print() const { print_on(tty); }
 void SemeruHeapRegion::print_on(outputStream* st) const {
 
-    //Debug
-  if(rem_set() == NULL){
-    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
-    return;
-  }
 
   st->print("|%4u", this->_cpu_to_mem_init->_hrm_index);
   st->print("|" PTR_FORMAT ", " PTR_FORMAT ", " PTR_FORMAT,
@@ -652,6 +789,17 @@ void SemeruHeapRegion::print_on(outputStream* st) const {
   } else {
     st->print("|  ");
   }
+
+
+
+  //Debug
+  if(rem_set() == NULL){
+    tty->print("%s, RemSet is disabled in Semeru MS. \n",__func__);
+    return;
+  }
+
+
+
   st->print_cr("|TAMS " PTR_FORMAT ", " PTR_FORMAT "| %s ",
                p2i(prev_top_at_mark_start()), p2i(next_top_at_mark_start()), rem_set()->get_state_str());
 }
@@ -910,7 +1058,7 @@ void SemeruHeapRegion::verify(VerifyOption vo,
   }
 
   if (!is_young() && !is_empty()) {
-    _bot_part.verify();
+    _sync_mem_cpu->_bot_part.verify();
   }
 
   if (is_region_humongous) {
@@ -936,7 +1084,7 @@ void SemeruHeapRegion::verify(VerifyOption vo,
   if (p < the_end) {
     // Look up top
     HeapWord* addr_1 = p;
-    HeapWord* b_start_1 = _bot_part.block_start_const(addr_1);
+    HeapWord* b_start_1 = _sync_mem_cpu->_bot_part.block_start_const(addr_1);
     if (b_start_1 != p) {
       log_error(gc, verify)("BOT look up for top: " PTR_FORMAT " "
                             " yielded " PTR_FORMAT ", expecting " PTR_FORMAT,
@@ -948,7 +1096,7 @@ void SemeruHeapRegion::verify(VerifyOption vo,
     // Look up top + 1
     HeapWord* addr_2 = p + 1;
     if (addr_2 < the_end) {
-      HeapWord* b_start_2 = _bot_part.block_start_const(addr_2);
+      HeapWord* b_start_2 = _sync_mem_cpu->_bot_part.block_start_const(addr_2);
       if (b_start_2 != p) {
         log_error(gc, verify)("BOT look up for top + 1: " PTR_FORMAT " "
                               " yielded " PTR_FORMAT ", expecting " PTR_FORMAT,
@@ -962,7 +1110,7 @@ void SemeruHeapRegion::verify(VerifyOption vo,
     size_t diff = pointer_delta(the_end, p) / 2;
     HeapWord* addr_3 = p + diff;
     if (addr_3 < the_end) {
-      HeapWord* b_start_3 = _bot_part.block_start_const(addr_3);
+      HeapWord* b_start_3 = _sync_mem_cpu->_bot_part.block_start_const(addr_3);
       if (b_start_3 != p) {
         log_error(gc, verify)("BOT look up for top + diff: " PTR_FORMAT " "
                               " yielded " PTR_FORMAT ", expecting " PTR_FORMAT,
@@ -974,7 +1122,7 @@ void SemeruHeapRegion::verify(VerifyOption vo,
 
     // Look up end - 1
     HeapWord* addr_4 = the_end - 1;
-    HeapWord* b_start_4 = _bot_part.block_start_const(addr_4);
+    HeapWord* b_start_4 = _sync_mem_cpu->_bot_part.block_start_const(addr_4);
     if (b_start_4 != p) {
       log_error(gc, verify)("BOT look up for end - 1: " PTR_FORMAT " "
                             " yielded " PTR_FORMAT ", expecting " PTR_FORMAT,

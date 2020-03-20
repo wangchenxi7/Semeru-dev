@@ -45,6 +45,12 @@
 #include "runtime/mutexLocker.hpp"
 #include "utilities/macros.hpp"
 
+
+// Semeru
+//Debug
+#include "string.h"
+#include "stdio.h"
+
 ObjArrayKlass* ObjArrayKlass::allocate(ClassLoaderData* loader_data, int n, Klass* k, Symbol* name, TRAPS) {
   assert(ObjArrayKlass::header_size() <= InstanceKlass::header_size(),
       "array klasses must be same size as InstanceKlass");
@@ -56,7 +62,7 @@ ObjArrayKlass* ObjArrayKlass::allocate(ClassLoaderData* loader_data, int n, Klas
 
 
 /**
- * Tag : build a objArray klass instance.
+ * Tag : Allocate and initialize a objArray klass instance.
  *  Use the ClassLoaderData to load the needed klass instance. 
  * 
  */
@@ -109,6 +115,15 @@ Klass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_data,
 
     ResourceMark rm(THREAD);
     char *name_str = element_klass->name()->as_C_string();
+
+    #ifdef ASSERT
+    const char* target_str="objItem";
+    char* matched = strstr(name_str,target_str);
+    if(matched != NULL){
+      tty->print("%s, build klass instance for %s \n", __func__, target_str);
+    }
+    #endif
+
     int len = element_klass->name()->utf8_length();
     char *new_str = NEW_RESOURCE_ARRAY(char, len + 4);
     int idx = 0;
@@ -130,7 +145,7 @@ Klass* ObjArrayKlass::allocate_objArray_klass(ClassLoaderData* loader_data,
   }
 
   // Initialize instance variables
-  // Build the klass instance ?
+  // Allocate && build the klass instance.
   ObjArrayKlass* oak = ObjArrayKlass::allocate(loader_data, n, element_klass, name, CHECK_0);
 
   // Add all classes to our internal class loader list here,

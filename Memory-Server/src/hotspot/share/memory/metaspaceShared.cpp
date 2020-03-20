@@ -338,12 +338,17 @@ void MetaspaceShared::initialize_dumptime_shared_and_meta_spaces() {
                 _shared_rs.size(), p2i(_shared_rs.base()));
 }
 
-// Called by universe_post_init()
+/**
+ * Called by universe_post_init()
+ * 
+ * [?] What's a shared Metaspace ? Shared by what ??
+ * 
+ */
 void MetaspaceShared::post_initialize(TRAPS) {
   if (UseSharedSpaces) {
     int size = FileMapInfo::get_number_of_shared_paths();
     if (size > 0) {
-      SystemDictionaryShared::allocate_shared_data_arrays(size, THREAD);
+      SystemDictionaryShared::allocate_shared_data_arrays(size, THREAD);   // [?] shared meta space ??
       FileMapHeader* header = FileMapInfo::current_info()->header();
       ClassLoaderExt::init_paths_start_index(header->_app_class_paths_start_index);
       ClassLoaderExt::init_app_module_paths_start_index(header->_app_module_paths_start_index);

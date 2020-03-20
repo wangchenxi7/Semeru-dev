@@ -77,6 +77,9 @@ class VirtualSpaceList : public CHeapObj<mtClass> {
   // and is typically followed by the allocation of a chunk.
   bool create_new_virtual_space(size_t vs_word_size);
 
+  // Semeru MS
+  bool create_new_semeru_virtual_space(size_t vs_word_size, bool map_fixed);
+
   // Chunk up the unused committed space in the current
   // virtual space and add the chunks to the free list.
   void retire_current_virtual_space();
@@ -84,6 +87,9 @@ class VirtualSpaceList : public CHeapObj<mtClass> {
  public:
   VirtualSpaceList(size_t word_size);
   VirtualSpaceList(ReservedSpace rs);
+
+  // Semeru
+  VirtualSpaceList(size_t word_size, bool map_fixed);
 
   size_t free_bytes();
 

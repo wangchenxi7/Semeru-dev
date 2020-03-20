@@ -1244,10 +1244,20 @@ bool InstanceKlass::is_same_or_direct_interface(Klass *k) const {
   return false;
 }
 
+
+/**
+ * [?] Allocate an object_array ?
+ *  
+ *  
+ * More Parameters:
+ *    n      : rank ? what's this parameter used for ?
+ *    length : object lenth
+ * 
+ */
 objArrayOop InstanceKlass::allocate_objArray(int n, int length, TRAPS) {
   check_array_allocation_length(length, arrayOopDesc::max_array_length(T_OBJECT), CHECK_NULL);
   int size = objArrayOopDesc::object_size(length);
-  Klass* ak = array_klass(n, CHECK_NULL);
+  Klass* ak = array_klass(n, CHECK_NULL);   // [?] get the object object_array klass ??
   objArrayOop o = (objArrayOop)Universe::heap()->array_allocate(ak, size, length,
                                                                 /* do_zero */ true, CHECK_NULL);
   return o;

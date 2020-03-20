@@ -35,6 +35,10 @@
 class G1BlockOffsetTable;
 class G1ContiguousSpace;
 
+// Semeru
+class SemeruHeapRegion;
+
+
 // This implementation of "G1BlockOffsetTable" divides the covered region
 // into "N"-word subregions (where "N" = 2^"LogN".  An array with an entry
 // for each such subregion indicates how far back one must go to find the
@@ -127,6 +131,10 @@ private:
   // Usually, this is a Region. A contiguous space.
   G1ContiguousSpace* _space;
 
+  // Semeru support
+  SemeruHeapRegion* _semeru_space;
+
+
   // Sets the entries
   // corresponding to the cards starting at "start" and ending at "end"
   // to point back to the card before "start": the interval [start, end)
@@ -188,6 +196,11 @@ private:
 public:
   //  The elements of the array are initialized to zero.
   G1BlockOffsetTablePart(G1BlockOffsetTable* array, G1ContiguousSpace* gsp);
+
+
+  // Semeru
+  G1BlockOffsetTablePart(G1BlockOffsetTable* array, SemeruHeapRegion* gsp);
+
 
   void verify() const;
 

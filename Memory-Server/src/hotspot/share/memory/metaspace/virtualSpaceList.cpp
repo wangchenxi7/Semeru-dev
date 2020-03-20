@@ -172,9 +172,26 @@ VirtualSpaceList::VirtualSpaceList(size_t word_size) :
                                    _committed_words(0),
                                    _virtual_space_count(0) {
   MutexLockerEx cl(MetaspaceExpand_lock,
-                   Mutex::_no_safepoint_check_flag);
+                   Mutex::_no_safepoint_check_flag);    // [?] get the lock before manipulating the _space_list
   create_new_virtual_space(word_size);
 }
+
+// Semeru MS
+// The space is allocated in fixed range.
+VirtualSpaceList::VirtualSpaceList(size_t word_size, bool map_fixed) :
+                                   _virtual_space_list(NULL),
+                                   _current_virtual_space(NULL),
+                                   _is_class(false),
+                                   _reserved_words(0),
+                                   _committed_words(0),
+                                   _virtual_space_count(0) {
+  MutexLockerEx cl(MetaspaceExpand_lock,
+                   Mutex::_no_safepoint_check_flag);    // [?] get the lock before manipulating the _space_list
+  create_new_semeru_virtual_space(word_size, map_fixed);
+}
+
+
+
 
 VirtualSpaceList::VirtualSpaceList(ReservedSpace rs) :
                                    _virtual_space_list(NULL),
@@ -196,16 +213,6 @@ size_t VirtualSpaceList::free_bytes() {
   return current_virtual_space()->free_words_in_vs() * BytesPerWord;
 }
 
-/**
- * Allocate another meta virtual space and add it to the list.
- *
- * Tag : Allocate a virtual space (Node) into the VirtualSpaceList.
- * Use "new" for allocation, so the virtual space Node is allocated into Native Memory pool.
- * Each VirtualSpaceNode is a small VirtualSpace committed from a ReservedSpace.
- * 
- * [x] What's the range for the Native Memory pool ?
- *  => Check the alloation of VirtualSpaceNode, it requests memory from native memory pool by using : mmap()
- */
 bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
   assert_lock_strong(MetaspaceExpand_lock);
 
@@ -227,7 +234,7 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
 
   // Allocate the meta virtual space and initialize it.
   VirtualSpaceNode* new_entry = new VirtualSpaceNode(is_class(), vs_byte_size);   // Allocate a new VirtualSpaceNode and added it into list.
-  if (!new_entry->initialize()) {
+  if (!new_entry->initialize()) { // use newly allocated VirtualSpaceNode->_rs to initialize the VirtualSpaceNode->_virtual_space
     delete new_entry;
     return false;
   } else {
@@ -240,6 +247,59 @@ bool VirtualSpaceList::create_new_virtual_space(size_t vs_word_size) {
     return true;
   }
 }
+
+
+
+
+/**
+ * 
+ * Semeru MS - Allocate another meta virtual space and add it to the list.
+ *
+ * Tag : Allocate a virtual space (Node) into the VirtualSpaceList.
+ * Use "new" for allocation, so the virtual space Node is allocated into Native Memory pool.
+ * Each VirtualSpaceNode is a small VirtualSpace committed from a ReservedSpace.
+ * 
+ * [x] What's the range for the Native Memory pool ?
+ *  => Check the alloation of VirtualSpaceNode, it requests memory from native memory pool by using : mmap()
+ */
+bool VirtualSpaceList::create_new_semeru_virtual_space(size_t vs_word_size, bool map_fixed) {
+  assert_lock_strong(MetaspaceExpand_lock);
+
+  if (is_class()) {
+    assert(false, "We currently don't support more than one VirtualSpace for"
+                  " the compressed class space. The initialization of the"
+                  " CCS uses another code path and should not hit this path.");
+    return false;
+  }
+
+  if (vs_word_size == 0) {
+    assert(false, "vs_word_size should always be at least _reserve_alignment large.");
+    return false;
+  }
+
+  // Reserve the space
+  size_t vs_byte_size = vs_word_size * BytesPerWord;
+  assert_is_aligned(vs_byte_size, Metaspace::reserve_alignment());
+
+  // Allocate the meta virtual space and initialize it.
+  VirtualSpaceNode* new_entry = new VirtualSpaceNode(is_class(), vs_byte_size, map_fixed);   // Allocate a new VirtualSpaceNode and added it into list.
+  if (!new_entry->initialize()) { // use newly allocated VirtualSpaceNode->_rs to initialize the VirtualSpaceNode->_virtual_space
+    delete new_entry;
+    return false;
+  } else {
+    assert(new_entry->reserved_words() == vs_word_size,
+        "Reserved memory size differs from requested memory size");
+    // ensure lock-free iteration sees fully initialized node
+    OrderAccess::storestore();    // [??] What's the storestore instruction used for ?? work as a fence ?
+    link_vs(new_entry);
+    DEBUG_ONLY(Atomic::inc(&g_internal_statistics.num_vsnodes_created));
+    return true;
+  }
+}
+
+
+
+
 
 void VirtualSpaceList::link_vs(VirtualSpaceNode* new_entry) {
   if (virtual_space_list() == NULL) {

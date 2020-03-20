@@ -25,7 +25,7 @@
 #ifndef SHARE_VM_GC_G1_SEMERU_HEAPREGION_HPP
 #define SHARE_VM_GC_G1_SEMERU_HEAPREGION_HPP
 
-#include "gc/g1/g1BlockOffsetTable.hpp"
+//#include "gc/g1/g1BlockOffsetTable.hpp"
 #include "gc/g1/g1HeapRegionTraceType.hpp"
 #include "gc/g1/heapRegionTracer.hpp"
 #include "gc/g1/heapRegionType.hpp"
@@ -39,6 +39,7 @@
 #include "gc/g1/heapRegion.hpp"   // Reuse class in original heapRegion.hpp
 #include "gc/shared/rdmaStructure.hpp"    // .hpp not to inlcude inline.hpp, will crash the include hierarchy
 #include "gc/g1/g1ConcurrentMarkBitMap.hpp"
+#include "gc/g1/g1SemeruBlockOffsetTable.hpp"
 
 
 // The inlcude order is that : HeapRegionSet include SemeruHeapRegion.
@@ -147,6 +148,7 @@ class CPUToMemoryAtGC : public CHeapRDMAObj< CPUToMemoryAtGC, CPU_TO_MEM_AT_GC_A
 
 public:
 
+
   // Free(Reserved, but not commited), Eden, Survivor, Old, Humonguous 
   // Only CPU server do the Region allocation.
   HeapRegionType _type;     
@@ -240,6 +242,176 @@ public:
 
 
 /**
+ * CPU <--> Memory server needs to communicate with each other.
+ * e.g. Both CPU and Memory server can adjust the _top pointer.
+ *  CPU Server : both Mutator and GC
+ *  MS         : GC Compact
+ * 
+ */
+class SyncBetweenMemoryAndCPU : public CHeapRDMAObj< SyncBetweenMemoryAndCPU, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>{
+
+public:
+
+  // override the value in G1SemeruContiguousSpace
+  // Used by CPU server for object allocation for both Mutators and GC.
+  HeapWord* volatile _top; 
+
+  G1SemeruBlockOffsetTablePart _bot_part;  // [?] 1 byte for each card. To record the start object offset for each card.
+
+
+  // When we need to retire an allocation region, while other threads
+  // are also concurrently trying to allocate into it, we typically
+  // allocate a dummy object at the end of the region to ensure that
+  // no more allocations can take place in it. However, sometimes we
+  // want to know where the end of the last "real" object we allocated
+  // into the region was and this is what this keeps track.
+  //
+  // Will be rewritten by CPU server.
+  // [?] in Semeru MS, we only need to know this value, but no need to set it?
+  HeapWord* _pre_dummy_top;   
+
+
+  SyncBetweenMemoryAndCPU(uint hrm_index, G1SemeruBlockOffsetTable* bot, SemeruHeapRegion* gsp) :
+  _top(NULL),       // set in intialization
+  _bot_part(bot,gsp), 
+  _pre_dummy_top(NULL)
+  {}
+
+};
+
+
+
+
+
+
+// The complicating factor is that BlockOffsetTable diverged
+// significantly, and we need functionality that is only in the G1 version.
+// So I copied that code, which led to an alternate G1 version of
+// OffsetTableContigSpace.  If the two versions of BlockOffsetTable could
+// be reconciled, then G1OffsetTableContigSpace could go away.
+
+// The idea behind time stamps is the following. We want to keep track of
+// the highest address where it's safe to scan objects for each region.
+// This is only relevant for current GC alloc regions so we keep a time stamp
+// per region to determine if the region has been allocated during the current
+// GC or not. If the time stamp is current we report a scan_top value which
+// was saved at the end of the previous GC for retained alloc regions and which is
+// equal to the bottom for all other regions.
+// There is a race between card scanners and allocating gc workers where we must ensure
+// that card scanners do not read the memory allocated by the gc workers.
+// In order to enforce that, we must not return a value of _top which is more recent than the
+// time stamp. This is due to the fact that a region may become a gc alloc region at
+// some point after we've read the timestamp value as being < the current time stamp.
+// The time stamps are re-initialized to zero at cleanup and at Full GCs.
+// The current scheme that uses sequential unsigned ints will fail only if we have 4b
+// evacuation pauses between two cleanups, which is _highly_ unlikely.
+class G1SemeruContiguousSpace: public CompactibleSpace {
+  friend class VMStructs;
+  //HeapWord* volatile _top;
+ protected:
+  // G1SemeruBlockOffsetTablePart _bot_part;  // [?] 1 byte for each card. To record the start object offset for each card.
+  Mutex _par_alloc_lock;
+  // // When we need to retire an allocation region, while other threads
+  // // are also concurrently trying to allocate into it, we typically
+  // // allocate a dummy object at the end of the region to ensure that
+  // // no more allocations can take place in it. However, sometimes we
+  // // want to know where the end of the last "real" object we allocated
+  // // into the region was and this is what this keeps track.
+  // HeapWord* _pre_dummy_top;
+
+ public:
+  G1SemeruContiguousSpace(G1SemeruBlockOffsetTable* bot);
+
+  //void set_top(HeapWord* value) { _top = value; }
+  //HeapWord* top() const { return _top; }
+
+ protected:
+  // Reset the G1SemeruContiguousSpace.
+  virtual void initialize(MemRegion mr, bool clear_space, bool mangle_space);
+
+  //HeapWord* volatile* top_addr() { return &_top; }
+
+
+  // // Try to allocate at least min_word_size and up to desired_size from this Space.
+  // // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
+  // // space allocated.
+  // // This version assumes that all allocation requests to this Space are properly
+  // // synchronized.
+  // inline HeapWord* allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+  // // Try to allocate at least min_word_size and up to desired_size from this Space.
+  // // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
+  // // space allocated.
+  // // This version synchronizes with other calls to par_allocate_impl().
+  // inline HeapWord* par_allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+
+ public:
+  // void reset_after_compaction() { set_top(compaction_top()); }
+
+  // size_t used() const { return byte_size(bottom(), top()); }
+  // size_t free() const { return byte_size(top(), end()); }
+  // bool is_free_block(const HeapWord* p) const { return p >= top(); }
+
+  // MemRegion used_region() const { return MemRegion(bottom(), top()); }
+
+  // void object_iterate(ObjectClosure* blk);
+  // void safe_object_iterate(ObjectClosure* blk);
+
+  // void mangle_unused_area() PRODUCT_RETURN;
+  // void mangle_unused_area_complete() PRODUCT_RETURN;
+
+  // See the comment above in the declaration of _pre_dummy_top for an
+  // explanation of what it is.
+  // void set_pre_dummy_top(HeapWord* pre_dummy_top) {
+  //   assert(is_in(pre_dummy_top) && pre_dummy_top <= top(), "pre-condition");
+  //   _pre_dummy_top = pre_dummy_top;
+  // }
+  // HeapWord* pre_dummy_top() {
+  //   return (_pre_dummy_top == NULL) ? top() : _pre_dummy_top;
+  // }
+  // void reset_pre_dummy_top() { _pre_dummy_top = NULL; }
+
+  // virtual void clear(bool mangle_space);
+
+  // HeapWord* block_start(const void* p);
+  // HeapWord* block_start_const(const void* p) const;
+
+  // // Allocation (return NULL if full).  Assumes the caller has established
+  // // mutually exclusive access to the space.
+  // HeapWord* allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+  // // Allocation (return NULL if full).  Enforces mutual exclusion internally.
+  // HeapWord* par_allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+
+  // virtual HeapWord* allocate(size_t word_size);
+  // virtual HeapWord* par_allocate(size_t word_size);
+
+  HeapWord* saved_mark_word() const { ShouldNotReachHere(); return NULL; }
+
+  // // MarkSweep support phase3
+  // virtual HeapWord* initialize_threshold();
+  // virtual HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
+
+  // virtual void print() const;
+
+  // void reset_bot() {
+  //   _bot_part.reset_bot();
+  // }
+
+  // void print_bot_on(outputStream* out) {
+  //   _bot_part.print_on(out);
+  // }
+};
+
+
+
+
+
+
+
+
+
+
+
+/**
  * Tag: SemeruHeapRegion management handler.
  *      SemeruHeapRegion is also a CHeapObj, allocated into native memory. 
  * 
@@ -249,14 +421,14 @@ public:
  *     How to handle this case ??
  * 
  */
-class SemeruHeapRegion: public G1ContiguousSpace {
+class SemeruHeapRegion: public G1SemeruContiguousSpace {
   friend class VMStructs;
   friend class SemeruHeapRegionManager; // Allocate & initialize its private field, target_oop_queue.
   // Allow scan_and_forward to call (private) overrides for auxiliary functions on this class
   template <typename SpaceType>
   friend void CompactibleSpace::scan_and_forward(SpaceType* space, CompactPoint* cp);
  
- // Upgrade the protection from private to protected. 
+ // Degrade the protection from private to protected. 
  // Becasue we need to merge them together for update purpose.
  //private:
 public:
@@ -266,7 +438,7 @@ public:
   CPUToMemoryAtInit   *_cpu_to_mem_init;
   CPUToMemoryAtGC     *_cpu_to_mem_gc;
   MemoryToCPUAtGC     *_mem_to_cpu_gc;
-
+  SyncBetweenMemoryAndCPU   *_sync_mem_cpu;
 
 
  protected: 
@@ -388,7 +560,7 @@ public:
 
  public:
   SemeruHeapRegion(uint hrm_index,
-             G1BlockOffsetTable* bot,
+             G1SemeruBlockOffsetTable* bot,
              MemRegion mr);
 
   // Initializing the SemeruHeapRegion not only resets the data structure, but also
@@ -398,18 +570,99 @@ public:
   virtual void initialize(MemRegion mr, bool clear_space = false, bool mangle_space = SpaceDecorator::Mangle);
 
   // Initialize SemeruHeapRegion with alive/dest bitmap information.
+  // [XX] If call this function, MUST assign the entire 4 parameters. 
+  //      Because the size_t can be trated as bool.
   virtual void initialize(MemRegion mr, 
                             size_t region_index,
                             bool clear_space = false, 
                             bool mangle_space = SpaceDecorator::Mangle);
 
+  //
+  // Override basic fields
+  //
+
+  // Try to allocate at least min_word_size and up to desired_size from this Space.
+  // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
+  // space allocated.
+  // This version assumes that all allocation requests to this Space are properly
+  // synchronized.
+  inline HeapWord* allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+  // Try to allocate at least min_word_size and up to desired_size from this Space.
+  // Returns NULL if not possible, otherwise sets actual_word_size to the amount of
+  // space allocated.
+  // This version synchronizes with other calls to par_allocate_impl().
+  inline HeapWord* par_allocate_impl(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+
+
+  // MarkSweep support phase3
+  virtual HeapWord* initialize_threshold();
+  virtual HeapWord* cross_threshold(HeapWord* start, HeapWord* end);
+
+
+  void mangle_unused_area() PRODUCT_RETURN;
+  void mangle_unused_area_complete() PRODUCT_RETURN;
+
+  void set_top(HeapWord* value) { _sync_mem_cpu->_top = value; }
+  HeapWord* top() const { return _sync_mem_cpu->_top; }
+  HeapWord* volatile* top_addr() { return &(_sync_mem_cpu->_top); }
+
+  void object_iterate(ObjectClosure* blk);
+
+  void safe_object_iterate(ObjectClosure* blk);
+   
+
+  void reset_after_compaction() { set_top(compaction_top()); }
+
+  size_t used() const { return byte_size(bottom(), top()); }
+  size_t free() const { return byte_size(top(), end()); }
+  bool is_free_block(const HeapWord* p) const { return p >= top(); }
+
+  MemRegion used_region() const { return MemRegion(bottom(), top()); }
+
+
+  // Allocation (return NULL if full).  Assumes the caller has established
+  // mutually exclusive access to the space.
+  HeapWord* allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+  // Allocation (return NULL if full).  Enforces mutual exclusion internally.
+  HeapWord* par_allocate(size_t min_word_size, size_t desired_word_size, size_t* actual_word_size);
+
+  virtual HeapWord* allocate(size_t word_size);
+  virtual HeapWord* par_allocate(size_t word_size);
+
+
+
+  void set_pre_dummy_top(HeapWord* pre_dummy_top) {
+    assert(is_in(pre_dummy_top) && pre_dummy_top <= top(), "pre-condition");
+    _sync_mem_cpu->_pre_dummy_top = pre_dummy_top;
+  }
+
+  HeapWord* pre_dummy_top() {
+    return (_sync_mem_cpu->_pre_dummy_top == NULL) ? top() : _sync_mem_cpu->_pre_dummy_top;
+  }
+
+  void reset_pre_dummy_top() { _sync_mem_cpu->_pre_dummy_top = NULL; }
+
+  HeapWord* block_start(const void* p);
+  HeapWord* block_start_const(const void* p) const;
+
+  void reset_bot() {
+    _sync_mem_cpu->_bot_part.reset_bot();
+  }
+
+  void print_bot_on(outputStream* out) {
+    _sync_mem_cpu->_bot_part.print_on(out);
+  }
+
+
+  virtual void clear(bool mangle_space);
+
+
+  //
+  // End of fields override.
+  //
 
   void allocate_init_target_oop_queue(uint hrm_index);
 
-
-  //
-  // Semeru
-  //
   static int    SemeruLogOfHRGrainBytes;
   static int    SemeruLogOfHRGrainWords;
 

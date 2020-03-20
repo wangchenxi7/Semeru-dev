@@ -257,7 +257,7 @@ private:
 
   // The block offset table for the G1 heap.
   // This is used to record the first object's offset for each card.
-  G1BlockOffsetTable* _bot;
+  G1SemeruBlockOffsetTable* _bot;
 
 //   // Tears down the region sets / lists so that they are empty and the
 //   // regions on the heap do not belong to a region set / list. The
@@ -1125,7 +1125,7 @@ public:
 //   void iterate_dirty_card_closure(CardTableEntryClosure* cl, uint worker_i);
 
   // The shared block offset table array.
-  G1BlockOffsetTable* bot() const { return _bot; }
+  G1SemeruBlockOffsetTable* bot() const { return _bot; }
 
 //   // Reference Processing accessors
 
@@ -1222,11 +1222,11 @@ public:
   void decrement_summary_bytes(size_t bytes);
 
   virtual bool is_in(const void* p) const;
-// #ifdef ASSERT
-//   // Returns whether p is in one of the available areas of the heap. Slow but
-//   // extensive version.
-//   bool is_in_exact(const void* p) const;
-// #endif
+#ifdef ASSERT
+  // Returns whether p is in one of the available areas of the heap. Slow but
+  // extensive version.
+  bool is_in_exact(const void* p) const;
+#endif
 
   // Return "TRUE" iff the given object address is within the collection
   // set. Assumes that the reference points into the heap.

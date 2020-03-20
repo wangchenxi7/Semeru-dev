@@ -86,6 +86,8 @@ typeArrayOop oopFactory::new_typeArray_nozero(BasicType type, int length, TRAPS)
  *   
  *  [?] Already get the klass instance before allocating the objects.
  * 
+ *  [?] meaning of the first parater,1, passed to klass->allocate_objArray(1,,) ?
+ * 
  */
 objArrayOop oopFactory::new_objArray(Klass* klass, int length, TRAPS) {
   assert(klass->is_klass(), "must be instance class");

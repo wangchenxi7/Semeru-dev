@@ -150,31 +150,37 @@
 // [0, 1GB), small meta data space
 
 // 1.1 Target object queue , 128MB
-#define TARGET_OBJ_OFFSET     (size_t)0
+#define TARGET_OBJ_OFFSET     (size_t)0            // 0x400,000,000,000
 #define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
 
 // 1.2 Small meta data
 
 // 1.2.1 Memory server CSet
-#define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB
+#define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB , 0x400,008,000,000
 #define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
 
 // 1.2.2 flags 
-#define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)  // +4KB, 0x400,008,001,000
 #define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)0x1000      // 4KB 
 
 // 1.3 CPU Server To Memory server, Initialization
-#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE) //
+#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE) // +4KB, 0x400,008,002,000
 #define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 16*ONE_MB    //
 
 // 1.4 CPU Server To Memory server, GC
-#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) //
+#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +16MB, 0x400,009,002,000
 #define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
 
 
 // 1.5 Memory server To CPU server 
-#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) //
+#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +16MB, 0x400,00A,002,000
 #define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+// 1.6 Synchonize between CPU server and memory server
+#define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +16MB, 0x400,00B,002,000
+#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
 
 
 // The space upper should be all committed contiguously.
@@ -186,22 +192,30 @@
 //     Make it easier to register RDMA buffer.
 //     Commit a contiguous space for RDMA Meta Space.
 //     Points to the last item.
-#define RDMA_PADDING_OFFSET     (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT)
-#define RDMA_PADDING_SIZE       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
+#define RDMA_PADDING_OFFSET     (size_t)(SYNC_MEMORY_AND_CPU_OFFSET + SYNC_MEMORY_AND_CPU_SIZE_LIMIT) 
+#define RDMA_PADDING_SIZE_LIMIT       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
 
 
 //2.  [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
-#define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // offset to semeru start addr, 1GB
+#define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // +1GB,  0x400,040,000,000
 #define ALIVE_BITMAP_SIZE        (size_t)ONE_GB
 
-#define DEST_BITMAP_OFFSET       (size_t)0x80000000     // 2GB
-#define DEST_BITMAP_SIZE         (size_t)ONE_GB
+//#define DEST_BITMAP_OFFSET       (size_t)0x80000000     // +2GB, not using for now ?
+//#define DEST_BITMAP_SIZE         (size_t)ONE_GB
+
+
+
+// 3. Klass instance information
+
+//#define KLASS_INSTANCE_OFFSET               (size_t)0xC0000000   // +3GB, 0x400,0C0,000,000
+#define KLASS_INSTANCE_OFFSET  (size_t)0x80000000
+#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)ONE_GB
 
 
 //
 // x. End of RDMA structure commit size
 //
-#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE)
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)
 
 
 // properties for the whole Semeru heap.

@@ -30,7 +30,10 @@ enum CHeapAllocType {
   CPU_TO_MEM_AT_INIT_ALLOCTYPE,   // 0,
   CPU_TO_MEM_AT_GC_ALLOCTYPE,     // 1,
   MEM_TO_CPU_AT_GC_ALLOCTYPE,     // 2,
-  ALLOC_TARGET_OBJ_QUEUE,         // 3,
+  SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE,  // 3
+  METADATA_SPACE_ALLOCTYPE,       // 4
+
+  ALLOC_TARGET_OBJ_QUEUE,         // 5,
   NON_ALLOC_TYPE     // non type
 };
 
@@ -141,13 +144,17 @@ public:
           CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
           
           if( (char*)commit_at(CPU_TO_MEMORY_INIT_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+
+            log_debug(semeru, alloc)("Commit the start area to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE , size 0x%lx .", 
+                                                                (size_t)requested_addr, (size_t)CPU_TO_MEMORY_INIT_SIZE_LIMIT);
+
             old_val = CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr;  // NULL
             ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr), old_val);
             assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
           }
 
           
-          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE.", 
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE , item[1].", 
                                                                 (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr);
 
           break;
@@ -183,6 +190,10 @@ public:
 
           
           if( (char*)commit_at(CPU_TO_MEMORY_GC_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+
+            log_debug(semeru, alloc)("Commit the start area to 0x%lx for CPU_TO_MEMORY_GC_SIZE_LIMIT , size 0x%lx .", 
+                                                                (size_t)requested_addr, (size_t)CPU_TO_MEMORY_GC_SIZE_LIMIT);
+
             old_val = CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr;  // NULL
             ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr), old_val);
             assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
@@ -224,6 +235,10 @@ public:
           CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
           
           if( (char*)commit_at(MEMORY_TO_CPU_GC_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+
+            log_debug(semeru, alloc)("Commit the start area to 0x%lx for MEMORY_TO_CPU_GC_SIZE_LIMIT , size 0x%lx .", 
+                                                                (size_t)requested_addr, (size_t)MEMORY_TO_CPU_GC_SIZE_LIMIT);
+
             old_val = CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr;  // NULL
             ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr), old_val);
             assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
@@ -255,6 +270,103 @@ public:
                                                                 (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr);
 
         break;
+
+
+
+      case SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE :
+        // 1) commit all the reserved space for easy debuging
+        //    First time entering the zone.
+        if(CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr == NULL){
+          requested_addr = (char*)(SEMERU_START_ADDR + SYNC_MEMORY_AND_CPU_OFFSET);
+          CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
+          
+          if( (char*)commit_at(SYNC_MEMORY_AND_CPU_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+
+            log_debug(semeru, alloc)("Commit the start area to 0x%lx for SYNC_MEMORY_AND_CPU_SIZE_LIMIT , size 0x%lx .", 
+                                                                (size_t)requested_addr, (size_t)SYNC_MEMORY_AND_CPU_SIZE_LIMIT);
+
+            old_val = CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr;  // NULL
+            ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr), old_val);
+            assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+          }
+
+          
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr);
+
+          break;
+        }
+
+        // 2) this type space is already committed.
+        //    Just return a start address back to caller && adjust the pointer value.
+        requested_addr = CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr;
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + SYNC_MEMORY_AND_CPU_OFFSET + SYNC_MEMORY_AND_CPU_SIZE_LIMIT), 
+                                                        "%s, Exceed the SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE's space range. \n", __func__ );
+
+        // Before bump the alloc pointer.
+        // Assume the the instance size are all the same for all the type under SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE
+        // assert( (size_t)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr,
+        //     " Each element size of type  SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE should be equal.");
+
+        // bump the pointer
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr), requested_addr);
+        assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
+
+        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr);
+
+        break;
+
+
+
+
+
+
+      case METADATA_SPACE_ALLOCTYPE :
+        // 1) commit all the reserved space for easy debuging
+        //    First time entering the zone.
+        if(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr == NULL){
+          requested_addr = (char*)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET);
+          CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_instance_size = commit_size;  // init here, compared latter.
+          
+          if( (char*)commit_at(KLASS_INSTANCE_OFFSET_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
+
+            log_debug(semeru, alloc)("Commit the start area to 0x%lx for METADATA_SPACE_ALLOCTYPE , size 0x%lx .", 
+                                                                (size_t)requested_addr, (size_t)SYNC_MEMORY_AND_CPU_SIZE_LIMIT);
+
+            old_val = CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr;  // NULL
+            ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr), old_val);
+            assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+          }
+
+          
+          log_debug(semeru, alloc)("Initialize _alloc_ptr to 0x%lx for METADATA_SPACE_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
+
+          break;
+        }
+
+        // 2) this type space is already committed.
+        //    Just return a start address back to caller && adjust the pointer value.
+        requested_addr = CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr;
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + SYNC_MEMORY_AND_CPU_OFFSET + SYNC_MEMORY_AND_CPU_SIZE_LIMIT), 
+                                                        "%s, Exceed the METADATA_SPACE_ALLOCTYPE's space range. \n", __func__ );
+
+        // Before bump the alloc pointer.
+        // Assume the the instance size are all the same for all the type under METADATA_SPACE_ALLOCTYPE
+        // assert( (size_t)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr,
+        //     " Each element size of type  METADATA_SPACE_ALLOCTYPE should be equal.");
+
+        // bump the pointer
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr), requested_addr);
+        assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
+
+        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for METADATA_SPACE_ALLOCTYPE.", 
+                                                                (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
+
+        break;
+
+
 
 
 

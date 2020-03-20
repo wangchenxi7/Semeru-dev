@@ -58,8 +58,8 @@ class ReservedSpace {
   // Semeru - protect domian
   //
   void initialize_semeru(size_t size, size_t alignment, bool large,
-                               char* requested_address,
-                               bool executable);
+                         char* requested_address,
+                         bool executable, bool heap_init);
 
 
  public:
@@ -76,6 +76,11 @@ class ReservedSpace {
 
   ReservedSpace(char* base, size_t size, size_t alignment, bool special,
                 bool executable);
+
+  // Semeru - add MAP_FIXED flag to mmap
+  ReservedSpace(size_t size, size_t alignment,
+                  bool large, char* requested_address, bool map_fixed);
+
 
   // Accessors
   char*  base()            const { return _base;      }

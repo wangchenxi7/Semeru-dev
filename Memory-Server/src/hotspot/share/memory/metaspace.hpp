@@ -78,12 +78,12 @@ class CollectedHeap;
  * More Explanation
  *  1) Some basic classes don't belong to the metaspace namespace.
  *    Metaspace,
- *        => metaspace::VirtualSpaceList
- *        => metaspace::ChunkManager
+ *        => metaspace::VirtualSpaceList   // a list of VirtualSpaceNode
+ *        => metaspace::ChunkManager       
  *       
  *    ClassLoaderMetaspace,
  *        => metaspace::SpaceManager    // Manage a list of virtual space (node)
- *        => define : allocate()       // Allocate data into the ClassLoader's corresponding MetaSpace.
+ *        => define : allocate()        // Allocate data into the ClassLoader's corresponding MetaSpace.
  */
 namespace metaspace {
   class ChunkManager;
@@ -162,6 +162,12 @@ class Metaspace : public AllStatic {
   // Virtual Space lists for both classes and other metadata
   static metaspace::VirtualSpaceList* _space_list;          // The global VirtualSpaceNode manager for the Metaspace
   static metaspace::VirtualSpaceList* _class_space_list;    // [x]Only used under CompressedOop mode. Allocated in Native memory pool. 
+
+  // Semeru MS
+  // Reserve enough space in Semeru MS.
+  // We don't need to manage the data in this space, all the data are transfered from CPU server via RDMA.
+  static metaspace::VirtualSpaceList* _semeru_space_list;   // Used for Semeru Metaspace
+
 
   static metaspace::ChunkManager* _chunk_manager_metadata;  // [?] What's the chunk for ?
   static metaspace::ChunkManager* _chunk_manager_class;     // Pari with _class_space_list. [x]Only used under CompressedOop mode.
@@ -283,8 +289,8 @@ class ClassLoaderMetaspace : public CHeapObj<mtClass> {
 
   const Metaspace::MetaspaceType _space_type;
   Mutex* const  _lock;
-  metaspace::SpaceManager* _vsm;
-  metaspace::SpaceManager* _class_vsm;
+  metaspace::SpaceManager* _vsm;        // _virtual_space_manager, for non-compressed oop
+  metaspace::SpaceManager* _class_vsm;  // for compressed oop.  all the klass instances are using this type ?
 
   metaspace::SpaceManager* vsm() const { return _vsm; }
   metaspace::SpaceManager* class_vsm() const { return _class_vsm; }

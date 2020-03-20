@@ -35,7 +35,8 @@
 #include "utilities/growableArray.hpp"
 
 // oopFactory is a class used for creating new objects.
-
+// [?] only for array ??
+//
 class vframeArray;
 
 class oopFactory: AllStatic {

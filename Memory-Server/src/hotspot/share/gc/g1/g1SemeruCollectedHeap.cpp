@@ -1677,9 +1677,9 @@ static size_t actual_reserved_page_size(ReservedSpace rs) {
  *  		 So everytime we commit a Region, 
  * 			 the mapper translates the committed Region size to needed page size for this structure.
  * 		
- * [x] This mapping is for the auxiliary structure, Le's take the G1BlockOffsetTable for example. 
- * 		First, reserve space for the G1BlockOffsetTable according to the size of Heap size.
- * 						1 byte of G1BlockOffsetTable can cover one card. So, the translation_factor is 512.
+ * [x] This mapping is for the auxiliary structure, Le's take the G1SemeruBlockOffsetTable for example. 
+ * 		First, reserve space for the G1SemeruBlockOffsetTable according to the size of Heap size.
+ * 						1 byte of G1SemeruBlockOffsetTable can cover one card. So, the translation_factor is 512.
  * 		Second, the Java heap is allocated in Region granularity, 1GB.
  * 		Third, calculate the mapping  for Region and page for BOT. 
  * 					 1 GB / 512 bytes = 2M cards
@@ -1945,10 +1945,10 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	// Debug
 	// Do padding for the first GB meta data space. Until the start of alive_bitmap.
-	_debug_rdma_padding		= new(RDMA_PADDING_SIZE, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
+	_debug_rdma_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
 	tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
 																																									(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
-																																									(size_t)RDMA_PADDING_SIZE);
+																																									(size_t)RDMA_PADDING_SIZE_LIMIT);
 
 	//
 	// End of RDMA structure section
@@ -1990,8 +1990,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// [?] They have to commit the space before using it ?
 	G1RegionToSpaceMapper* bot_storage =
 		create_aux_memory_mapper("Block Offset Table",
-														 G1BlockOffsetTable::compute_size(g1_rs.size() / HeapWordSize),
-														 G1BlockOffsetTable::heap_map_factor());
+														 G1SemeruBlockOffsetTable::compute_size(g1_rs.size() / HeapWordSize),
+														 G1SemeruBlockOffsetTable::heap_map_factor());
 
 	// [?] Seems that Semeru doesn't need this information ?
 	//
@@ -2057,7 +2057,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	// do we initialize the  _reserved_semeru successfully ?
 	// 
-	_bot = new G1BlockOffsetTable(reserved_memory_pool(), bot_storage);
+	_bot = new G1SemeruBlockOffsetTable(reserved_memory_pool(), bot_storage);
 
 	//
 	// [x] Collection Set related structures ?
@@ -2073,7 +2073,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 		_in_cset_fast_test.initialize(start, end, granularity);
 
 
-	//	_humongous_reclaim_candidates.initialize(start, end, granularity);
+		_humongous_reclaim_candidates.initialize(start, end, granularity);
 	}
 
 	// Thread 1) Build the ParallelThreads 
@@ -2615,17 +2615,17 @@ bool G1SemeruCollectedHeap::is_in(const void* p) const {
 	}
 }
 
-// #ifdef ASSERT
-// bool G1SemeruCollectedHeap::is_in_exact(const void* p) const {
-// 	bool contains = reserved_region().contains(p);
-// 	bool available = _hrm->is_available(addr_to_region((HeapWord*)p));
-// 	if (contains && available) {
-// 		return true;
-// 	} else {
-// 		return false;
-// 	}
-// }
-// #endif
+#ifdef ASSERT
+bool G1SemeruCollectedHeap::is_in_exact(const void* p) const {
+	bool contains = reserved_region().contains(p);
+	bool available = _hrm->is_available(addr_to_region((HeapWord*)p));
+	if (contains && available) {
+		return true;
+	} else {
+		return false;
+	}
+}
+#endif
 
 // Iteration functions.
 

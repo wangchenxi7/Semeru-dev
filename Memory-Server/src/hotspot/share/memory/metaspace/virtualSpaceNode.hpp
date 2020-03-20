@@ -40,7 +40,12 @@ class OccupancyMap;
 
 // A VirtualSpaceList node.
 // A list of VirtualSpaceNode can form the VirtualSpaceList.
-class VirtualSpaceNode : public CHeapObj<mtClass> {
+
+// class VirtualSpaceNode : public CHeapRDMAObj< VirtualSpaceNode, METADATA_SPACE_ALLOCTYPE>{ 
+// [xx] Semeru MS doesn't care about these klass space management information.
+//      We only need to confirm the klass instances are in the same address as CPU server.
+
+class VirtualSpaceNode : public CHeapObj<mtClass> {  
   friend class VirtualSpaceList;
 
   // Link to next VirtualSpaceNode
@@ -50,13 +55,14 @@ class VirtualSpaceNode : public CHeapObj<mtClass> {
   const bool _is_class;
 
   // total in the VirtualSpace
-  ReservedSpace _rs;
-  VirtualSpace _virtual_space;
+  ReservedSpace _rs;            // Each VirtualSpaceNode is a ReservedSpace. 
+  VirtualSpace _virtual_space;  // This VirtualSpace is used to mange the ReservedSpace, _rs.
   MetaWord* _top;
   // count of chunks contained in this VirtualSpace
   uintx _container_count;
 
-  OccupancyMap* _occupancy_map;
+  OccupancyMap* _occupancy_map; // [?] Why need this ? We already have a _top pointer.
+
 
   // Convenience functions to access the _virtual_space
   char* low()  const { return virtual_space()->low(); }
@@ -78,7 +84,17 @@ class VirtualSpaceNode : public CHeapObj<mtClass> {
 
  public:
 
+  // Semeru 
+  static size_t VirtualSpaceNode_index;  // We want to know its global index.
+
+  //
+  // Functions
+  //
+
   VirtualSpaceNode(bool is_class, size_t byte_size);
+  // Semeru MS
+  VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed);
+
   VirtualSpaceNode(bool is_class, ReservedSpace rs) :
     _next(NULL), _is_class(is_class), _rs(rs), _top(NULL), _container_count(0), _occupancy_map(NULL) {}
   ~VirtualSpaceNode();
