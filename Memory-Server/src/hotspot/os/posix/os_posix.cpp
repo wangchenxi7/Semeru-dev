@@ -623,6 +623,11 @@ char* os::build_agent_function_name(const char *sym_name, const char *lib_name,
   return agent_entry_name;
 }
 
+
+/**
+ * Put current Thread to sleep ## milliseconds.
+ *  
+ */
 int os::sleep(Thread* thread, jlong millis, bool interruptible) {
   assert(thread == Thread::current(),  "thread consistency check");
 

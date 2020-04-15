@@ -130,6 +130,27 @@
 
 
 
+// Synchronization mask
+#define  VERSION_TAG_OFFSET      0
+#define  DIRTY_TAG_OFFSET        16
+
+#define	DIRTY_TAG_MASK 	 (uint32_t)( ((1<<16) - 1) << 16)		// high 16 bits of the uint32_t
+#define VERSION_MASK	 	 (uint32_t)( (1<<16) - 1 )						// low 16 bits of the uint32_t
+
+// The high 16 bits can only be 1 or 0.
+#define DIRTY_TAG_SEND_START	 (uint32_t)(1<<16)				// 1,0000,0000,0000,0000, OR this value to set the high 16 bits as 1.
+#define DIRTY_TAG_SEND_END		 (uint32_t)( (1<<16) - 1)	// 0,1111,1111,1111,1111, AND this vlaue to set high 16 bits as 0.
+
+
+
+
+
+
+
+
+
+
+
 //
 // JVM Related.
 //
@@ -163,22 +184,29 @@
 #define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)  // +4KB, 0x400,008,001,000
 #define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)0x1000      // 4KB 
 
+// 1.2.3 one-sided RDMA write check flags
+// 4 bytes per HeapRegion |-- 16 bits for dirty --|-- 16 bits for version --|
+// Assume the number of Region is 1024, 
+// Reserve 4KB for the write check flags.
+#define FLAGS_OF_CPU_WRITE_CHECK_OFFSET       (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)  // +4KB, 0x400,008,002,000
+#define FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT   (size_t)0x1000      // 4KB 
+
 // 1.3 CPU Server To Memory server, Initialization
-#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE) // +4KB, 0x400,008,002,000
+#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT) // +4KB, 0x400,008,003,000
 #define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 16*ONE_MB    //
 
 // 1.4 CPU Server To Memory server, GC
-#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +16MB, 0x400,009,002,000
+#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +16MB, 0x400,009,003,000
 #define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
 
 
 // 1.5 Memory server To CPU server 
-#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +16MB, 0x400,00A,002,000
+#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +16MB, 0x400,00A,003,000
 #define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
 
 
 // 1.6 Synchonize between CPU server and memory server
-#define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +16MB, 0x400,00B,002,000
+#define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +16MB, 0x400,00B,003,000
 #define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 16*ONE_MB    //
 
 
@@ -223,6 +251,9 @@
 
 #define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE/ONE_GB)    //for local memory management
 #define MAX_REGION_NUM    ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
+#define MAX_SWAP_MEM_GB   (u64)(REGION_SIZE_GB * RDMA_DATA_REGION_NUM)		// Space managed by SWAP
+
+
 
 
 //----------------------------------------------------------------------------------------------------

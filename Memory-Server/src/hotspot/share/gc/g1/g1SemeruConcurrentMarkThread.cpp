@@ -48,6 +48,7 @@
 #include "gc/g1/g1SemeruConcurrentMark.inline.hpp"
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 #include "gc/g1/g1SemeruConcurrentMarkThread.inline.hpp"
+#include "semeru/debug_function.h"
 
 
 // ======= Semeru Concurrent Mark Thread ========
@@ -487,6 +488,12 @@ void G1SemeruConcurrentMarkThread::run_service() {
         }else{
           log_debug(semeru,thread)("%s, Unknown Runnting thread [0x%lx] is running here. \n",__func__, (size_t)Thread::current());
         }
+
+        // Check 1-sided synchronization write.
+        // Check the version's of all the Region.
+        print_region_write_check_flag(sizeof(uint32_t));
+
+
         #endif
 
         received_memory_server_cset* recv_mem_server_cset = semeru_heap->recv_mem_server_cset();
@@ -578,8 +585,13 @@ void G1SemeruConcurrentMarkThread::run_service() {
     //
     // Debug - Terminate the ConcurrentThread
     //
-    set_semeru_ms_gc_terminated();
-    this->_should_terminate = true;
+
+    // Infinite loop. 
+    // Sleep and wake up to check CSet.
+    os::sleep(this, 5000, false); // sleep a while.
+    
+    //set_semeru_ms_gc_terminated();
+    //this->_should_terminate = true;
 
 
   } // End of the while loop

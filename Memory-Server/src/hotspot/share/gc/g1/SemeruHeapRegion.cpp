@@ -512,8 +512,11 @@ void SemeruHeapRegion::initialize(MemRegion mr,
 
   // Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
-  
   _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
+
+  // assign the 1-sided rdma write check flag 
+  G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
+  _write_check_flag = g1h->_rdma_write_check_flags->region_write_check_flag(region_index);
 
   hr_clear(false /*par*/, false /*clear_space*/);
 

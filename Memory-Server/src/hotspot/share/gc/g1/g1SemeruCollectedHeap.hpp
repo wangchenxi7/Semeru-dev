@@ -197,7 +197,7 @@ class G1SemeruCollectedHeap : public CollectedHeap {
 
 
 //
-// Fields needed to be updated by CPU Server
+// Fields needed to be sent to Memory server
 //
 private :
 
@@ -214,8 +214,14 @@ public :
   // the fileds of flags_of_cpu_server_state are  all volatile.
   flags_of_cpu_server_state* _cpu_server_flags;
 
+  flags_of_rdma_write_check* _rdma_write_check_flags;
+
   received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
   bool is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  }
+
+
+
+
 
 //
 // Fields needed to be sent to CPU server

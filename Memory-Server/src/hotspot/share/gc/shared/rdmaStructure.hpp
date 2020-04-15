@@ -92,11 +92,12 @@ public:
 
   /**
    * new object instance #1
-   * Allocate space for non-array object instance.
+   * Allocate space for non-array object instance with [flexible array].
    *  1) Single structure.
    *  2) Content are stored in a flexible array
    *  3) Fixed start address.
-   * 
+   *  4) Both the instance and flexible array share the commited space.
+   *      So, if don't want to wast space, do not allocate fields for the class itself.
    * 
    * More explanation
    * 
@@ -841,6 +842,8 @@ private :
 	// First field, identify if CPU server pushed new Regions here.
 	size_t 	_num_regions;
 
+
+public :
 	// [?] a flexible array, points the memory just behind this instance.
 	// The size of current instance should be limited within 4K, 
 	// The array size should be limited by MEM_SERVER_CSET_BUFFER_SIZE.
@@ -848,7 +851,7 @@ private :
 
 
 
-public :
+//public :
 	
 	received_memory_server_cset();
 	
@@ -899,6 +902,45 @@ class flags_of_cpu_server_state : public CHeapRDMAObj<flags_of_cpu_server_state>
 };
 
 
+
+
+/**
+ * 1-Sided RDMA write flag,
+ *  with flexbile array.
+ * 
+ * Reverse 4 bytes for each Region,
+ * Assume there are at most 1024 Regions. (The instance can NOT cost space)
+ * Reserve 4KB.  Region[index]->write_check_flag = Region_index x 4 bytes.
+ *  
+ */
+class flags_of_rdma_write_check : public CHeapRDMAObj<flags_of_rdma_write_check>{
+private :
+
+public :
+
+  // Real content, the flexible array.
+  // [x] Do we need to declare the base as volatile also
+  //  => Any variable pointed by volatile pointers are treated as volatile variables. 
+  volatile uint32_t one_sided_rdma_write_check_flags_base[]; 
+
+  // functions
+  
+  // Constructor
+  flags_of_rdma_write_check( char* start, size_t byte_size , size_t granularity){
+    // reset memory value to 0.
+    uint32_t *ptr = (uint32_t*)start;
+
+    assert(sizeof(uint32_t) == granularity, "wrong granularity. ");
+
+    memset(ptr, byte_size/granularity, 0);
+    
+  }
+
+
+  // return a uint32_t for a Region.
+	inline uint32_t* region_write_check_flag(size_t index)	{	return (uint32_t*)(one_sided_rdma_write_check_flags_base + index) ;	}
+
+};
 
 
 

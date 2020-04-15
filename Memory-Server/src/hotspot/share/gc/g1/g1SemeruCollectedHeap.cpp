@@ -1941,9 +1941,34 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// For the memory_server_cset, we need to allocate space && invoke construction, so it should be operator new().
 	// if _mem_server_cset->_num_regions != 0, means new data are sent to Semeru memory server
 	//	  the real data is stored in flexible array, _mem_server_cset->_region_cset[]
-	_recv_mem_server_cset 	= new(MEMORY_SERVER_CSET_SIZE, rdma_rs.base() + MEMORY_SERVER_CSET_OFFSET) received_memory_server_cset();
-	_cpu_server_flags				=	new(FLAGS_OF_CPU_SERVER_STATE_SIZE, rdma_rs.base() + FLAGS_OF_CPU_SERVER_STATE_OFFSET) flags_of_cpu_server_state();
+	// 2) Commit the space directly.
+	char * area_start;
+	size_t area_size;
+	
+	area_start = rdma_rs.base() + MEMORY_SERVER_CSET_OFFSET;
+	area_size	=	MEMORY_SERVER_CSET_SIZE;
+	_recv_mem_server_cset 	= new(area_size, area_start) received_memory_server_cset();
+	
+	area_start = rdma_rs.base() + FLAGS_OF_CPU_SERVER_STATE_OFFSET;
+	area_size  = FLAGS_OF_CPU_SERVER_STATE_SIZE;
+	_cpu_server_flags				=	new(area_size, area_start) flags_of_cpu_server_state();
 
+	area_start =  rdma_rs.base() + FLAGS_OF_CPU_WRITE_CHECK_OFFSET;
+	area_size  = FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT;
+	_rdma_write_check_flags = new(area_size, area_start) flags_of_rdma_write_check(area_start, area_size, sizeof(uint32_t)); 
+
+
+
+	#ifdef ASSERT
+		log_debug(semeru, alloc)("%s, Meta data allocation Start\n", __func__);
+		log_debug(semeru, alloc)("	received_memory_server_cset 0x%lx, flexible array 0x%lx",  
+																							(size_t)_recv_mem_server_cset, (size_t)_recv_mem_server_cset->_region_cset  );
+		log_debug(semeru, alloc)("	flags_of_cpu_server_state  0x%lx, flexible array 0x%lx",  
+																							(size_t)_cpu_server_flags, (size_t)0 );
+		log_debug(semeru, alloc)("	flags_of_rdma_write_check  0x%lx, flexible array 0x%lx",  
+																							(size_t)_rdma_write_check_flags, (size_t)_rdma_write_check_flags->one_sided_rdma_write_check_flags_base );
+		log_debug(semeru, alloc)("%s, Meta data allocation End \n", __func__);
+	#endif
 
 	// Debug
 	// Do padding for the first GB meta data space. Until the start of alive_bitmap.

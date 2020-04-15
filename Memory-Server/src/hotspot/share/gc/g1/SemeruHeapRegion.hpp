@@ -440,6 +440,23 @@ public:
   MemoryToCPUAtGC     *_mem_to_cpu_gc;
   SyncBetweenMemoryAndCPU   *_sync_mem_cpu;
 
+  // Other fields
+  // 1-sied RDMA write check flags
+  volatile uint32_t* _write_check_flag;
+
+  #define WRITE_CHECK_VERSION_OFFSET 0
+  #define WRITE_CHECK_DIRTY_OFFSET  16
+
+  #define WRITE_CHECK_VERSION_MASK  ((uint32_t)1<<WRITE_CHECK_DIRTY_OFFSET) -1   // low 16 bits
+
+  //
+  // Functions
+
+  // get the low 16 bits
+  inline uint32_t write_check_flag_version_val() {  return *_write_check_flag & WRITE_CHECK_VERSION_MASK;  }
+
+  // check the high 16 bits
+  inline bool write_check_flag_dirty()           { return  (*_write_check_flag >>  WRITE_CHECK_DIRTY_OFFSET) == (uint32_t)1;  }
 
  protected: 
   //
