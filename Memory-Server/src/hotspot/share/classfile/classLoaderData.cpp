@@ -272,6 +272,19 @@ bool ClassLoaderData::ChunkedHandleList::owner_of(oop* oop_handle) {
 }
 #endif // PRODUCT
 
+/**
+ * Claim what ?? The ClassLoaderData->_claim variable.
+ * 
+ * 
+ * 1）If the old_claim value of _claim == the new value,
+ * 			return false,
+ * 		Which means no need to traverse this klass's field ?
+ * 
+ * 2) if Set the new claim value successfully,
+ * 			return true.
+ * 		Which means, go to traverse its fields
+ * 
+ */
 bool ClassLoaderData::try_claim(int claim) {
   for (;;) {
     int old_claim = Atomic::load(&_claim);
@@ -304,6 +317,16 @@ void ClassLoaderData::dec_keep_alive() {
   }
 }
 
+
+/**
+ * Tag : Apply OopClosure to a specific klass's fields.
+ * 
+ * [?] What's the meaning of the claim mechanism ?
+ *  Guarantee this ClassLoaderData's klass are only traversed once ?
+ *  Doesn't make sences.
+ *  Because the klass information may change ?
+ *  
+ */
 void ClassLoaderData::oops_do(OopClosure* f, int claim_value, bool clear_mod_oops) {
   if (claim_value != ClassLoaderData::_claim_none && !try_claim(claim_value)) {
     return;
@@ -314,7 +337,7 @@ void ClassLoaderData::oops_do(OopClosure* f, int claim_value, bool clear_mod_oop
     clear_modified_oops();
   }
 
-  _handles.oops_do(f);
+  _handles.oops_do(f);  // Apply the OopClosure function to this klass's fields ?
 }
 
 void ClassLoaderData::classes_do(KlassClosure* klass_closure) {

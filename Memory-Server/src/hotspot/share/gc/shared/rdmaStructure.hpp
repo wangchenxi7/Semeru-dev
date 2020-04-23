@@ -796,6 +796,9 @@ public:
     return taskqueue_empty() && overflow_empty();
   }
 
+  // Debug, the used slots of generic queue
+  inline uint bottom() const {return taskqueue_t::_bottom;}
+
 private:
   overflow_t _overflow_stack;     // The Stack<E,F>
 };
@@ -840,14 +843,14 @@ class received_memory_server_cset : public CHeapRDMAObj<received_memory_server_c
 
 private :
 	// First field, identify if CPU server pushed new Regions here.
-	size_t 	_num_regions;
+	volatile size_t 	_num_regions;
 
 
 public :
 	// [?] a flexible array, points the memory just behind this instance.
 	// The size of current instance should be limited within 4K, 
 	// The array size should be limited by MEM_SERVER_CSET_BUFFER_SIZE.
-	size_t	_region_cset[];			
+	volatile size_t	_region_cset[];			
 
 
 
@@ -855,7 +858,7 @@ public :
 	
 	received_memory_server_cset();
 	
-	size_t*	num_received_regions()	{	return &_num_regions;	}
+	volatile size_t*	num_received_regions()	{	return &_num_regions;	}
 
 
 	// Allocate the _region_cset just behind this instance ?

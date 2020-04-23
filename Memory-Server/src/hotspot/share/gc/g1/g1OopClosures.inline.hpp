@@ -165,6 +165,25 @@ inline void G1SemeruCMOopClosure::do_oop_work(T* p) {
 }
 
 
+#ifdef ASSERT
+// This verification is applied to all visited oops.
+// The closures can turn is off by overriding should_verify_oops().
+template <typename T>
+void G1SemeruCMOopClosure::verify(T* p) {
+	if (should_verify_oops()) {
+		T heap_oop = RawAccess<>::oop_load(p);
+		if (!CompressedOops::is_null(heap_oop)) {
+			oop o = CompressedOops::decode_not_null(heap_oop);
+			assert(Universe::semeru_heap()->semeru_is_in_closed_subset(o),
+						 "should be in closed *p " PTR_FORMAT " " PTR_FORMAT, p2i(p), p2i(o));
+		}
+	}
+}
+#endif
+
+
+
+
 /**
  * Tag : Closure of scanning Root Regions for CM.
  * 	Mark the object alive in next_bitmap directly, without pushing any fields/objects into task_queue.

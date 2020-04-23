@@ -1989,7 +1989,7 @@ jint G1CollectedHeap::initialize() {
 /**
  *	Semeru 
  *  Main entrance for Java Heap build.
- *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_reserved_memory_pool 
+ *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_semeru_reserved 
  * 
  */
 jint G1CollectedHeap::initialize_memory_pool() {

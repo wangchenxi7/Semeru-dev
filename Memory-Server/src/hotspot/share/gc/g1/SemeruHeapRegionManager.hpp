@@ -128,8 +128,8 @@ class SemeruHeapRegionManager: public CHeapObj<mtGC> {
   uint find_empty_from_idx_reverse(uint start_idx, uint* res_idx) const;
 
 protected:
-  G1SemeruHeapRegionTable _regions;           // <region_index, heapRegion*>. Records the committed Regions.
-  FreeSemeruRegionList _free_list;                  // The un-committed free Regions.
+  G1SemeruHeapRegionTable _regions;           // <region_index, heapRegion*>. Records for the whole reserved Java heap.
+  FreeSemeruRegionList _free_list;            // The committed free Regions. Mutator/GC reuqest space from the _free_list.
   
   G1RegionToSpaceMapper* _heap_mapper;   
 

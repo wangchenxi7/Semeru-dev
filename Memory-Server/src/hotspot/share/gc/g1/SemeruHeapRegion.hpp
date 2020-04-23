@@ -538,7 +538,7 @@ public:
   // "prev" is the top at the start of the last completed marking.
   // "next" is the top at the start of the in-progress marking (if any.)
   HeapWord* _prev_top_at_mark_start;  // Keep  this value NULL to disable dual marking bitmap for Semeru MS.
-  HeapWord* _next_top_at_mark_start;
+  HeapWord* _next_top_at_mark_start;  // [??] Add this value into SyncBetweenMemoryAndCPU
   // If a collection pause is in progress, this is the top at the start
   // of that pause.
 
@@ -689,6 +689,8 @@ public:
 
   // get current Region's alive/dest bitmap
   G1CMBitMap* alive_bitmap()  { return &(_mem_to_cpu_gc->_alive_bitmap);  }
+
+	bool is_marked_alive(oop obj) const {	 return _mem_to_cpu_gc->_alive_bitmap.is_marked( obj);	}
 
   // allocate space for the alive/dest bitmap.
   G1RegionToSpaceMapper* create_alive_bitmap_storage(size_t region_idnex);

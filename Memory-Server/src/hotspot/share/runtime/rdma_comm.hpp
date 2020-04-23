@@ -32,24 +32,6 @@
 //       cpp -v /dev/null -o /dev/null   print the search path.
 //
 
-/**
- * Controll options 
- * 
- * Not exceed  the int limitations.
- *  [x][x] Moved to hotspot/share/utilities/globalDefinitions.hpp
- */
-// #define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
-// #define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
-
-// #define PAGE_SIZE		      ((size_t)4096)	// bytes
-// #define REGION_SIZE_GB    ((size_t)8)   	// Habe to be 1GB at current ! or will cause inconsistence problems. 
-
-// #define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *1)
-
-// #define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * 4 + RDMA_STRUCTURE_SPACE)    //for local memory management
-// #define MAX_MR_NUM_GB     ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
-
-// #define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
 
 
 // Enable the debug information.

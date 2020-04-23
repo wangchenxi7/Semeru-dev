@@ -259,7 +259,7 @@ void ClassLoaderDataGraph::roots_cld_do(CLDClosure* strong, CLDClosure* weak) {
   for (ClassLoaderData* cld = _head;  cld != NULL; cld = cld->_next) {
     CLDClosure* closure = cld->keep_alive() ? strong : weak;
     if (closure != NULL) {
-      closure->do_cld(cld);
+      closure->do_cld(cld);  // Apply the CLDClosure to the klasses ?
     }
   }
 }

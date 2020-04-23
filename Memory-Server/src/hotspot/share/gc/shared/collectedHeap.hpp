@@ -111,7 +111,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   /**
    * Semeru 
    */
-  MemRegion _reserved_memory_pool;  // [?] What's this variable used for ??
+  MemRegion _semeru_reserved;  // Used to test if an addr is in the reserved address.
 
  protected:
   bool _is_gc_active;
@@ -229,9 +229,9 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   /**
    * Semeru 
    */
-  void initialize_reserved_memory_pool(HeapWord *start, HeapWord *end);
-  MemRegion reserved_memory_pool()  const { return _reserved_memory_pool; }
-  address memory_pool_base()        const { return (address)reserved_memory_pool().start();  } 
+  void initialize_semeru_reserved(HeapWord *start, HeapWord *end);
+  MemRegion semeru_reserved_region()  const { return _semeru_reserved; }  // corresponding to reserved_regions
+  address semeru_base() const { return (address)semeru_reserved_region().start();  } 
 
   // Return "true" if the part of the heap that allocates Java
   // objects has reached the maximal committed limit that it can
@@ -260,7 +260,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
    */
   // Returns "TRUE" if "p" points into the reserved area of the heap.
   bool is_in_semeru_reserved(const void* p) const {
-    return _reserved_memory_pool.contains(p);
+    return _semeru_reserved.contains(p);
   }
 
   bool is_in_semeru_reserved_or_null(const void* p) const {
@@ -302,6 +302,12 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   virtual bool is_in_closed_subset(const void* p) const {
     return is_in_reserved(p);
   }
+
+	// Semeru
+	bool semeru_is_in_closed_subset(const void* p) const {
+    return is_in_semeru_reserved(p);
+  }
+
 
   bool is_in_closed_subset_or_null(const void* p) const {
     return p == NULL || is_in_closed_subset(p);

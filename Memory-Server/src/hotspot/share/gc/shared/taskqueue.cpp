@@ -141,7 +141,7 @@ bool
 ParallelTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
   assert(_n_threads > 0, "Initialization is incorrect");
   assert(_offered_termination < _n_threads, "Invariant");
-  Atomic::inc(&_offered_termination);
+  Atomic::inc(&_offered_termination);  // Offer 1 termination.
 
   uint yield_count = 0;
   // Number of hard spin loops done since last yield

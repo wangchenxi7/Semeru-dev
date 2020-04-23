@@ -210,7 +210,7 @@ void HeapRegionManager::make_regions_available(uint start, uint num_regions, Wor
 		}
 	}
 
-	_available_map.par_set_range(start, start + num_regions, BitMap::unknown_range);
+	_available_map.par_set_range(start, start + num_regions, BitMap::unknown_range);  // Set the corresponding Regions at non-available ?
 
 	// 2) Initialize the management for the space 
 	for (uint i = start; i < start + num_regions; i++) {

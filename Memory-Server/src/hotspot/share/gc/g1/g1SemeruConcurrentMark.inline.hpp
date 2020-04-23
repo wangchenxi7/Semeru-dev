@@ -233,10 +233,12 @@ inline void G1SemeruCMTask::scan_task_entry(G1SemeruTaskQueueEntry task_entry) {
 
 inline void G1SemeruCMTask::push(G1SemeruTaskQueueEntry task_entry) {
   assert(task_entry.is_array_slice() || _semeru_h->is_in_g1_reserved(task_entry.obj()), "invariant");
-  assert(task_entry.is_array_slice() || !_semeru_h->is_on_master_free_list(
-              _semeru_h->heap_region_containing(task_entry.obj())), "invariant");
+  
+	//Loose#1 Memory Server has no information about which Region is allocated or not. (SemeruHeapRegionManager->_free_list isn't updated.)
+	// assert(task_entry.is_array_slice() || !_semeru_h->is_on_master_free_list(
+  //             _semeru_h->heap_region_containing(task_entry.obj())), "invariant");
   assert(task_entry.is_array_slice() || !_semeru_h->is_obj_ill(task_entry.obj()), "invariant");  // FIXME!!!
-  assert(task_entry.is_array_slice() || _next_mark_bitmap->is_marked((HeapWord*)task_entry.obj()), "invariant");
+	assert(task_entry.is_array_slice() || _curr_region->alive_bitmap()->is_marked((HeapWord*)task_entry.obj())  , "invariant");
 
   if (!_semeru_task_queue->push(task_entry)) {
     // The local task queue looks full. We need to push some entries
@@ -452,8 +454,11 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
   // Calculate the alive objects information. 
   // [?] Can we invoke freind class's function like  this ?
   if (success) {
-    _semeru_cm->add_to_liveness(worker_id, obj, obj->size());
-  }
+    //_semeru_cm->add_to_liveness(worker_id, obj, obj->size());
+
+		tty->print(" \n ERROR in %s, Should count the scanned alive objects 0x%lx !! \n\n", __func__, (size_t)obj_addr );
+	
+	}
 
   return success;
 }
@@ -486,6 +491,8 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
   if( !mark_in_alive_bitmap(_worker_id, obj) ) {  // Mark object alive in alive_bitmap
     return false;
   }
+
+	log_debug(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)obj ,_curr_region->hrm_index() );
 
   // No OrderAccess:store_load() is needed. It is implicit in the
   // CAS done in G1CMBitMap::parMark() call in the routine above.
@@ -544,11 +551,18 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
   if (obj == NULL) {
     return false;
   }
+
+	log_debug(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)obj);
   
   // Check if this object is in current Region, if not, skip it.
   // Assume 1) Write Barrier has captured all the cross-region reference caused by mutator
   // 2) GC can update the cross-region referenced caused by alive object evacuation.
   if(_curr_region->is_in_reserved(obj) == false ){
+
+		//debug
+		log_debug(semeru,mem_trace)("%s, Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx) ", __func__, 
+																			_curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
+
     return false;
   }
 
@@ -582,7 +596,7 @@ inline void G1SemeruCMTask::trim_target_object_queue_to_threshold(TargetObjQueue
 		}
 	}
 
-	while (target_obj_queue->pop_local(ref, threshold)) {  // threshold = 64
+	while (target_obj_queue->pop_local(ref, threshold)) {  // process all the content length than threshold.
 		dispatch_reference(ref);
 	}
 }

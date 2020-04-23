@@ -284,6 +284,10 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
  * 2) Region size alignment, alignment. 
  * 3) Initialize the fields of Reserved Heap space.
  * 
+ * More explain:
+ *  heap_init = true, means reserving space for the heap.
+ * 	heap_init = false, reserve space for some specific scenario.
+ * 				e.g. the allocate the metaspace , in Meta Regions.
  */ 
 
 pthread_t rdma_cma_thread;    // a global variable.
@@ -291,6 +295,31 @@ pthread_t rdma_cma_thread;    // a global variable.
 void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
                                char* requested_address,
                                bool executable, bool heap_init) {
+
+	//
+	// For Debug, decouple the RDMA buffer and Java Heap size.
+	//  Java Heap size follows the command line : 
+	// 1) -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=${SemeruMemPoolSize} -XX:SemeruMemPoolInitialSize=${SemeruMemPoolSize} -XX:SemeruMemPoolAlignment=${SemeruMemPoolAlignment}
+	//			Let the JVM follow the RDMA buffer confiruation to commit memory size. (maybe not reserve)
+	// 2) RDMA buffer follow the definitions in Memory-Server/src/hotspot/share/utilities/globalDefinitions.hpp.
+	// 		size:	MAX_FREE_MEM_GB
+	//		alignment : ONE_GB
+	//		Same start addr. 
+	size_t old_size, old_alignment;
+	if(heap_init){
+		tty->print("%s, Heap Initialization \n",__func__);
+		tty->print("%s, WARNING : Debug version. #1     \n", __func__);
+		old_size = size;
+		old_alignment = alignment;
+
+		size = (size_t)(MAX_FREE_MEM_GB * ONE_GB);
+		alignment = (size_t)ONE_GB;
+
+		tty->print("%s, after overide  size 0x%lx, alignment 0x%lx, requested_addr 0x%lx \n",__func__, size, alignment, (size_t)requested_address );
+	}
+
+	// End of override
+
   const size_t granularity = os::vm_allocation_granularity();    // 4KB ?
   assert((size & (granularity - 1)) == 0,
          "size not aligned to os::vm_allocation_granularity()");
@@ -385,8 +414,8 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 
     //
     // Request memory from OS failed. 
-    //
-    if (base == NULL) return;
+    // Base MUST equal to the requested addr.  && requested_addr != NULL.
+    if (base == NULL || base != requested_address) return;
 
     // Check alignment constraints
     if ((((size_t)base) & (alignment - 1)) != 0) {
@@ -408,17 +437,50 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
     }
   }  // base == NULL
 
+
+
+
   // Done
   // Initialize the fields of ReservedSpace
   //
-  _base = base;
-  _size = size;
-  _alignment = alignment;
-  // If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
-  if (_fd_for_heap != -1) {
-    _special = true;
-  }
 
+	if(heap_init){
+
+		// 1) DEBUG PATH
+		// Assign the command line values to the reservesed space.
+		//
+		tty->print("%s, WARNING : Debug version. #2\n", __func__);
+	 	_base = base;
+   	_size = old_size;
+   	_alignment = old_alignment;
+  	// If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
+  	if (_fd_for_heap != -1) {
+     _special = true;
+  	}
+
+		char* commit_start = (char*)(base + RDMA_STRUCTURE_SPACE_SIZE );
+		size_t commit_size = (size_t)(RDMA_DATA_REGION_NUM * REGION_SIZE_GB * ONE_GB);
+		// Commit the whole JVM  memory range
+		log_debug(semeru,alloc)("%s, Commit the whole DATA Regions [0x%lx, 0x%lx) immediately \n", __func__, (size_t)commit_start, (size_t)(commit_start +commit_size) );
+		os::commit_memory_or_exit(commit_start, commit_size, PAGE_SIZE, false, "Debug DATA Regions");
+	
+	// End of DEBUG
+	//
+
+	}else{
+		// 2) Normal Path
+  	_base = base;
+  	_size = size;
+  	_alignment = alignment;
+  	// If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
+  	if (_fd_for_heap != -1) {
+    _special = true;
+  	}
+
+		// Debug Klass space
+		log_debug(semeru,alloc)("%s, Commit Space [0x%lx, 0x%lx)] ",__func__, (size_t)_base, (size_t)(_base + _size) );
+		os::commit_memory_or_exit(_base, _size, PAGE_SIZE, false, "Debug Klass Space");
+	}
 
   //
   // Semeru RDMA support
@@ -439,6 +501,10 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
       //assert(false, "%s, Must specify the start address for the Sermeru heap. \n",__func__);
       tty->print("Create the RDMA daemon thread successfully.\n");
     }
+
+
+		// Let Memory server wait here until connected to CPU server.
+		
 
 	} // end of RDMA support
 

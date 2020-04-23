@@ -496,6 +496,8 @@ void G1SemeruConcurrentMarkThread::run_service() {
 
         #endif
 
+
+				log_debug(semeru, mem_trace)("%s, Scan Memory Server CSet.", __func__);
         received_memory_server_cset* recv_mem_server_cset = semeru_heap->recv_mem_server_cset();
 
         // Enqueue the received Regions to _cm_scanned_region, _freshly_evicetd_regions.
@@ -525,6 +527,8 @@ void G1SemeruConcurrentMarkThread::run_service() {
           break;
         } else {
           // Do the Compact action.
+					log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
+
           _semeru_sc->semeru_stw_compact();
         }
 
@@ -551,6 +555,9 @@ void G1SemeruConcurrentMarkThread::run_service() {
         // Do the Concurrent Tracing for the freshly evicted Regions in MS CSet.
         {
           G1SemeruConcPhase p(G1SemeruConcurrentPhase::SEMERU_MEM_SERVER_CONCURRENT, this);
+					
+					log_debug(semeru,mem_trace)("%s, Memory Server concurrent tracing starts .", __func__);
+
           _semeru_cm->semeru_concurrent_marking();    // The main content of Concurrent Marking 
         }
 
@@ -649,21 +656,31 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
 
   G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
   //size_t* received_num = mem_server_cset->num_received_regions();
-  int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
+  volatile int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
    SemeruHeapRegion* region_received = NULL;
 
   while(received_region_ind != -1){
+
+		// Debug
+		log_debug(semeru,mem_trace)("%s, Get a Evicted Region[%d] \n", __func__,received_region_ind);
+
     region_received = semeru_heap->hrm()->at(received_region_ind);
     assert(region_received != NULL, "%s, received Region is invalid.", __func__);   // [?] how to confirm if this region is available ?
 
     if(region_received->is_region_cm_scanned()){
+			log_debug(semeru,mem_trace)(" Region[%d] is already scanned. \n", received_region_ind);
+
       // add region into _cm_scanned_regions[] queue
       // The add operation may add one Region mutiple times. 
       semeru_cm()->mem_server_cset()->add_cm_scanned_regions(region_received);
     }else{
+			log_debug(semeru,mem_trace)(" Region[%d] is fresh. \n", received_region_ind);
+
       // add region into _freshly_evicted_regions[] queue
       semeru_cm()->mem_server_cset()->add_freshly_evicted_regions(region_received);
     }
+
+		received_region_ind = recv_mem_server_cset->pop();
 
   }// Received CSet isn't emtpy.
 
@@ -710,10 +727,18 @@ void G1SemeruConcurrentMarkThread::sleep_before_next_cycle() {
   // below while the world is otherwise stopped.
   assert(!in_progress(), "should have been cleared");
 
-  MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
-  while (!started() && !should_terminate()) {    // [?] A loop :means after waking up, the conditions 1) and 2) should also be satisfied. 
-    SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag);    // If the threads already wait here, no need to use a while loop?
-  }
+	{
+  	MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
+  	while (!started() && !should_terminate()) {    // [?] A loop :means after waking up, the conditions 1) and 2) should also be satisfied. 
+    	SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag);    // If the threads already wait here, no need to use a while loop?
+  	}
+	}
+
+	// debug - memory server
+	int sleep_time = 60;
+	log_debug(semeru,rdma)("%s, Sleep Concurrent GC thread %d seconds to let connect to CPU server. \n",__func__, sleep_time);
+	//sleep(sleep_time);
+	os::sleep(this, sleep_time*100, false);
 
   if (started()) {      // G1SemeruConcurrentMarkThread->_state Started 
     set_in_progress();  // switch to G1SemeruConcurrentMarkThread->_state InProgress from Started.

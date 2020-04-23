@@ -319,21 +319,30 @@ private:
  *    1) CM Scanned Regions, already scanned by CM. Remark adn evacuate the regions during STW window.
  *    2) Freshly evicted Regions, apply CM on these Regions.
  * 
+ * Work as a linked cycle:
+ * 	[ empty slots -- _bottom(first filed) -- filled slots -- _top(first available)-- empty slots   ]
+ * 
+ * e.g. 
+ * 	content : _freshly_evicted_regions[]
+ * 	_bottom : _claimed_freshly_evicted_regions
+ *  _top		: _num_freshly_evicted_regions
+ * 
+ * 
  * This Structure is only built and used in Semeru Memory Server.
  *    This structure is built from the region index set from CPU server.
  */
 class G1SemeruCMCSetRegions {
   SemeruHeapRegion** _cm_scanned_regions;
-  SemeruHeapRegion** _freshly_evicted_regions;
+  SemeruHeapRegion** _freshly_evicted_regions;  
 
   //size_t const _max_cm_scanned_regions;
   //size_t const _max_freshly_evicted_regions;
   size_t const _max_regions;    // both cm_scanned and freshly_evicted use the same value.
 
-  volatile size_t _num_cm_scanned_regions; // Actual number of cm scanned regions.
+  volatile size_t _num_cm_scanned_regions; // Actual number of cm scanned regions. Works as  _top, the first available slot.
   volatile size_t _num_freshly_evicted_regions;   // Actual number of freshly evicted regions.
 
-  volatile size_t _claimed_cm_scanned_regions;
+  volatile size_t _claimed_cm_scanned_regions;     // Works as _bottom, the first filled slot.
   volatile size_t _claimed_freshly_evicted_regions; // Number of root regions currently claimed.
 
   volatile bool _compact_in_progress;
@@ -857,7 +866,7 @@ private:
   // the task(entry) queue of this task
   G1SemeruCMTaskQueue*              _semeru_task_queue;      // The StarTask queue for CM
 
-  G1RegionMarkStatsCache      _mark_stats_cache;    // [?] What's this StatCache used for ??
+  G1RegionMarkStatsCache      _mark_stats_cache;    // [?] Store the CM scanning information. e.g. scanned alive objects.
   // Number of calls to this task
   uint                        _calls;
 

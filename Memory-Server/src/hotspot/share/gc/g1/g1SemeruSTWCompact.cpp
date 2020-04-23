@@ -167,7 +167,7 @@ void G1SemeruSTWCompact::semeru_stw_compact() {
 	// worker threads may currently exist and more may not be
 	// available.
 	active_workers = _concurrent_workers->update_active_workers(active_workers);
-	log_info(semeru, compact)("Using %u workers of %u for Semeru MS compacting", active_workers, _concurrent_workers->total_workers());
+	log_info(semeru, mem_compact)("Using %u workers of %u for Semeru MS compacting", active_workers, _concurrent_workers->total_workers());
 
 	// Parallel task terminator is set in "set_concurrency_and_phase()"
 	set_concurrency_and_phase(active_workers, true /* concurrent */);  // actually here is executed in STW.
@@ -314,7 +314,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		_cp = _semeru_sc->compaction_point(_worker_id); // [X] Remember to reset the compaction_point at the end of this work.
 		SemeruHeapRegion* region_to_evacuate = NULL;
 
-		log_debug(semeru, compact)("%s, Enter SemeruSWTCompact worker[%x] \n", __func__, worker_id);
+		log_debug(semeru, mem_compact)("%s, Enter SemeruSWTCompact worker[%x] \n", __func__, worker_id);
 
 
 
@@ -381,7 +381,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
  */
 void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
 
-	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#1, preparation, worker [0x%x] ", __func__, this->_worker_id);
+	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#1, preparation, worker [0x%x] ", __func__, this->_worker_id);
 
 	// get _cp from G1SemeruSTWCompact->compaction_point(worker_id)
 	G1SemeruCalculatePointersClosure semeru_ms_prepare(_semeru_sc, hr->alive_bitmap(), _cp, &_humongous_regions_removed);  
@@ -448,7 +448,7 @@ class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
 
 void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr){
 
-	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
+	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
 
 
 	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap() );
@@ -471,7 +471,7 @@ void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion
  */
 void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
 
-	log_debug(semeru, compact)("%s, Enter Semeru MS Compact Phase#3, object compactation, worker [0x%x] ", __func__, this->_worker_id);
+	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#3, object compactation, worker [0x%x] ", __func__, this->_worker_id);
 
 	assert(!hr->is_humongous(), "Should be no humongous regions in compaction queue");
 

@@ -245,7 +245,7 @@ void G1RootProcessor::process_java_roots(G1RootClosures* closures,
 	{
 		G1GCParPhaseTimesTracker x(phase_times, G1GCPhaseTimes::CLDGRoots, worker_i);
 		if (_process_strong_tasks.try_claim_task(G1RP_PS_ClassLoaderDataGraph_oops_do)) {
-			ClassLoaderDataGraph::roots_cld_do(closures->strong_clds(), closures->weak_clds());
+			ClassLoaderDataGraph::roots_cld_do(closures->strong_clds(), closures->weak_clds());  // [?] GC the klass information ?
 		}
 	}
 

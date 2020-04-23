@@ -160,7 +160,7 @@ class G1SemeruConcurrentMarkThread: public ConcurrentGCThread {
   //
   // Semeru Memory Server
   //
-  void dispatch_received_regions(received_memory_server_cset* mem_server_cset);
+  void dispatch_received_regions( received_memory_server_cset* mem_server_cset);
 
   // Debug functions
 

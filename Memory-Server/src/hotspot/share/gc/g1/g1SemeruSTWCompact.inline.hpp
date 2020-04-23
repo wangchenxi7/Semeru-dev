@@ -44,7 +44,7 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
 	// if this obj is within current scanning Region.
 	if( !curr_region->is_in(obj)){
 		// Path #2, Inter-Region reference. Record and adjust it  in Phase#4.
-		log_debug(semeru, compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)obj );
+		log_debug(semeru, mem_compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)obj );
 
 		// if the target object is in another Region, we don't to handle it.
 		// When a Region is compacted, we send the new address of the Target Oop to its source to update them.

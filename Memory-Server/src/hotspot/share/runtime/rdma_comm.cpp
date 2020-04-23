@@ -216,6 +216,7 @@ int on_cm_event(struct rdma_cm_event *event){
     #endif
     
     r = rdma_connected(event->id);                       //    send the free memory to client size of current server.
+
   }else if (event->event == RDMA_CM_EVENT_DISCONNECTED){
 
     #ifdef DEBUG_RDMA_SERVER
@@ -664,6 +665,18 @@ int rdma_connected(struct rdma_cm_id *id){
   // Send the available free size to CPU server to let it prepare necessary meta data.
   //
   send_free_mem_size(rdma_ctx);
+
+
+	// [?] Seems only Thread can use the MutexLockerEx. this is only a pthread.
+	// //
+	// // Synchronous with JVM
+	// // Time to wake up the JVM now.
+	// {
+  //   MutexLockerEx x(SemeruRDMA_lock, Mutex::_no_safepoint_check_flag);
+  //   log_debug(semeru,rdma)("%s, RDMA buffer registered and sent to CPU server. Wake up Concurrent Thread.",__func__);
+  //   SemeruRDMA_lock->notify_all();
+  // }
+
 
 
   return 0;

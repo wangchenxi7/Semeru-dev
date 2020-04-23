@@ -132,12 +132,6 @@ protected:
   G1RegionToSpaceMapper* _next_bitmap_mapper;
   FreeRegionList _free_list;                  // The un-committed free Regions.
 
-  // Semeru Memory Server 
-  //  [?] Each Semeru memory server only manages a range of regions of the Java heap 
-  //
-  //G1HeapRegionTable   _semeru_regions;        
-  //FreeRegionList      _semeru_free_list;
-
 
   void make_regions_available(uint index, uint num_regions = 1, WorkGang* pretouch_gang = NULL);
   void uncommit_regions(uint index, size_t num_regions = 1);

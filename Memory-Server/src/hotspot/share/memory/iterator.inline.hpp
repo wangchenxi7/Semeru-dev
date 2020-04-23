@@ -164,7 +164,7 @@ call_do_klass(void (Receiver::*)(Klass*), void (Base::*)(Klass*), OopClosureType
 }
 
 template <typename OopClosureType>
-inline void Devirtualizer::do_klass(OopClosureType* closure, Klass* k) {
+inline void Devirtualizer::do_klass(OopClosureType* closure, Klass* k) {  // [?] Purpose of the function ? 
 	call_do_klass(&OopClosureType::do_klass, &OopIterateClosure::do_klass, closure, k);
 }
 

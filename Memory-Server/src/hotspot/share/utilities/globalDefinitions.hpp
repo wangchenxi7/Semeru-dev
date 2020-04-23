@@ -114,6 +114,14 @@
 // Semeru Macros
 //
 
+
+//
+// Debug options
+
+#define ASSERT 1
+
+
+
 #define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
 #define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
 
@@ -164,7 +172,7 @@
 
 // RDMA structure space
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
-#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *4)
+#define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
 
 // 1) First part is for the Target Object queue, 128M
 
@@ -173,6 +181,7 @@
 // 1.1 Target object queue , 128MB
 #define TARGET_OBJ_OFFSET     (size_t)0            // 0x400,000,000,000
 #define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
+#define TARGET_OBJ_QUEUE_SIZE (size_t)(1<< 18)				 // length per queue. The total size should include Instance size 
 
 // 1.2 Small meta data
 
@@ -236,7 +245,7 @@
 // 3. Klass instance information
 
 //#define KLASS_INSTANCE_OFFSET               (size_t)0xC0000000   // +3GB, 0x400,0C0,000,000
-#define KLASS_INSTANCE_OFFSET  (size_t)0x80000000
+#define KLASS_INSTANCE_OFFSET  (size_t)0x80000000    // +2GB, 0x400,080,000,000
 #define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)ONE_GB
 
 
@@ -249,9 +258,12 @@
 // properties for the whole Semeru heap.
 // [ RDMA meta data sapce] [RDMA data space]
 
-#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE/ONE_GB)    //for local memory management
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE_SIZE/ONE_GB)    //for local memory management
 #define MAX_REGION_NUM    ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
 #define MAX_SWAP_MEM_GB   (u64)(REGION_SIZE_GB * RDMA_DATA_REGION_NUM)		// Space managed by SWAP
+
+
+
 
 
 

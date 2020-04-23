@@ -1439,16 +1439,27 @@ public:
       !hr->is_archive();
   }
 
-  // This function returns true when an object has been
-  // around since the previous marking and hasn't yet
-  // been marked during this marking, and is not in an archive region.
-  //
-  // [?] Why call this object ill ? Because if it's not allocated sin_next_marking, it shoule be marked ? 
-  //
+  /** 
+	 * This function returns true when an object has been
+   * around since the previous marking and hasn't yet
+   * been marked during this marking, and is not in an archive region.
+   *
+   * [x] Definition of ill object? 
+	 *		If one object get 3 false for these conditions, it's an ill object.
+	 *    In other words, this objct must get one TURE from these judges.
+	 * 	a. allocated since TAMS
+	 *  b. Marked in current bitmap(_next_bitmap/_alive_bitmap)
+	 *  c. object in archived Region.
+   */
   bool is_obj_ill(const oop obj, const SemeruHeapRegion* hr) const {
-    return
+    // return
+    //   !hr->obj_allocated_since_next_marking(obj) &&
+    //   !is_marked_next(obj) &&
+    //   !hr->is_archive();
+
+  	return
       !hr->obj_allocated_since_next_marking(obj) &&
-      !is_marked_next(obj) &&
+      !hr->is_marked_alive(obj) &&
       !hr->is_archive();
   }
 

@@ -598,18 +598,38 @@ protected:
   }
  public:
   #endif
-  inline  bool is_instance_klass()            const { return assert_same_query(
-                                                      layout_helper_is_instance(layout_helper()),
-                                                      is_instance_klass_slow()); }
-  inline  bool is_array_klass()               const { return assert_same_query(
-                                                    layout_helper_is_array(layout_helper()),
-                                                    is_array_klass_slow()); }
-  inline  bool is_objArray_klass()            const { return assert_same_query(
-                                                    layout_helper_is_objArray(layout_helper()),
-                                                    is_objArray_klass_slow()); }
-  inline  bool is_typeArray_klass()           const { return assert_same_query(
-                                                    layout_helper_is_typeArray(layout_helper()),
-                                                    is_typeArray_klass_slow()); }
+  // inline  bool is_instance_klass()            const { return assert_same_query(
+  //                                                     layout_helper_is_instance(layout_helper()),
+  //                                                     is_instance_klass_slow()); }
+  inline  bool is_instance_klass()            const { return    layout_helper_is_instance(layout_helper()); }
+
+
+  // inline  bool is_array_klass()               const { return assert_same_query(
+  //                                                   layout_helper_is_array(layout_helper()),
+  //                                                   is_array_klass_slow()); }
+  inline  bool is_array_klass()               const { return    layout_helper_is_array(layout_helper()); }
+
+  // inline  bool is_objArray_klass()            const { return assert_same_query(
+  //                                                   layout_helper_is_objArray(layout_helper()),
+  //                                                   is_objArray_klass_slow()); }
+	inline  bool is_objArray_klass()            const { return   layout_helper_is_objArray(layout_helper()); }
+
+
+
+  // inline  bool is_typeArray_klass()           const { return assert_same_query(
+  //                                                   layout_helper_is_typeArray(layout_helper()),
+  //                                                   is_typeArray_klass_slow()); }
+
+	// Debug version
+ inline  bool is_typeArray_klass()  const { 
+	 	bool ret1, ret2;
+		int layout_helper_val;
+		layout_helper_val = layout_helper();
+		ret1 = layout_helper_is_typeArray(layout_helper_val);
+	//	ret2 = is_typeArray_klass_slow();   // can't invoke the virtual functions ?
+	 	return ret1; 
+}
+
   #undef assert_same_query
 
   // Access flags

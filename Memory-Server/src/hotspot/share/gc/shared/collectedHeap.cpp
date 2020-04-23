@@ -604,15 +604,15 @@ void CollectedHeap::initialize_reserved_region(HeapWord *start, HeapWord *end) {
 /**
  * Semeru
  * 
- *  collectedHeap->_reserved_memory_pool records the space for normal data allocation.
+ *  collectedHeap->_semeru_reserved records the space for normal data allocation.
  *  
  */ 
-	void CollectedHeap::initialize_reserved_memory_pool(HeapWord *start, HeapWord *end) {
+	void CollectedHeap::initialize_semeru_reserved(HeapWord *start, HeapWord *end) {
 	// It is important to do this in a way such that concurrent readers can't
 	// temporarily think something is in the heap.  (Seen this happen in asserts.)
-	_reserved_memory_pool.set_word_size(0);			// [?] Why set here to 0 ?
-	_reserved_memory_pool.set_start(start);
-	_reserved_memory_pool.set_end(end);
+	_semeru_reserved.set_word_size(0);			// [?] Why set here to 0 ?
+	_semeru_reserved.set_start(start);
+	_semeru_reserved.set_end(end);
 
 	log_debug(heap)("%s, Allocated G1 Memory Pool[0x%llx, 0x%llx] successfully.", __func__, 
 																	(unsigned long long)start, (unsigned long long)end);

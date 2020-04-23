@@ -77,7 +77,7 @@ inline SemeruHeapRegion* SemeruHeapRegionManager::next_region_in_humongous(Semer
 }
 
 /**
- * Tag : Insert a Region into SemeruHeapRegionManager->_free_list.
+ * Tag : Insert a committed Region into SemeruHeapRegionManager->_free_list.
  *  This procedure usually happenned during commit/expand the spaces, young/old. 
  * 
  */

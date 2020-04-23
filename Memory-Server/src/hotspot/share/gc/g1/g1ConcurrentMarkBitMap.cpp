@@ -30,6 +30,7 @@
 
 //Semeru
 #include "gc/g1/SemeruHeapRegion.hpp"
+#include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 
 /**
  * [?] Allocate bitmap space from storage to cover the MemRegion, heap. 
@@ -59,9 +60,24 @@ void G1CMBitMap::clear_region(HeapRegion* region) {
 
 #ifdef ASSERT
 void G1CMBitMap::check_mark(HeapWord* addr) {
-  assert(G1CollectedHeap::heap()->is_in_exact(addr),
+  // assert(G1CollectedHeap::heap()->is_in_exact(addr),
+  //        "Trying to access bitmap " PTR_FORMAT " for address " PTR_FORMAT " not in the heap.",
+  //        p2i(this), p2i(addr));
+
+	bool valid = false;
+
+	if(G1CollectedHeap::heap()->is_in(addr)){
+		valid = G1CollectedHeap::heap()->is_in_exact(addr);
+	}
+
+	if(!valid){
+	  valid =	G1SemeruCollectedHeap::heap()->is_in_exact(addr);  // may lead to assert error
+	}
+
+	assert(valid,
          "Trying to access bitmap " PTR_FORMAT " for address " PTR_FORMAT " not in the heap.",
          p2i(this), p2i(addr));
+
 }
 #endif
 

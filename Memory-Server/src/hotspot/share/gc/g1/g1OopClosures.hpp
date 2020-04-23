@@ -336,9 +336,29 @@ public:
 	// Semeru support
 	G1SemeruCMOopClosure(G1SemeruCollectedHeap* g1h, G1SemeruCMTask* task);
 
+
+	// Memory Server GC does NOT trace the Meta Data space 
+	// override the judge function
+	virtual bool do_metadata() { return false; }
+  virtual void do_klass(Klass* k) { ShouldNotReachHere(); }
+  virtual void do_cld(ClassLoaderData* cld) { ShouldNotReachHere(); }
+
+
+	// normal object instance traverse functions
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+
+
+	// Override the verify functions.
+	#ifdef ASSERT
+  	// Default verification of each visited oop field.
+  	template <typename T> void verify(T* p);
+
+  	// Can be used by subclasses to turn off the default verification of oop fields.
+  	virtual bool should_verify_oops() { return true; }
+	#endif
+
 };
 
 

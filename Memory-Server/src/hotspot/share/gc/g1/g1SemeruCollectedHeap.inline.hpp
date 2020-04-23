@@ -74,10 +74,10 @@ inline SemeruHeapRegion* G1SemeruCollectedHeap::region_at_or_null(uint index) co
 // }
 
 inline uint G1SemeruCollectedHeap::addr_to_region(HeapWord* addr) const {
-  assert(is_in_reserved(addr),
+  assert(is_in_semeru_reserved(addr),
          "Cannot calculate region index for address " PTR_FORMAT " that is outside of the heap [" PTR_FORMAT ", " PTR_FORMAT ")",
-         p2i(addr), p2i(reserved_region().start()), p2i(reserved_region().end()));
-  return (uint)(pointer_delta(addr, reserved_region().start(), sizeof(uint8_t)) >> SemeruHeapRegion::SemeruLogOfHRGrainBytes);
+         p2i(addr), p2i(semeru_reserved_region().start()), p2i(semeru_reserved_region().end()));
+  return (uint)(pointer_delta(addr, semeru_reserved_region().start(), sizeof(uint8_t)) >> SemeruHeapRegion::SemeruLogOfHRGrainBytes);
 }
 
 inline HeapWord* G1SemeruCollectedHeap::bottom_addr_for_region(uint index) const {
@@ -143,6 +143,8 @@ G1SemeruCollectedHeap::dirty_young_block(HeapWord* start, size_t word_size) {
 //   return _task_queues->queue(i);
 // }
 
+// [XX] Abandon this function.
+// Replace with _curr_region->alive_bitmap()->is_marked(obj)
 inline bool G1SemeruCollectedHeap::is_marked_next(oop obj) const {
   return _semeru_cm->next_mark_bitmap()->is_marked((HeapWord*)obj);
 }

@@ -232,10 +232,10 @@ int oopDesc::size_given_klass(Klass* klass)  {
 	// speed of allocation.
 
 	if (lh > Klass::_lh_neutral_value) {
-		if (!Klass::layout_helper_needs_slow_path(lh)) {
+		if (!Klass::layout_helper_needs_slow_path(lh)) {  // [?] In which situation, need the slow path to calculate the instance size ?
 			s = lh >> LogHeapWordSize;  // deliver size scaled by wordSize
 		} else {
-			s = klass->oop_size(this);
+			s = klass->oop_size(this);  // For a Transfered Object, klas, how to locate its member function oop_size() ?
 		}
 	} else if (lh <= Klass::_lh_neutral_value) {
 		// The most common case is instances; fall through if so.

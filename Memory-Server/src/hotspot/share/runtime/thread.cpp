@@ -4024,11 +4024,11 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
 	// Inform the RDMA module, we already commit all the necessary space.
 	// It's safe to register them as RDMA buffer now.
-	{
-    MutexLockerEx x(SemeruRDMA_lock, Mutex::_no_safepoint_check_flag);
-    log_debug(semeru,rdma)("%s, VM is initialized, safe to do RDMA connection.",__func__);
-    SemeruRDMA_lock->notify_all();
-  }
+	// {
+  //   MutexLockerEx x(SemeruRDMA_lock, Mutex::_no_safepoint_check_flag);
+  //   log_debug(semeru,rdma)("%s, VM is initialized, safe to do RDMA connection.",__func__);
+  //   SemeruRDMA_lock->notify_all();
+  // }
 
 
 	// Debug

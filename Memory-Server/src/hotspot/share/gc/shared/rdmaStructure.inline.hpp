@@ -316,10 +316,10 @@ inline void OverflowTargetObjQueue<E, Alloc_type, N>::initialize(size_t q_index)
 
 	// element length is N.
 	// type is class E;
-	this->_elems	=	(E*)((char*)this + align_up(sizeof(OverflowTargetObjQueue),4096));  // 4KB alignment for the _elems
+	this->_elems	=	(E*)((char*)this + align_up(sizeof(OverflowTargetObjQueue),PAGE_SIZE));  // 4KB alignment for the _elems
 
 	#ifdef ASSERT
-	log_debug(semeru, heap)("%s, Allocate OverflowTargetObjQueue[%lu] at 0x%lx, content E* _elems 0x%lx \n",__func__,
+	log_debug(semeru, alloc)("%s, Allocate OverflowTargetObjQueue[%lu] at 0x%lx, content E* _elems 0x%lx \n",__func__,
 																																	(size_t)q_index,
 																																	(size_t)this,
 																																	(size_t)this->_elems);

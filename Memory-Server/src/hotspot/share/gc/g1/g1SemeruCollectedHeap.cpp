@@ -1798,7 +1798,7 @@ jint G1SemeruCollectedHeap::initialize() {
 /**
  *	Semeru 
  *  Main entrance for Java Heap build.
- *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_reserved_memory_pool
+ *  Allocate and Intialize the Memory Pool for CPU server : collectedHeap->_semeru_reserved
  * 
  * 1) Get heap space from OS by mmap.
  * 2) Split the Heap into Regions.
@@ -1837,7 +1837,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	size_t max_byte_size 	= semeru_collector_policy()->heap_reserved_size_bytes();		//-X:SemeruMemPoolMaxSize
 	size_t heap_alignment = semeru_collector_policy()->heap_alignment();							//-X:SemeruMemPoolAlignment
 	// [x] Shrink the size in product mode. [x]
-	size_t reserved_for_rdma_data = RDMA_STRUCTURE_SPACE;	// Bytes, Reserved for structures transfered by RDMA.
+	size_t reserved_for_rdma_data = RDMA_STRUCTURE_SPACE_SIZE; // Reserved for structures transfered by RDMA.
 	log_info(heap)("%s, init_byte_size : 0x%llx, max_byte_size : 0x%llx, heap_alignment : 0x%llx \n",
 								__func__, (unsigned long long)init_byte_size, (unsigned long long)max_byte_size,(unsigned long long)heap_alignment);
 
@@ -1870,7 +1870,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	// |----- RDMA data structure(reserved_for_rdma_data) ----------|---- normal Java heap(max_byte_size)-----------|
 	//	Here initialize the second part, max_byte_size, as collectedHeap.
 	//
-	initialize_reserved_memory_pool((HeapWord*)heap_rs.base()+reserved_for_rdma_data/HeapWordSize, 
+	initialize_semeru_reserved((HeapWord*)heap_rs.base()+reserved_for_rdma_data/HeapWordSize, 
 																										(HeapWord*)(heap_rs.base() + heap_rs.size()));
 
 	//debug - Code passed here.
@@ -2084,7 +2084,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	// do we initialize the  _reserved_semeru successfully ?
 	// 
-	_bot = new G1SemeruBlockOffsetTable(reserved_memory_pool(), bot_storage);
+	_bot = new G1SemeruBlockOffsetTable(semeru_reserved_region(), bot_storage);
 
 	//
 	// [x] Collection Set related structures ?
@@ -2644,7 +2644,7 @@ bool G1SemeruCollectedHeap::is_in(const void* p) const {
 
 #ifdef ASSERT
 bool G1SemeruCollectedHeap::is_in_exact(const void* p) const {
-	bool contains = reserved_region().contains(p);
+	bool contains = semeru_reserved_region().contains(p);
 	bool available = _hrm->is_available(addr_to_region((HeapWord*)p));
 	if (contains && available) {
 		return true;

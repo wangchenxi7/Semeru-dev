@@ -131,11 +131,11 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps_bounded(oop obj, OopCl
 
 template <typename T, class OopClosureType>
 ALWAYSINLINE void InstanceKlass::oop_oop_iterate(oop obj, OopClosureType* closure) {
-	if (Devirtualizer::do_metadata(closure)) {
-		Devirtualizer::do_klass(closure, this);
+	if (Devirtualizer::do_metadata(closure)) {    // [x] Judge, if apply the closure to the Meta data space.
+		Devirtualizer::do_klass(closure, this);  // Need to gc/trace the kalss of this CLD.
 	}
 
-	oop_oop_iterate_oop_maps<T>(obj, closure);
+	oop_oop_iterate_oop_maps<T>(obj, closure);  // [x] Iterate the fields of the object instance, according to klass information.
 }
 
 template <typename T, class OopClosureType>
