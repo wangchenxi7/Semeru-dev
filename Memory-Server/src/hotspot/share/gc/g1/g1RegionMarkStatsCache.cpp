@@ -27,17 +27,17 @@
 #include "memory/allocation.inline.hpp"
 
 G1RegionMarkStatsCache::G1RegionMarkStatsCache(G1RegionMarkStats* target, uint max_regions, uint num_cache_entries) :
-  _target(target),
+  _target(target),    // the global, stats entry. Used as overflow/evict cache entries.
   _num_stats(max_regions),
-  _cache(NULL),
-  _num_cache_entries(num_cache_entries),
-  _cache_hits(0),
-  _cache_misses(0),
+  _cache(NULL),       // the content for <key, value> pair
+  _num_cache_entries(num_cache_entries),   // 1 entry records, <region_id, live_words>
+  _cache_hits(0),     // hash hit 
+  _cache_misses(0),   // hash miss
   _num_cache_entries_mask(_num_cache_entries - 1) {
 
   guarantee(is_power_of_2(num_cache_entries),
             "Number of cache entries must be power of two, but is %u", num_cache_entries);
-  _cache = NEW_C_HEAP_ARRAY(G1RegionMarkStatsCacheEntry, _num_cache_entries, mtGC);
+  _cache = NEW_C_HEAP_ARRAY(G1RegionMarkStatsCacheEntry, _num_cache_entries, mtGC);  // need to reset the cache entries.
 }
 
 G1RegionMarkStatsCache::~G1RegionMarkStatsCache() {

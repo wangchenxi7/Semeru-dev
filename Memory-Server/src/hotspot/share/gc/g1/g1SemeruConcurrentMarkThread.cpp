@@ -439,6 +439,12 @@ void G1SemeruConcurrentMarkThread::run_service() {
   // it's proper to put this start here ??
   _semeru_cm->concurrent_cycle_start();     // Set timer, tracer
 
+  // Do initialization for the Contiguous Memory Server Marking/Compacting.
+  // This is a one-time initializaiton
+  if(_semeru_cm){
+    _semeru_cm->pre_initial_mark();
+  }
+
   // [?] What's  the purpose of these phase ?
   //    Just for Log ? Can also synchronize, schedule some thing?
   //    e.g. Concurrent Tracing and STW Compact are different phases, we need to schedule and switch between these 2 phases.

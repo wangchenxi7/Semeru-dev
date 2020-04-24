@@ -62,14 +62,14 @@ struct G1RegionMarkStats {
 class G1RegionMarkStatsCache {
 private:
   // The array of statistics entries to evict to; the global array.
-  G1RegionMarkStats* _target;
+  G1RegionMarkStats* _target;     // [？] What's this used for ?
   // Number of entries in the eviction target.
   uint _num_stats;
 
   // An entry of the statistics cache.
   struct G1RegionMarkStatsCacheEntry {
-    uint _region_idx;
-    G1RegionMarkStats _stats;
+    uint _region_idx;               // key
+    G1RegionMarkStats _stats;       // value, live_words
 
     void clear() {
       _region_idx = 0;
@@ -82,19 +82,19 @@ private:
   };
 
   // The actual cache and its number of entries.
-  G1RegionMarkStatsCacheEntry* _cache;
-  uint _num_cache_entries;
+  G1RegionMarkStatsCacheEntry* _cache;   // records per Entry,  <region_id, live_words>
+  uint _num_cache_entries;        // The real number of cache entries. It may less than the max regions.
 
   // Cache hits/miss counters.
-  size_t _cache_hits;
-  size_t _cache_misses;
+  size_t _cache_hits;     // The actual region number may exceed the number of entries. Hit means this Region_id is in  the entries.
+  size_t _cache_misses;		//
 
   // Evict a given element of the statistics cache.
   void evict(uint idx);
 
   size_t _num_cache_entries_mask;
 
-  uint hash(uint idx) {
+  uint hash(uint idx) {   // hash Region_id to entry id.
     return idx & _num_cache_entries_mask;
   }
 

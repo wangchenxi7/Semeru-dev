@@ -65,6 +65,9 @@ class InstanceMirrorKlass: public InstanceKlass {
   // Returns the size of the instance including the extra static fields.
   virtual int oop_size(oop obj) const;
 
+	// Semeru
+	int semeru_oop_size(oop obj) const;
+
   // Static field offset is an offset into the Heap, should be converted by
   // based on UseCompressedOop for traversal
   static HeapWord* start_of_static_fields(oop obj) {

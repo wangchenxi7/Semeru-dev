@@ -217,7 +217,10 @@ public :
   flags_of_rdma_write_check* _rdma_write_check_flags;
 
   received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
-  bool is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  }
+
+
+  flags_of_cpu_server_state* cpu_server_flags()   { return _cpu_server_flags;  }
+  bool is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  } // abandon this function.
 
 
 

@@ -62,6 +62,9 @@ class TypeArrayKlass : public ArrayKlass {
 
   int oop_size(oop obj) const;
 
+	// Semeru
+	int semeru_oop_size(oop obj) const;
+
   bool compute_is_subtype_of(Klass* k);
 
   // Allocation

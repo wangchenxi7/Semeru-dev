@@ -750,7 +750,7 @@ public:
 
 
 /**
- * Tag : Why does it need to inform each region ?
+ * Tag : Reset some fields and values before start Concurrent Marking.
  * 
  */
 void G1ConcurrentMark::pre_initial_mark() {

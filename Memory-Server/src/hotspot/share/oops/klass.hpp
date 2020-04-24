@@ -29,7 +29,7 @@
 #include "memory/iterator.hpp"
 #include "memory/memRegion.hpp"
 #include "oops/metadata.hpp"
-#include "oops/oop.hpp"
+#include "oops/oop.hpp"    // otherInstanceKlass.hpp -> klass.hpp -> oop.hpp
 #include "oops/oopHandle.hpp"
 #include "utilities/accessFlags.hpp"
 #include "utilities/macros.hpp"

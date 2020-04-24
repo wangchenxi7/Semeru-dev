@@ -454,10 +454,7 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
   // Calculate the alive objects information. 
   // [?] Can we invoke freind class's function like  this ?
   if (success) {
-    //_semeru_cm->add_to_liveness(worker_id, obj, obj->size());
-
-		tty->print(" \n ERROR in %s, Should count the scanned alive objects 0x%lx !! \n\n", __func__, (size_t)obj_addr );
-	
+    _semeru_cm->add_to_liveness(worker_id, obj, obj->size());
 	}
 
   return success;
@@ -492,7 +489,7 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
     return false;
   }
 
-	log_debug(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)obj ,_curr_region->hrm_index() );
+	log_trace(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)obj ,_curr_region->hrm_index() );
 
   // No OrderAccess:store_load() is needed. It is implicit in the
   // CAS done in G1CMBitMap::parMark() call in the routine above.
@@ -552,15 +549,14 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
     return false;
   }
 
-	log_debug(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)obj);
+	log_trace(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)obj);
   
   // Check if this object is in current Region, if not, skip it.
   // Assume 1) Write Barrier has captured all the cross-region reference caused by mutator
   // 2) GC can update the cross-region referenced caused by alive object evacuation.
   if(_curr_region->is_in_reserved(obj) == false ){
 
-		//debug
-		log_debug(semeru,mem_trace)("%s, Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx) ", __func__, 
+		log_trace(semeru,mem_trace)("%s, Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx). Update RemSet ? ", __func__, 
 																			_curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
 
     return false;

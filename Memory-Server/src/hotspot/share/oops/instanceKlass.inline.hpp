@@ -28,7 +28,7 @@
 #include "memory/iterator.hpp"
 #include "oops/instanceKlass.hpp"
 #include "oops/klass.hpp"
-#include "oops/oop.inline.hpp"
+#include "oops/oop.inline.hpp"   // instanceKlass.inline --> oop.inline.hpp
 #include "runtime/orderAccess.hpp"
 #include "utilities/debug.hpp"
 #include "utilities/globalDefinitions.hpp"

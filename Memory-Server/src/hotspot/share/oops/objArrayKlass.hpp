@@ -74,6 +74,9 @@ class ObjArrayKlass : public ArrayKlass {
   DEBUG_ONLY(bool is_objArray_klass_slow()  const  { return true; })
   int oop_size(oop obj) const;
 
+	// semeru
+	int semeru_oop_size(oop obj) const;
+
   // Allocation
   static Klass* allocate_objArray_klass(ClassLoaderData* loader_data,
                                           int n, Klass* element_klass, TRAPS);

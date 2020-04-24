@@ -30,7 +30,7 @@
 #include "oops/arrayKlass.hpp"
 #include "oops/arrayOop.hpp"
 #include "oops/compressedOops.inline.hpp"
-#include "oops/klass.inline.hpp"
+#include "oops/klass.inline.hpp"            //instanceKlass.inline -->  oop.inline.hpp --> klass.inline.hpp
 #include "oops/markOop.inline.hpp"
 #include "oops/oop.hpp"
 #include "runtime/atomic.hpp"
@@ -38,6 +38,18 @@
 #include "runtime/os.hpp"
 #include "utilities/align.hpp"
 #include "utilities/macros.hpp"
+
+
+// Semeru  
+// All of these klass instance include oop.hpp. 
+// But this is oop.inline.hpp, it's ok.
+#include "oops/instanceKlass.hpp"
+#include "oops/instanceRefKlass.hpp"
+#include "oops/instanceMirrorKlass.hpp"
+#include "oops/instanceClassLoaderKlass.hpp"
+#include "oops/typeArrayKlass.hpp"
+#include "oops/objArrayKlass.hpp"
+
 
 // Implementation of all inlined member functions defined in oop.hpp
 // We need a separate file to avoid circular references
@@ -212,6 +224,8 @@ int oopDesc::size()  {
 	return size_given_klass(klass());
 }
 
+
+
 /**
  * Tag : Calculate the oops by using klass information
  * 
@@ -235,7 +249,9 @@ int oopDesc::size_given_klass(Klass* klass)  {
 		if (!Klass::layout_helper_needs_slow_path(lh)) {  // [?] In which situation, need the slow path to calculate the instance size ?
 			s = lh >> LogHeapWordSize;  // deliver size scaled by wordSize
 		} else {
-			s = klass->oop_size(this);  // For a Transfered Object, klas, how to locate its member function oop_size() ?
+			//s = klass->oop_size(this);  // For a Transfered Object, klas, how to locate its member function oop_size() ?
+			s = semeru_oop_size(this, klass);
+		
 		}
 	} else if (lh <= Klass::_lh_neutral_value) {
 		// The most common case is instances; fall through if so.
@@ -268,14 +284,15 @@ int oopDesc::size_given_klass(Klass* klass)  {
 			//  || is_typeArray()                    // covers second scenario above
 			// If and when UseParallelGC uses the same obj array oop stealing/chunking
 			// technique, we will need to suitably modify the assertion.
-			assert((s == klass->oop_size(this)) ||
+			assert((s ==semeru_oop_size(this, klass)) ||
 						 (Universe::heap()->is_gc_active() &&
 							((is_typeArray() && UseConcMarkSweepGC) ||
 							 (is_objArray()  && is_forwarded() && (UseConcMarkSweepGC || UseParallelGC || UseG1GC)))),
 						 "wrong array object size");
 		} else {
 			// Must be zero, so bite the bullet and take the virtual call.
-			s = klass->oop_size(this);
+			//s = klass->oop_size(this);
+			s = semeru_oop_size(this, klass);
 		}
 	}
 
@@ -498,5 +515,60 @@ markOop oopDesc::displaced_mark_raw() const {
 void oopDesc::set_displaced_mark_raw(markOop m) {
 	mark_raw()->set_displaced_mark_helper(m);
 }
+
+
+
+
+	// Semeru
+	//
+
+ // sub class of klass
+// enum KlassID {
+//   InstanceKlassID,
+//   InstanceRefKlassID,
+//   InstanceMirrorKlassID,
+//   InstanceClassLoaderKlassID,
+//   TypeArrayKlassID,
+//   ObjArrayKlassID
+// };
+
+	
+	int oopDesc::semeru_oop_size(oop obj, Klass* klass){
+		int oop_size = -1;
+
+		switch (klass->id())
+		{
+			case InstanceKlassID :
+			case InstanceRefKlassID :
+			case InstanceClassLoaderKlassID :
+				oop_size = ((class InstanceKlass*)klass)->semeru_oop_size(obj);
+				break;
+			
+			case InstanceMirrorKlassID :
+				oop_size = ((class InstanceMirrorKlass*)klass)->semeru_oop_size(obj);
+				break;
+
+			case TypeArrayKlassID :
+				oop_size = ((class TypeArrayKlass*)klass)->semeru_oop_size(obj);
+				break;
+
+			case ObjArrayKlassID :
+				oop_size = ((class ObjArrayKlass*)klass)->semeru_oop_size(obj);
+				break;
+
+			default:
+				assert(false, "Should not reach here.\n");
+		}
+
+		return oop_size;
+	}
+
+	//
+	// End of Semeru
+
+
+
+
+
 
 #endif // SHARE_VM_OOPS_OOP_INLINE_HPP

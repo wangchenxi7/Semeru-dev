@@ -121,7 +121,7 @@ class InstanceKlass: public Klass {
   friend class CompileReplay;
 
  public:
-  static const KlassID ID = InstanceKlassID;
+  static const KlassID ID = InstanceKlassID;  // [?] klass._id ? used to implement de-virtualized function 
 
  protected:
   InstanceKlass(const ClassFileParser& parser, unsigned kind, KlassID id = ID);
@@ -1023,6 +1023,19 @@ public:
   // slow because it's a virtual call and used for verifying the layout_helper.
   // Using the layout_helper bits, we can call is_instance_klass without a virtual call.
   DEBUG_ONLY(bool is_instance_klass_slow() const      { return true; })
+
+
+	// Semeru
+	//
+
+	// de-virtual
+	// Calculate on klass->_layout_helper, no need to oop.
+	int semeru_oop_size(oop obj) { return size_helper(); }
+
+
+	//
+	// Semeru End
+
 
   // Iterators
   void do_local_static_fields(FieldClosure* cl);

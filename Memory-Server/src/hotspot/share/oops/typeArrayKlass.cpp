@@ -235,6 +235,18 @@ int TypeArrayKlass::oop_size(oop obj) const {
   return t->object_size();
 }
 
+
+// Semeru
+int TypeArrayKlass::semeru_oop_size(oop obj) const {
+  assert(obj->is_typeArray(),"must be a type array");
+  typeArrayOop t = typeArrayOop(obj);
+  return t->object_size();
+}
+
+
+
+
+
 void TypeArrayKlass::initialize(TRAPS) {
   // Nothing to do. Having this function is handy since objArrayKlasses can be
   // initialized by calling initialize on their bottom_klass, see ObjArrayKlass::initialize

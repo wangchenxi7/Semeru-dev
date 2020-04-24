@@ -59,6 +59,7 @@ int InstanceMirrorKlass::oop_size(oop obj) const {
   return java_lang_Class::oop_size_raw(obj);
 }
 
+
 int InstanceMirrorKlass::compute_static_oop_field_count(oop obj) {
   Klass* k = java_lang_Class::as_Klass(obj);
   if (k != NULL && k->is_instance_klass()) {
@@ -67,8 +68,20 @@ int InstanceMirrorKlass::compute_static_oop_field_count(oop obj) {
   return 0;
 }
 
+
 #if INCLUDE_CDS
 void InstanceMirrorKlass::serialize_offsets(SerializeClosure* f) {
   f->do_u4((u4*)&_offset_of_static_fields);
 }
 #endif
+
+
+// Semeru
+//
+
+int InstanceMirrorKlass::semeru_oop_size(oop obj) const {
+  return java_lang_Class::oop_size_raw(obj);
+}
+
+//
+// Semeru End 

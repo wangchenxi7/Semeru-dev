@@ -128,6 +128,14 @@ class oopDesc {
   inline oop        as_oop() const { return const_cast<oopDesc*>(this); }
 
  public:
+
+	// Semeru
+	//
+	inline int semeru_oop_size(oop obj, Klass* klass);
+
+	//
+	// End of Semeru
+
   // field addresses in oop
   inline void* field_addr(int offset)     const;
   inline void* field_addr_raw(int offset) const;

@@ -190,6 +190,13 @@ int ObjArrayKlass::oop_size(oop obj) const {
   return objArrayOop(obj)->object_size();
 }
 
+// Semeru
+int ObjArrayKlass::semeru_oop_size(oop obj) const {
+  assert(obj->is_objArray(), "must be object array");
+  return objArrayOop(obj)->object_size();
+}
+
+
 objArrayOop ObjArrayKlass::allocate(int length, TRAPS) {
   check_array_allocation_length(length, arrayOopDesc::max_array_length(T_OBJECT), CHECK_0);
   int size = objArrayOopDesc::object_size(length);

@@ -97,7 +97,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 
 // RDMA structure space
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
-#define RDMA_STRUCTURE_SPACE  ((size_t) ONE_GB *4)
+#define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
 
 // 1) First part is for the Target Object queue, 128M
 
@@ -140,7 +140,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;
 // properties for the whole Semeru heap.
 // [ RDMA meta data sapce] [RDMA data space]
 
-#define MAX_FREE_MEM_GB   ((u64) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE/ONE_GB)    //for local memory management
+#define MAX_FREE_MEM_GB   ((u64) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE_SIZE/ONE_GB)    //for local memory management
 #define MAX_REGION_NUM    ((u64) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
 #define MAX_SWAP_MEM_GB   (u64)(REGION_SIZE_GB * RDMA_DATA_REGION_NUM)		// Space managed by SWAP
 
