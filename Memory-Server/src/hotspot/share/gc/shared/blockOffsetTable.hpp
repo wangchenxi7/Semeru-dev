@@ -51,8 +51,8 @@ class BOTConstants : public AllStatic {
 public:
   static const uint LogN = 9;
   static const uint LogN_words = LogN - LogHeapWordSize;
-  static const uint N_bytes = 1 << LogN;            // 512 entries at most ??
-  static const uint N_words = 1 << LogN_words;
+  static const uint N_bytes = 1 << LogN;          // 512 bytes, per block
+  static const uint N_words = 1 << LogN_words;    // 64 words, per block
   // entries "e" of at least N_words mean "go back by Base^(e-N_words)."
   // All entries are less than "N_words + N_powers".
   static const uint LogBase = 4;

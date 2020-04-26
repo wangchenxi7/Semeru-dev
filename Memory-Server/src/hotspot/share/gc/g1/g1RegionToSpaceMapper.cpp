@@ -109,6 +109,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
   CommitRefcountArray _refcounts;
 
+  // Page index : Region_index/regions_per_pages
   uintptr_t region_idx_to_page_idx(uint region) const {
     return region / _regions_per_page;
   }
@@ -127,6 +128,11 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
     _refcounts.initialize((HeapWord*)rs.base(), (HeapWord*)(rs.base() + align_up(rs.size(), page_size)), page_size);
   }
 
+  /**
+   * Tag : Commit num Regions, start from Regions index, start_idx.
+   *  Use the Region index to calculate the corresponding page index, and then commit the pages.
+   *  
+   */
   virtual void commit_regions(uint start_idx, size_t num_regions, WorkGang* pretouch_gang) {
     size_t const NoPage = ~(size_t)0;
 
@@ -137,7 +143,7 @@ class G1RegionsSmallerThanCommitSizeMapper : public G1RegionToSpaceMapper {
 
     for (uint i = start_idx; i < start_idx + num_regions; i++) {
       assert(!_commit_map.at(i), "Trying to commit storage at region %u that is already committed", i);
-      size_t idx = region_idx_to_page_idx(i);           // [?] Calculate the start page index ?
+      size_t idx = region_idx_to_page_idx(i);           // [x] Calculate the start page index.
       uint old_refcount = _refcounts.get_by_index(idx);
 
       bool zero_filled = false;
@@ -331,9 +337,21 @@ G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_heap_mapper(ReservedSpace r
 }
 
 /**
- * Tag : Calculate how many HeapRegions are needed for the this specific RecerdSpace
- *      Take G1BlockOffsetTable as example.
- *      actual_size = 32GB/8bytes = 
+ * Tag : Calculate how many pages are needed for each Region.
+ * 
+ * Parameter :
+ *    actual_size : the reserved meta data byte size.
+ *    page_size: 4KB usually.
+ *    region_granularity : Region size in bytes
+ *    commit_factor : byte size of block/card, which is covered by 1 byte, u_char.
+ * 
+ * More  Explanation
+ *    There is an assumption. Each slot/entry only need 1 bytes.
+ *    So, region_granulairty/commit_facter  * 1 bytes = the total meta bytes needed for each Region.
+ *    if the result > page_size,
+ *        The meta data bytes needed by one Region is large than a page.
+ *    else
+ *        smaller than a page
  * 
  */
 G1RegionToSpaceMapper* G1RegionToSpaceMapper::create_mapper(ReservedSpace rs,

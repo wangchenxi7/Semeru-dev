@@ -99,7 +99,7 @@ ReservedSpace::ReservedSpace(size_t size, size_t alignment,
                              char* requested_address, bool map_fixed) : _fd_for_heap(-1), _pre_commit(false) {
   if(map_fixed){
     // 1) Add MAP_FIXED to mmap flags.
-    initialize_semeru(size, alignment, large, requested_address, false , false); // not heap_init,
+    initialize_semeru(size, alignment, large, requested_address, false /*Executable*/ , false /*heap init*/ ); // not heap_init,
   }else{
     // 2) requested_address is just a hint
     initialize(size, alignment, large, requested_address, false);
@@ -316,7 +316,16 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 		alignment = (size_t)ONE_GB;
 
 		tty->print("%s, after overide  size 0x%lx, alignment 0x%lx, requested_addr 0x%lx \n",__func__, size, alignment, (size_t)requested_address );
-	}
+	}else if(requested_address == (char*)(SEMERU_START_ADDR + BLOCK_OFFSET_TABLE_OFFSET) ){
+    tty->print("%s, Block Offset Table Initialization \n",__func__);
+		tty->print("%s, WARNING : Debug version. #1     \n", __func__);
+    
+    old_size = size;
+		old_alignment = alignment;
+
+    size = (size_t)BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT;
+    alignment = (size_t)PAGE_SIZE;
+  }
 
 	// End of override
 
@@ -449,7 +458,7 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 		// 1) DEBUG PATH
 		// Assign the command line values to the reservesed space.
 		//
-		tty->print("%s, WARNING : Debug version. #2\n", __func__);
+		tty->print("%s, WARNING : Debug version, Debug for the Java heap.Commit all.  #2  \n", __func__);
 	 	_base = base;
    	_size = old_size;
    	_alignment = old_alignment;
@@ -467,8 +476,30 @@ void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
 	// End of DEBUG
 	//
 
-	}else{
-		// 2) Normal Path
+	}else if( base == (char*)(SEMERU_START_ADDR + BLOCK_OFFSET_TABLE_OFFSET)  ){
+    // 2) Debug Block Offset Table path
+		// Assign the command line values to the reservesed space.
+		//
+		tty->print("%s, WARNING : Debug version, Debug for the Block Offset Table. Commit all #3  \n", __func__);
+	 	_base = base;
+   	_size = old_size;
+   	_alignment = old_alignment;
+  	// If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
+  	if (_fd_for_heap != -1) {
+     _special = true;
+  	}
+
+		char* commit_start = (char*)(SEMERU_START_ADDR + BLOCK_OFFSET_TABLE_OFFSET);
+		size_t commit_size = (size_t)(BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT);
+		// Commit the whole JVM  memory range
+		log_debug(semeru,alloc)("%s, Commit the whole BlockOffsetTable [0x%lx, 0x%lx) immediately \n", __func__, (size_t)commit_start, (size_t)(commit_start +commit_size) );
+		os::commit_memory_or_exit(commit_start, commit_size, PAGE_SIZE, false, "Debug Block Offset Table");
+	
+	// End of DEBUG
+	//
+
+  }else{
+		// 3) Normal Path
   	_base = base;
   	_size = size;
   	_alignment = alignment;

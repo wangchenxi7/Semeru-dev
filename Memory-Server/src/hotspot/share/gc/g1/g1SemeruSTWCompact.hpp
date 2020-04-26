@@ -21,8 +21,8 @@
 #include "gc/shared/gcTrace.hpp"
 
 
-// Full GC structures
-#include "gc/g1/g1FullGCCompactionPoint.hpp"
+// Compact
+#include "gc/g1/g1SemeruCompactionPoint.hpp"
 
 // memory module
 #include "memory/resourceArea.hpp"
@@ -119,7 +119,7 @@ class G1SemeruSTWCompact : public CHeapObj<mtGC> {
   //
 
 
-  G1FullGCCompactionPoint** _compaction_points;  // each thread use one, clear it after the compaction phase.
+  G1SemeruCompactionPoint** _compaction_points;  // each thread use one, clear it after the compaction phase.
 
 
 	//
@@ -274,7 +274,7 @@ public:
   //
   // Compaction related functions
   //
-  G1FullGCCompactionPoint* compaction_point(uint id) { return _compaction_points[id]; }
+  G1SemeruCompactionPoint* compaction_point(uint id) { return _compaction_points[id]; }
 
 
 
@@ -472,7 +472,7 @@ class G1SemeruSTWCompactTask : public AbstractGangTask {
   
   // initialized in function, work()
   uint _worker_id;
-  G1FullGCCompactionPoint* _cp;         // Compaction Point for this task.
+  G1SemeruCompactionPoint* _cp;         // Compaction Point for this task.
   
 
   // The statistics data in each Closure are stateless, 
@@ -545,18 +545,18 @@ protected:
   //  G1CollectedHeap* _g1h;
     G1SemeruSTWCompact* _semeru_sc;
     G1CMBitMap* _bitmap;
-    G1FullGCCompactionPoint* _cp;       // The destination Region, for Semeru MS, each Region compact to itself.
+    G1SemeruCompactionPoint* _cp;       // The destination Region, for Semeru MS, each Region compact to itself.
     uint* _humongous_regions_removed;   // stateless,  pointed to G1SemeruSTWCompactTask->_humongous_regions_removed
 
     virtual void prepare_for_compaction(SemeruHeapRegion* hr);
-    void prepare_for_compaction_work(G1FullGCCompactionPoint* cp, SemeruHeapRegion* hr);
+    void prepare_for_compaction_work(G1SemeruCompactionPoint* cp, SemeruHeapRegion* hr);
     void free_humongous_region(SemeruHeapRegion* hr);
     void reset_region_metadata(SemeruHeapRegion* hr);
 
 public:
     G1SemeruCalculatePointersClosure( G1SemeruSTWCompact* semeru_sc,
                                       G1CMBitMap* bitmap,
-                                      G1FullGCCompactionPoint* cp,
+                                      G1SemeruCompactionPoint* cp,
                                       uint* humongous_regions_removed);
 
     void update_sets();       // [?] Young, Old, Humongous set ?
@@ -570,10 +570,10 @@ public:
   // preparation Phase #1, calculate the destination for each alive object withn a source Region.
   //
 class G1SemeruPrepareCompactLiveClosure : public StackObj {
-    G1FullGCCompactionPoint* _cp;     // This source Region's compaction/destination Region.
+    G1SemeruCompactionPoint* _cp;     // This source Region's compaction/destination Region.
 
 public:
-    G1SemeruPrepareCompactLiveClosure(G1FullGCCompactionPoint* cp);
+    G1SemeruPrepareCompactLiveClosure(G1SemeruCompactionPoint* cp);
     size_t apply(oop object);
 };
 

@@ -378,7 +378,7 @@ bool oopDesc::is_forwarded() const {
 void oopDesc::forward_to(oop p) {
 	assert(check_obj_alignment(p),
 				 "forwarding to something not aligned");
-	assert(Universe::heap()->is_in_reserved(p),
+	assert(Universe::heap()->is_in_reserved(p) || Universe::semeru_heap()->is_in_semeru_reserved(p),
 				 "forwarding to something not in heap");
 	assert(!is_archived_object(oop(this)) &&
 				 !is_archived_object(p),

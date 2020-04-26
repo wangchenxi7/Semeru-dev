@@ -39,7 +39,7 @@
 #include "gc/g1/heapRegion.hpp"   // Reuse class in original heapRegion.hpp
 #include "gc/shared/rdmaStructure.hpp"    // .hpp not to inlcude inline.hpp, will crash the include hierarchy
 #include "gc/g1/g1ConcurrentMarkBitMap.hpp"
-#include "gc/g1/g1SemeruBlockOffsetTable.hpp"
+#include "gc/g1/g1SemeruBlockOffsetTable.hpp"   // g1SemeruBlockOffsetTable.inline.hpp -> SemeruHeapRegion.hpp -> g1SemeruBlockOffsetTable.hpp
 
 
 // The inlcude order is that : HeapRegionSet include SemeruHeapRegion.
@@ -672,6 +672,12 @@ public:
 
 
   virtual void clear(bool mangle_space);
+
+  // reset some fields after RDMA transfer.
+  void reset_fields_after_transfer(){
+    // reset block offet table information.
+    this->_sync_mem_cpu->_bot_part.reset_fields_after_transfer(this);
+  }
 
 
   //

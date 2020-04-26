@@ -129,7 +129,10 @@
 //
 // RDMA Related
 //
-#define PAGE_SIZE		      ((size_t)4096)	// bytes
+#ifndef PAGE_SIZE
+  #define PAGE_SIZE		      ((size_t)4096)	// bytes
+#endif
+
 #define REGION_SIZE_GB    ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
 #define RDMA_DATA_REGION_NUM     8
 
@@ -187,18 +190,18 @@
 
 // 1.2.1 Memory server CSet
 #define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB , 0x400,008,000,000
-#define MEMORY_SERVER_CSET_SIZE       (size_t)0x1000      // 4KB 
+#define MEMORY_SERVER_CSET_SIZE       (size_t)PAGE_SIZE      // 4KB 
 
 // 1.2.2 flags 
 #define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)  // +4KB, 0x400,008,001,000
-#define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)0x1000      // 4KB 
+#define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)PAGE_SIZE      // 4KB 
 
 // 1.2.3 one-sided RDMA write check flags
 // 4 bytes per HeapRegion |-- 16 bits for dirty --|-- 16 bits for version --|
 // Assume the number of Region is 1024, 
 // Reserve 4KB for the write check flags.
 #define FLAGS_OF_CPU_WRITE_CHECK_OFFSET       (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)  // +4KB, 0x400,008,002,000
-#define FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT   (size_t)0x1000      // 4KB 
+#define FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT   (size_t)PAGE_SIZE      // 4KB 
 
 // 1.3 CPU Server To Memory server, Initialization
 #define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT) // +4KB, 0x400,008,003,000
@@ -237,22 +240,25 @@
 #define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // +1GB,  0x400,040,000,000
 #define ALIVE_BITMAP_SIZE        (size_t)ONE_GB
 
-//#define DEST_BITMAP_OFFSET       (size_t)0x80000000     // +2GB, not using for now ?
-//#define DEST_BITMAP_SIZE         (size_t)ONE_GB
-
 
 
 // 3. Klass instance information
 
-//#define KLASS_INSTANCE_OFFSET               (size_t)0xC0000000   // +3GB, 0x400,0C0,000,000
-#define KLASS_INSTANCE_OFFSET  (size_t)0x80000000    // +2GB, 0x400,080,000,000
+#define KLASS_INSTANCE_OFFSET               (size_t)(ALIVE_BITMAP_OFFSET + ALIVE_BITMAP_SIZE)    // +2GB, 0x400,080,000,000
 #define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)ONE_GB
+
+// 4. Block Offset Table 
+#define BLOCK_OFFSET_TABLE_OFFSET             (size_t)(KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)    // +3GB,  0x400,0C0,000,000
+#define BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT  (size_t)256*ONE_MB    // 1 : 512, can cover 128B heap.
+
+#define BOT_GLOBAL_STRUCT_OFFSET            (size_t)(BLOCK_OFFSET_TABLE_OFFSET + BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT)  // +3GB 4KB,  0x400,0C0,001,000
+#define BOT_GLOBAL_STRUCT_SIZE_LIMIT        (size_t)(PAGE_SIZE) 
 
 
 //
 // x. End of RDMA structure commit size
 //
-#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)
 
 
 // properties for the whole Semeru heap.

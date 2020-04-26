@@ -138,7 +138,7 @@ void G1FullGCCompactionPoint::forward(oop object, size_t size) {
   // Update compaction values.
   _compaction_top += size;
   if (_compaction_top > _threshold) {
-    _threshold = _current_region->cross_threshold(_compaction_top - size, _compaction_top);
+    _threshold = _current_region->cross_threshold(_compaction_top - size, _compaction_top);  // cross Region, need to update the block offset table ?
   }
 }
 

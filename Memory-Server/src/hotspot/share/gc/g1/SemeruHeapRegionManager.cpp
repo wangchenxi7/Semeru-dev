@@ -69,22 +69,6 @@ public:
 	const char* get_description() { return "Free Regions"; }
 };
 
-/**
- * Assign intial values to each field.
- * 	
- */
-// SemeruHeapRegionManager::SemeruHeapRegionManager() :
-// 	_bot_mapper(NULL),
-// 	_cardtable_mapper(NULL),
-// 	_card_counts_mapper(NULL),
-// 	_available_map(mtGC),
-// 	_num_committed(0),
-// 	_allocated_heapregions_length(0),
-// 	_regions(), _heap_mapper(NULL),
-// 	_prev_bitmap_mapper(NULL),
-// 	_next_bitmap_mapper(NULL),
-// 	_free_list("Free list", new SemeruMasterFreeRegionListChecker())
-// { }
 
 
 /**
@@ -124,38 +108,6 @@ SemeruHeapRegionManager* SemeruHeapRegionManager::create_manager(G1SemeruCollect
 	return new SemeruHeapRegionManager();
 }
 
-
-
-// void SemeruHeapRegionManager::initialize(G1RegionToSpaceMapper* heap_storage,
-// 															 G1RegionToSpaceMapper* prev_bitmap,
-// 															 G1RegionToSpaceMapper* next_bitmap,
-// 															 G1RegionToSpaceMapper* alive_bitmap,  // mapper for Semeru
-// 															 G1RegionToSpaceMapper* dest_bitmap,
-// 															 G1RegionToSpaceMapper* bot,
-// 															 G1RegionToSpaceMapper* cardtable,
-// 															 G1RegionToSpaceMapper* card_counts) {
-// 	_allocated_heapregions_length = 0;
-
-// 	_heap_mapper = heap_storage;				// Java heap's Region->Page mapping  
-
-// 	_prev_bitmap_mapper = prev_bitmap;
-// 	_next_bitmap_mapper = next_bitmap;
-
-// 	// semeru
-// 	_alive_bitmap_mapper	= alive_bitmap;
-// 	_dest_bitmap_mapper		=	dest_bitmap;
-
-// 	_bot_mapper = bot;									// Region -> G1BlockOffsetTable ->Page mapping 
-// 	_cardtable_mapper = cardtable;
-
-// 	_card_counts_mapper = card_counts;
-
-// 	// Both _regions[] and _availale_map cover the whole reserved Java heap.
-// 	MemRegion reserved = heap_storage->reserved();		// The Reserved space got from OS.
-// 	_regions.initialize(reserved.start(), reserved.end(), SemeruHeapRegion::SemeruGrainBytes);  // Split the Java heap into Regions.
-
-// 	_available_map.initialize(_regions.length());			// [?] Free bitmap for the Region list.
-// }
 
 
 

@@ -106,10 +106,11 @@ class CollectedHeap : public CHeapObj<mtInternal> {
 
   GCHeapLog* _gc_heap_log;
 
+  // The control Heap.
   MemRegion _reserved;
 
   /**
-   * Semeru 
+   * Semeru Heap
    */
   MemRegion _semeru_reserved;  // Used to test if an addr is in the reserved address.
 
@@ -300,7 +301,7 @@ class CollectedHeap : public CHeapObj<mtInternal> {
   // Return "TRUE" iff the given pointer points into the heap's defined
   // closed subset (which defaults to the entire heap).
   virtual bool is_in_closed_subset(const void* p) const {
-    return is_in_reserved(p);
+    return is_in_reserved(p) ||  is_in_semeru_reserved(p) ;
   }
 
 	// Semeru

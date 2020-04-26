@@ -33,7 +33,7 @@ class HeapRegion;
 
 class G1FullGCCompactionPoint : public CHeapObj<mtGC> {
   HeapRegion* _current_region;      // Current destination Region.
-  HeapWord*   _threshold;
+  HeapWord*   _threshold;           // The compaction end ?
   HeapWord*   _compaction_top;      // the top, when this Region is used as compaction destination Region.
   GrowableArray<HeapRegion*>* _compaction_regions;    // The destination Region candidates. The enqueued source Region.
   GrowableArrayIterator<HeapRegion*> _compaction_region_iterator; // points to the _compaction_regions[]

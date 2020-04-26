@@ -81,6 +81,8 @@ inline size_t G1SemeruBlockOffsetTable::index_for_raw(const void* p) const {
   return pointer_delta((char*)p, _reserved.start(), sizeof(char)) >> BOTConstants::LogN;
 }
 
+// Calculate the Block index for the address p.
+// For the covered space, stored in _reserved. index start from 0.
 inline size_t G1SemeruBlockOffsetTable::index_for(const void* p) const {
   char* pc = (char*)p;
   assert(pc >= (char*)_reserved.start() &&
@@ -118,7 +120,7 @@ inline HeapWord* G1SemeruBlockOffsetTablePart::block_at_or_preceding(const void*
   if (has_max_index) {
     index = MIN2(index, max_index);
   }
-  HeapWord* q = _bot->address_for_index(index);
+  HeapWord* q = _bot->address_for_index(index);  // start addr for the block index.
 
   uint offset = _bot->offset_array(index);  // Extend u_char to uint.
   while (offset >= BOTConstants::N_words) {
@@ -166,5 +168,7 @@ inline HeapWord* G1SemeruBlockOffsetTablePart::forward_to_block_containing_addr(
   assert(q <= addr, "wrong order for current and arg");
   return q;
 }
+
+
 
 #endif // SHARE_VM_GC_G1_G1BLOCKOFFSETTABLE_INLINE_HPP

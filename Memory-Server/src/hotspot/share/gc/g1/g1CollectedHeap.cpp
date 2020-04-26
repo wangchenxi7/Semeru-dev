@@ -2943,7 +2943,7 @@ class RegisterHumongousWithInCSetFastTestClosure : public HeapRegionClosure {
 					jbyte* card_ptr = (jbyte*)ct->byte_for_index(card_index);
 					// The remembered set might contain references to already freed
 					// regions. Filter out such entries to avoid failing card table
-					// verification.
+					// verification.is_in_closed_subset
 					if (g1h->is_in_closed_subset(ct->addr_for(card_ptr))) {
 						if (*card_ptr != G1CardTable::dirty_card_val()) {
 							*card_ptr = G1CardTable::dirty_card_val();
@@ -4935,8 +4935,11 @@ void G1CollectedHeap::rebuild_region_sets(bool free_list_only) {
 }
 
 bool G1CollectedHeap::is_in_closed_subset(const void* p) const {
-	HeapRegion* hr = heap_region_containing(p);
-	return hr->is_in(p);
+	if(is_in(p)){ // add a filter 
+		HeapRegion* hr = heap_region_containing(p);
+		return hr->is_in(p);
+	}
+	return false;
 }
 
 /** 

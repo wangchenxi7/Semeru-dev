@@ -77,9 +77,9 @@ G1SemeruSTWCompact::G1SemeruSTWCompact(G1SemeruCollectedHeap* 	g1h,
 	//
 	
 	// Destination Regions for Compaction.
-	_compaction_points = NEW_C_HEAP_ARRAY(G1FullGCCompactionPoint*, _max_num_tasks, mtGC);
+	_compaction_points = NEW_C_HEAP_ARRAY(G1SemeruCompactionPoint*, _max_num_tasks, mtGC);
   for (uint i = 0; i < _max_num_tasks; i++) {
-    _compaction_points[i] = new G1FullGCCompactionPoint();
+    _compaction_points[i] = new G1SemeruCompactionPoint();
   }
 
 
@@ -309,6 +309,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		assert(Thread::current()->is_ConcurrentGC_thread(), "Not a concurrent GC thread");
 		ResourceMark rm;			// [?] What's this resource used for ?
 		double start_vtime = os::elapsedVTime();
+		bool is_cpu_server_in_stw = false;
 
 		_worker_id = worker_id;
 		_cp = _semeru_sc->compaction_point(_worker_id); // [X] Remember to reset the compaction_point at the end of this work.
@@ -320,33 +321,39 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 		// Claim scanned Regions from the MS CSet.
 		do{
+				// Check CPU server STW states.
+				// Compact one Region at least. When we reach here, we already confirmed the cpu server STW mode.
+				is_cpu_server_in_stw = _semeru_sc->_semeru_h->is_cpu_server_in_stw();
+
 				// Start: When the compacting for a Region is started,
 				// do not interrupt it until the end of compacting.
 
-			region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id, region_to_evacuate);
-			if(region_to_evacuate != NULL){
-				// Phase#1 Sumarize alive objects' destinazion
-				// 1) put forwarding pointer in alive object's markOop
-				phase1_prepare_for_compact(region_to_evacuate);
+				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id, region_to_evacuate);
+				if(region_to_evacuate != NULL){
+					log_debug(semeru,mem_compact)("%s, Claimed Region[0x%lx] to be evacuted.", __func__, (size_t)region_to_evacuate->hrm_index() );
 
-				// Phase#2 Adjust object's intra-Region feild pointer
-				// The adjustment is based on forwarding pointer.
-				// This has to be finished bofore data copy, which may overwrite the original alive objects and their forwarding pointer.
-				phase2_adjust_intra_region_pointer(region_to_evacuate);
+					// Phase#1 Sumarize alive objects' destinazion
+					// 1) put forwarding pointer in alive object's markOop
+					phase1_prepare_for_compact(region_to_evacuate);
 
-
-				// Phase#3 Do the compaction
-				// Multiple worker threads do this parallelly
-				phase3_compact_region(region_to_evacuate);
-
-				// Phase#4 Inter-Region reference fields update.
+					// Phase#2 Adjust object's intra-Region feild pointer
+					// The adjustment is based on forwarding pointer.
+					// This has to be finished bofore data copy, which may overwrite the original alive objects and their forwarding pointer.
+					phase2_adjust_intra_region_pointer(region_to_evacuate);
 
 
-			}
+					// Phase#3 Do the compaction
+					// Multiple worker threads do this parallelly
+					phase3_compact_region(region_to_evacuate);
+
+					// Phase#4 Inter-Region reference fields update.
+
+					log_debug(semeru,mem_compact)("%s, Evacuation for Region[0x%lx] is done.", __func__, (size_t)region_to_evacuate->hrm_index() );
+				}
 
 			// End: Check if we need to stop the compacting work
 			// and switch to the inter-region fields update phase.
-		}while(region_to_evacuate != NULL && !_semeru_sc->has_aborted() );
+		}while( is_cpu_server_in_stw && region_to_evacuate != NULL && !_semeru_sc->has_aborted() );
 
 
 		//
@@ -354,9 +361,8 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		// 2 posible conditions:
 		// 1) The CPU STW window is closed.
 		// 2) All the scanned Regions are processed.
-		// 
-
-		assert(_semeru_sc->mem_server_scanned_cset()->is_compact_finished() || _semeru_sc->has_aborted(),
+		// 3) The CPU server is changed to none STW mode. 
+		assert(_semeru_sc->mem_server_scanned_cset()->is_compact_finished() || is_cpu_server_in_stw == false  || _semeru_sc->has_aborted(),
 										"%s, Semeru Memoery server's compaction stop unproperly. \n", __func__ );
 		
 
@@ -376,7 +382,8 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
  * 
  * 2) The Region is claimed in G1SemeruSTWCompactTask::work()
  * 
- * Warning : this is a per Region processing. Pass the stateless structure in.
+ * Warning : this is a per Region processing. Pass the necessary stateless structures in.
+ * 					e.g. the alive_bitmap and 
  * 
  */
 void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
@@ -505,7 +512,7 @@ void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
 
 G1SemeruCalculatePointersClosure::G1SemeruCalculatePointersClosure( G1SemeruSTWCompact* semeru_sc,
 																																		G1CMBitMap* bitmap,
-                                                             				G1FullGCCompactionPoint* cp,
+                                                             				G1SemeruCompactionPoint* cp,
 																																		uint* humongous_regions_removed) :
   _semeru_sc(semeru_sc),
   _bitmap(bitmap),
@@ -522,7 +529,7 @@ G1SemeruCalculatePointersClosure::G1SemeruCalculatePointersClosure( G1SemeruSTWC
 /**
  * Tag : the FullGC threads is summarizing a source Region's destination Region.
  * 
- * [x] The claimed source Region will be added into G1FullGCPrepareTask->G1FullGCCompactionPoint
+ * [x] The claimed source Region will be added into G1FullGCPrepareTask->G1SemeruCompactionPoint
  *      which points to collector()->compaction_point(worker_id).
  * 
  */
@@ -601,17 +608,15 @@ void G1SemeruCalculatePointersClosure::prepare_for_compaction(SemeruHeapRegion* 
 
 
 	//debug
-	tty->print("%s, Error, the _cp needs to be replaced with \n",__func__);
+	tty->print("%s, Calculate destination for alive objects in Region[0x%lx] \n",__func__, (size_t)hr->hrm_index());
 
-  // if (!_cp->is_initialized()) {   	// if G1FullGCCompactionPoint is not setted, compact to itself.
-  //   hr->set_compaction_top(hr->bottom());
-  //   _cp->initialize(hr, true);			// Enqueue current Source Region as the first Destination Region.
-  // }
-  // // Enqueue this Region into destination Region queue.
-  // _cp->add(hr);
-  // prepare_for_compaction_work(_cp, hr);
-
-
+  if (!_cp->is_initialized()) {   	// if G1SemeruCompactionPoint is not setted, compact to itself.
+    hr->set_compaction_top(hr->bottom());
+    _cp->initialize(hr, true);			// Enqueue current Source Region as the first Destination Region.
+  }
+  // Enqueue this Region into destination Region queue.
+  _cp->add(hr);
+  prepare_for_compaction_work(_cp, hr);
 
 }
 
@@ -624,7 +629,7 @@ void G1SemeruCalculatePointersClosure::prepare_for_compaction(SemeruHeapRegion* 
  *   hr : The source Region, who should be compacted to cp.
  * 
  */
-void G1SemeruCalculatePointersClosure::prepare_for_compaction_work(G1FullGCCompactionPoint* cp,
+void G1SemeruCalculatePointersClosure::prepare_for_compaction_work(G1SemeruCompactionPoint* cp,
                                                                                   SemeruHeapRegion* hr) {
   G1SemeruPrepareCompactLiveClosure prepare_compact(cp);
   hr->set_compaction_top(hr->bottom());     // SemeruHeapRegion->_compaction_top is that if using this Region as a Destination, this is his top.
@@ -661,13 +666,13 @@ bool G1SemeruCalculatePointersClosure::freed_regions() {
 // Live object closure
 //
 
-G1SemeruPrepareCompactLiveClosure::G1SemeruPrepareCompactLiveClosure(G1FullGCCompactionPoint* cp) :
+G1SemeruPrepareCompactLiveClosure::G1SemeruPrepareCompactLiveClosure(G1SemeruCompactionPoint* cp) :
     _cp(cp) { }
 
 
 /**
  * Tag : Preparation Phase #2, calculate the destination for each alive object in the source/current Region. 
- *  
+ *        G1SemeruCompactionPoint* _cp, stores the destination Regions.
  */
 size_t G1SemeruPrepareCompactLiveClosure::apply(oop object) {
   size_t size = object->size();

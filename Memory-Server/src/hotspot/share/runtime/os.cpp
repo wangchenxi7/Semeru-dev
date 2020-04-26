@@ -1411,10 +1411,12 @@ size_t os::page_size_for_region(size_t region_size, size_t min_pages, bool must_
   return vm_page_size();
 }
 
+// Return the page size of current kernel. aligned.
 size_t os::page_size_for_region_aligned(size_t region_size, size_t min_pages) {
   return page_size_for_region(region_size, min_pages, true);
 }
 
+// Return the page size of current kernel. maybe not aligned.
 size_t os::page_size_for_region_unaligned(size_t region_size, size_t min_pages) {
   return page_size_for_region(region_size, min_pages, false);
 }

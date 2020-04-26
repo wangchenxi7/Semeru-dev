@@ -48,9 +48,9 @@
 G1SemeruBlockOffsetTable::G1SemeruBlockOffsetTable(MemRegion heap, G1RegionToSpaceMapper* storage) :
   _reserved(heap), _offset_array(NULL) {
 
-  MemRegion bot_reserved = storage->reserved();  // The storage is allocated in 
+  MemRegion bot_reserved = storage->reserved();  // The storage is committed already ? or only reserved ?
 
-  _offset_array = (u_char*)bot_reserved.start();
+  _offset_array = (u_char*)bot_reserved.start(); // Assin the content/storage to current Block Offset  Table.
 
   log_trace(gc, bot)("G1SemeruBlockOffsetTable::G1SemeruBlockOffsetTable: ");
   log_trace(gc, bot)("    rs.base(): " PTR_FORMAT "  rs.size(): " SIZE_FORMAT "  rs end(): " PTR_FORMAT,
@@ -86,10 +86,12 @@ G1SemeruBlockOffsetTablePart::G1SemeruBlockOffsetTablePart(G1SemeruBlockOffsetTa
   _next_offset_threshold(NULL),
   _next_offset_index(0),
   DEBUG_ONLY(_object_can_span(false) COMMA)
-  _bot(array),
-  _space(gsp)
+  _bot(array),  // points to parameter, array ? the array is the global address  
+  _space(gsp)   // points to the HeapRegion directly.
 {
 
+  // initialzie more fields
+  initialize_array_offset_par(array ,gsp);
 }
 
 
@@ -273,9 +275,9 @@ void G1SemeruBlockOffsetTablePart::alloc_block_work(HeapWord** threshold_, size_
   assert(blk_start <= threshold, "blk_start should be at or before threshold");
   assert(pointer_delta(threshold, blk_start) <= BOTConstants::N_words,
          "offset should be <= BlockOffsetSharedArray::N");
-  assert(G1SemeruCollectedHeap::heap()->is_in_reserved(blk_start),
+  assert(G1SemeruCollectedHeap::heap()->is_in_semeru_reserved(blk_start),
          "reference must be into the heap");
-  assert(G1SemeruCollectedHeap::heap()->is_in_reserved(blk_end-1),
+  assert(G1SemeruCollectedHeap::heap()->is_in_semeru_reserved(blk_end-1),
          "limit must be within the heap");
   assert(threshold == _bot->_reserved.start() + index*BOTConstants::N_words,
          "index must agree with threshold");
@@ -403,7 +405,7 @@ G1SemeruBlockOffsetTablePart::print_on(outputStream* out) {
 #endif // !PRODUCT
 
 HeapWord* G1SemeruBlockOffsetTablePart::initialize_threshold_raw() {
-  assert(!G1SemeruCollectedHeap::heap()->is_in_reserved(_bot->_offset_array),
+  assert(!G1SemeruCollectedHeap::heap()->is_in_semeru_reserved(_bot->_offset_array),
          "just checking");
   _next_offset_index = _bot->index_for_raw(_space->bottom());
   _next_offset_index++;
@@ -413,7 +415,7 @@ HeapWord* G1SemeruBlockOffsetTablePart::initialize_threshold_raw() {
 }
 
 void G1SemeruBlockOffsetTablePart::zero_bottom_entry_raw() {
-  assert(!G1SemeruCollectedHeap::heap()->is_in_reserved(_bot->_offset_array),
+  assert(!G1SemeruCollectedHeap::heap()->is_in_semeru_reserved(_bot->_offset_array),
          "just checking");
   size_t bottom_index = _bot->index_for_raw(_space->bottom());
   assert(_bot->address_for_index_raw(bottom_index) == _space->bottom(),
@@ -422,7 +424,7 @@ void G1SemeruBlockOffsetTablePart::zero_bottom_entry_raw() {
 }
 
 HeapWord* G1SemeruBlockOffsetTablePart::initialize_threshold() {
-  assert(!G1SemeruCollectedHeap::heap()->is_in_reserved(_bot->_offset_array),
+  assert(!G1SemeruCollectedHeap::heap()->is_in_semeru_reserved(_bot->_offset_array),
          "just checking");
   _next_offset_index = _bot->index_for(_space->bottom());
   _next_offset_index++;
@@ -438,4 +440,42 @@ void G1SemeruBlockOffsetTablePart::set_for_starts_humongous(HeapWord* obj_top, s
   if (fill_size > 0) {
     alloc_block(obj_top, fill_size);
   }
+}
+
+
+/**
+ * Calculate the the u_char range of _array_offset for this Region.
+ *  
+ */
+void  G1SemeruBlockOffsetTablePart::initialize_array_offset_par(G1SemeruBlockOffsetTable* array, SemeruHeapRegion* coverd_region){
+  u_char* array_part_start;
+  size_t slot_offset;
+  size_t slots_per_region;
+
+  // 1 bytes per slot.
+  slots_per_region = SemeruHeapRegion::SemeruGrainBytes / G1SemeruBlockOffsetTable::heap_map_factor();
+  slot_offset = coverd_region->hrm_index() * slots_per_region;
+  array_part_start = array->_offset_array + slot_offset;
+
+  // initialize current Region 
+  _offset_array_part = array_part_start;
+  _offset_array_part_length = slots_per_region;
+
+  log_debug(semeru,alloc)("Semeru Block_offset_table : Region[0x%lx] , _offset_array_part 0x%lx , length 0x%lx ",
+                                     (size_t)coverd_region->hrm_index(), (size_t)_offset_array_part, (size_t)_offset_array_part_length );
+}
+
+
+/**
+ * Some fields need to be reset.
+ * 
+ * 1) The _space may point to different SemeruHeapRegion*, 
+ * But the _covered_region_id is always the same.
+ * So, we should reset the _space pointer, every time we recieved the Region.  
+ */
+void G1SemeruBlockOffsetTablePart::reset_fields_after_transfer(SemeruHeapRegion* covered_region){
+  // 1) reset _space field.
+  log_debug(semeru,rdma)("G1SemeruBlockOffsetTablePart, reset _space from 0x%lx to 0x%lx ", 
+                                                            (size_t)_space, (size_t)covered_region );
+  _space = covered_region;
 }

@@ -529,7 +529,7 @@ void G1SemeruConcurrentMarkThread::run_service() {
  
         if (_semeru_sc->has_aborted()) {
           // Abort the compact phase, continue the  concurrent tracing.
-          log_debug(semeru, thread)("%s, G1SemeruSTWCompact is aborted. \n",__func__);
+          log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact is aborted. \n",__func__);
           break;
         } else {
           // Do the Compact action.
@@ -671,6 +671,7 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
 		log_debug(semeru,mem_trace)("%s, Get a Evicted Region[%d] \n", __func__,received_region_ind);
 
     region_received = semeru_heap->hrm()->at(received_region_ind);
+    region_received->reset_fields_after_transfer();  // reset some fields, whose value are differenct between CPU and Memory server.
     assert(region_received != NULL, "%s, received Region is invalid.", __func__);   // [?] how to confirm if this region is available ?
 
     if(region_received->is_region_cm_scanned()){

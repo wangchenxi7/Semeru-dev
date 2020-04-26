@@ -63,11 +63,13 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
 		// Path#1, Intra-Region reference. Adjust it here.
 
 
-  assert(Universe::heap()->is_in(obj), "should be in heap");
+  assert(Universe::semeru_heap()->is_in(obj), "should be in heap");
 	assert(curr_region->is_in(obj), "should be in current compacting Region.");
 
   if (G1ArchiveAllocator::is_archived_object(obj)) {
     // We never forward archive objects.
+    log_debug(semeru,mem_compact)("%s,target obj 0x%lx is in archived Region, can't be moved. skip pointer adjustment p 0x%lx -> it.", __func__,
+                                   (size_t)obj, (size_t)p );
     return;
   }
 
@@ -83,7 +85,7 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
   }
 
   // Forwarded, just update.
-  assert(Universe::heap()->is_in_reserved(forwardee), "should be in object space");
+  assert(Universe::semeru_heap()->is_in_semeru_reserved(forwardee), "should be in object space");
   RawAccess<IS_NOT_NULL>::oop_store(p, forwardee);
 }
 

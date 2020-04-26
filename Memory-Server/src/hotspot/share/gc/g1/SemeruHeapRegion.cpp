@@ -428,7 +428,7 @@ void SemeruHeapRegion::clear_humongous() {
 SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
                        G1SemeruBlockOffsetTable* bot,
                        MemRegion mr) :
-    G1SemeruContiguousSpace(bot),
+    G1SemeruContiguousSpace(bot),  // abandoned, move the block offset table to SemeruHeapRegion->SyncBetweenMemoryAndCPU.
     _cpu_to_mem_init(NULL),
     _cpu_to_mem_gc(NULL),
     _mem_to_cpu_gc(NULL),

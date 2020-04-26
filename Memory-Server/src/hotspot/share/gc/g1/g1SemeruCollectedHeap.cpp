@@ -1694,7 +1694,8 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const cha
 																																 size_t translation_factor) {
 	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
 	// Allocate a new reserved space, preferring to use large pages.
-	ReservedSpace rs(size, preferred_page_size);					// [?] Reserve space for the auxiliary structure.
+	// at 
+	ReservedSpace rs(size, preferred_page_size);					// [x] Reserve space for the auxiliary structure.
 	size_t page_size = actual_reserved_page_size(rs);
 	G1RegionToSpaceMapper* result  =
 		G1RegionToSpaceMapper::create_mapper(rs,
@@ -1716,6 +1717,44 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper(const cha
 
 
 /**
+ * Reserve pages for Region meta data at fixed address.
+ *  
+ */
+G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper_at_fixed_addr(const char* description,
+																																 char* request_addr,
+																																 size_t size,
+																																 size_t translation_factor) {
+	size_t preferred_page_size = os::page_size_for_region_unaligned(size, 1);
+	// Allocate a new reserved space, preferring to use large pages.
+	// Constructor : (size_t size, size_t alignment, bool large, char* requested_address, bool map_fixed);
+	ReservedSpace rs(size, preferred_page_size, false /*large*/, request_addr, true /*map_fixed*/ ); // [x] Reserve space for the auxiliary structure.
+	size_t page_size = actual_reserved_page_size(rs);
+	G1RegionToSpaceMapper* result  =
+		G1RegionToSpaceMapper::create_mapper(rs,
+																				 size,
+																				 page_size,
+																				 SemeruHeapRegion::SemeruGrainBytes,
+																				 translation_factor,
+																				 mtGC);
+
+	os::trace_page_sizes_for_requested_size(description,
+																					size,
+																					preferred_page_size,
+																					page_size,
+																					rs.base(),
+																					rs.size());
+
+	log_debug(semeru,alloc)("%s, Reserve RegionToPage mapper for [0x%lx, 0x%lx) ",description, (size_t)request_addr, (size_t)(request_addr + size) );
+	assert(SemeruHeapRegion::SemeruGrainBytes >= page_size * translation_factor, "Each Region use at least 1 pages !! RDMA transfaer constraint." );
+	return result;
+}
+
+
+
+
+
+
+/**
  * Semeru - Reserve auxiliary space at fixed start address. 
  * 
  * [x] The specified memory range may already be reserved at very first.
@@ -1732,6 +1771,8 @@ G1RegionToSpaceMapper* G1SemeruCollectedHeap::create_aux_memory_mapper_from_rs(c
 	G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();  // This is a static function, we have to build the instance explicitly.
 
 	// Allocate a new reserved space, preferring to use large pages.
+	// constructor : char* base, size_t size, size_t alignment, bool special,  bool executable.
+	// This ReservedSpace constructor is only for space already reserved.
 	ReservedSpace rs(semeru_h->semeru_reserved_space()->base()+ offset,
 									size, 
 									preferred_page_size, false, false);					// [?] Build a ReservedSpace based already mmap() range.
@@ -2014,9 +2055,13 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
  	heap_storage->set_mapping_changed_listener(&_listener);  // [?] meanning of mapping change ?  free or committed ?
 
 	// Reserve storage for the BOT, card table, card counts table (hot card cache) and the bitmaps.
-	// [?] They have to commit the space before using it ?
+	// [x] They have to commit the space before using it.
+	// The commit procesure is controlled by G1RegionToSpaceMapper, page granularity.
+
+	// Allocated at fixed address, RDMA Meta Space, SEMERU_START_ADDR + BLOCK_OFFSET_TABLE_OFFSET
 	G1RegionToSpaceMapper* bot_storage =
-		create_aux_memory_mapper("Block Offset Table",
+		create_aux_memory_mapper_at_fixed_addr("Block Offset Table",
+														 (char*)(SEMERU_START_ADDR + BLOCK_OFFSET_TABLE_OFFSET),
 														 G1SemeruBlockOffsetTable::compute_size(g1_rs.size() / HeapWordSize),
 														 G1SemeruBlockOffsetTable::heap_map_factor());
 
@@ -2082,10 +2127,21 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 	FreeSemeruRegionList::set_unrealistically_long_length(max_expandable_regions() + 1);  // This global variable can only be set once.
 
-	// do we initialize the  _reserved_semeru successfully ?
-	// 
-	_bot = new G1SemeruBlockOffsetTable(semeru_reserved_region(), bot_storage);
 
+	// [x] The Block Offset Table should be allocated into RDMA meta space.
+	//		 It only has 2 fields, _reserved and _offset_array.
+	//		 There is no need to transfer this field via RDMA, but its address should be the same in both the CPU and Memory server.
+	//
+	// 	1) also in the RDMA meta space.
+	//	2) Committed by per Region.
+	// Because the objects are allocated in the CPU server.
+	// Memory Server only needs to update offset values during compaction.
+	{
+		char* start = (char*)(SEMERU_START_ADDR + BOT_GLOBAL_STRUCT_OFFSET);
+		size_t	size 		= BOT_GLOBAL_STRUCT_SIZE_LIMIT;
+		_bot = new(size, start) G1SemeruBlockOffsetTable(semeru_reserved_region(), bot_storage);
+		log_debug(semeru,alloc)("%s, allocate block offset table global pointer _bot 0x%lx, size 0x%lx ", __func__, (size_t)_bot, (size_t)size );
+	}
 	//
 	// [x] Collection Set related structures ?
 	// Semeru Memory Server
@@ -5240,8 +5296,11 @@ void G1SemeruCollectedHeap::set_used(size_t bytes) {
 // }
 
 bool G1SemeruCollectedHeap::is_in_closed_subset(const void* p) const {
-	SemeruHeapRegion* hr = heap_region_containing(p);
-	return hr->is_in(p);
+	if(is_in(p)){ // add a filter.
+		SemeruHeapRegion* hr = heap_region_containing(p);
+		return hr->is_in(p);
+	}
+	return false;
 }
 
 // /** 

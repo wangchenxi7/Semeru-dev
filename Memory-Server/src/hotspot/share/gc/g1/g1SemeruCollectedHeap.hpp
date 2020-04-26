@@ -634,6 +634,11 @@ private:
 																																 size_t translation_factor,
 																																 size_t offset);
 
+  static G1RegionToSpaceMapper* create_aux_memory_mapper_at_fixed_addr(const char* description,
+																																 char* request_addr,
+																																 size_t size,
+																																 size_t translation_factor);
+
 
 //   G1YoungRemSetSamplingThread* sampling_thread() const { return _young_gen_sampling_thread; }
 

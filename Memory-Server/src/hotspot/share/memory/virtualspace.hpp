@@ -81,7 +81,7 @@ class ReservedSpace {
   ReservedSpace(char* base, size_t size, size_t alignment, bool special,
                 bool executable);
 
-  // Semeru - add MAP_FIXED flag to mmap
+  // Semeru - add MAP_FIXED flag to mmap, when reserve space from OS.
   ReservedSpace(size_t size, size_t alignment,
                   bool large, char* requested_address, bool map_fixed);
 

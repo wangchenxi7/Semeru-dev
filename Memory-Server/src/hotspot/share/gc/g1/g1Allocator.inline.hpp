@@ -159,6 +159,8 @@ inline bool G1ArchiveAllocator::is_open_archive_object(oop object) {
   return (archive_check_enabled() && in_open_archive_range(object));
 }
 
+// Any Semeru Region isn't in any closed/open archive Regions.
+// So these 2 checks should ok and return false.
 inline bool G1ArchiveAllocator::is_archived_object(oop object) {
   return (archive_check_enabled() && (in_closed_archive_range(object) ||
                                       in_open_archive_range(object)));

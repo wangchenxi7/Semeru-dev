@@ -3533,7 +3533,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			//_curr_region->note_end_of_marking();
 
 			_curr_region->set_region_cm_scanned(); // if setted by Remark, it's ok.
-			_curr_region = NULL;			// finished scanning of current Region.
+			_semeru_cm->mem_server_cset()->add_cm_scanned_regions(_curr_region);	// Add the scanned Region into scanned_region list.
+			giveup_current_region();			// finished scanning of current Region.
 
 			// Finish Site#1
 			// Processed all the freshly scanned Regions.

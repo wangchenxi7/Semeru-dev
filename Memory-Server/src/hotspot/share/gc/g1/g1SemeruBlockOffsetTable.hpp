@@ -46,7 +46,7 @@ class SemeruHeapRegion;
 //
 // Each G1SemeruBlockOffsetTablePart is owned by a G1SemeruContiguousSpace.
 
-class G1SemeruBlockOffsetTable: public CHeapObj<mtGC> {
+class G1SemeruBlockOffsetTable: public CHeapRDMAObj<G1SemeruBlockOffsetTable, NON_ALLOC_TYPE> {
   friend class G1SemeruBlockOffsetTablePart;
   friend class VMStructs;
 
@@ -54,8 +54,9 @@ private:
   // The reserved region covered by the table.
   MemRegion _reserved;
 
-  // Array for keeping offsets for retrieving object start fast given an
-  // address.  // [?] What's the size for the array ??
+  // Array for keeping offsets for retrieving object start fast given an address.  
+  // This should be the real content of the Block Offset Table.
+  // each block is 512 bytes, 8 byts alignment, 1 byte is enough to record the address of it.
   u_char* _offset_array;          // byte array keeping backwards offsets
 
   void check_offset(size_t offset, const char* msg) const {
@@ -84,11 +85,14 @@ private:
 
 public:
 
-  // Return the number of slots needed for an offset array
+  // Return the number of slots needed for the offset array
   // that covers mem_region_words words.
   static size_t compute_size(size_t mem_region_words) {
-    size_t number_of_slots = (mem_region_words / BOTConstants::N_words);   // e.g. 32GB heap.  4G words/64 words per block
-    return ReservedSpace::allocation_align_size_up(number_of_slots);       // 64M slots
+    size_t number_of_slots = (mem_region_words / BOTConstants::N_words);   // number of slots/blocks:  e.g. 32GB heap.  4G words/(64 word per block)
+    size_t block_off_table_words = ReservedSpace::allocation_align_size_up(number_of_slots); // page alignment.
+    assert(block_off_table_words*HeapWordSize <= BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT, "Exceed size limitations.");
+
+    return block_off_table_words;       // 1 byte,u_char, per slot.
   }
 
   // Returns how many bytes of the heap a single byte of the BOT corresponds to.
@@ -125,11 +129,21 @@ private:
   debug_only(bool _object_can_span;)
 
   // This is the global BlockOffsetTable.
+  // points to the G1SemeruCollectedHeap->_bot, which covers the whole Java heap.
+  // So, there is only one global _bot->_offset_array shared by all the Regions.
   G1SemeruBlockOffsetTable* _bot;
 
   // The space that owns this subregion.
   // Usually, this is a Region. A contiguous space.
+  // [x]This value must be reset after each transfer.
+  // Because CPU server and Memory server have different values for it.
   SemeruHeapRegion* _space;
+
+  // Semeru 
+  // Covered block offset table start addr and length in char.
+  // Used to synchronize between CPU and Memory server.
+  u_char* _offset_array_part;
+  size_t  _offset_array_part_length;
 
 
   // Sets the entries
@@ -194,6 +208,7 @@ public:
   //  The elements of the array are initialized to zero.
   G1SemeruBlockOffsetTablePart(G1SemeruBlockOffsetTable* array, SemeruHeapRegion* gsp);
 
+  void  initialize_array_offset_par();
 
   void verify() const;
 
@@ -237,6 +252,12 @@ public:
   void set_object_can_span(bool can_span) NOT_DEBUG_RETURN;
 
   void print_on(outputStream* out) PRODUCT_RETURN;
+
+
+
+  // Semeru
+  void  initialize_array_offset_par(G1SemeruBlockOffsetTable* array, SemeruHeapRegion* coverd_region);
+  void reset_fields_after_transfer(SemeruHeapRegion* covered_region);
 };
 
 #endif // SHARE_VM_GC_G1_G1BLOCKOFFSETTABLE_HPP

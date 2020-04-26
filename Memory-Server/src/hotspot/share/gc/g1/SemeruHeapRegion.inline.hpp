@@ -254,7 +254,11 @@ inline void SemeruHeapRegion::complete_compaction() {
 
 
 /**
- * Tag : Evacuate alive objects to desetination according to the bitmap.
+ * Semeru MS : Apply a Closure to the target Regions.
+ * e.g.
+ *  The colusre can be :
+ * 	1)  G1SemeruPrepareCompactLiveClosure, put forwarding pointer at the MarkOop of the alive objects.
+ * 	2) Evacuate alive objects to desetination according to the bitmap.
  * 			 This phase is purely object data copy. no pointer adjustment, no RemSet update. 
  * 
  * 

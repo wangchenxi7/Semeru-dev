@@ -34,6 +34,7 @@ enum CHeapAllocType {
   METADATA_SPACE_ALLOCTYPE,       // 4
 
   ALLOC_TARGET_OBJ_QUEUE,         // 5,
+  BLOCK_OFFSET_TABLE_ALLCTYPE,    // 6, only for the Global structure
   NON_ALLOC_TYPE     // non type
 };
 
@@ -101,7 +102,8 @@ public:
    * 
    * More explanation
    * 
-   * 1) this function is only used to commit space on reserved space.
+   * 1) this function is only used to COMMIT space directly.
+   *    There is no need to commit space on reserved space. But reserve sapce first is more safe.
    * 2) the new operation first, invoke this override function to allocate space
    *    second, it invokes the constructor to do initialization.
    *    BUT the return value of operator new, has to be void*.
@@ -367,9 +369,6 @@ public:
                                                                 (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
 
         break;
-
-
-
 
 
       case NON_ALLOC_TYPE :
