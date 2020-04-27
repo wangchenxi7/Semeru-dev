@@ -122,6 +122,9 @@ class SemeruHeapRegion;
 
 
 
+
+
+
 class CPUToMemoryAtInit : public CHeapRDMAObj< CPUToMemoryAtInit, CPU_TO_MEM_AT_INIT_ALLOCTYPE>{
 
 public:
@@ -173,6 +176,7 @@ public:
   //
   // [x] Only allocate && initialize this queue in Semeru heap.
   TargetObjQueue* _target_obj_queue;
+
 
 
   // functions
@@ -270,14 +274,27 @@ public:
   // [?] in Semeru MS, we only need to know this value, but no need to set it?
   HeapWord* _pre_dummy_top;   
 
+  // Cross Region reference update queue
+  HashQueue* _cross_region_ref_update_queue; 
+
 
   SyncBetweenMemoryAndCPU(uint hrm_index, G1SemeruBlockOffsetTable* bot, SemeruHeapRegion* gsp) :
   _top(NULL),       // set in intialization
   _bot_part(bot,gsp), 
-  _pre_dummy_top(NULL)
-  {}
+  _pre_dummy_top(NULL),
+  _cross_region_ref_update_queue(NULL)
+  { }
 
 };
+
+
+
+
+
+
+
+
+
 
 
 
@@ -685,6 +702,7 @@ public:
   //
 
   void allocate_init_target_oop_queue(uint hrm_index);
+  void allocate_init_cross_region_ref_update_queue(uint hrm_index);
 
   static int    SemeruLogOfHRGrainBytes;
   static int    SemeruLogOfHRGrainWords;
@@ -866,6 +884,10 @@ public:
 
   TargetObjQueue* target_obj_queue() const {
     return _cpu_to_mem_gc->_target_obj_queue;
+  }
+
+  HashQueue* cross_region_ref_update_queue() const{
+    return _sync_mem_cpu->_cross_region_ref_update_queue;
   }
 
   // Change this code to  check if a Region is in Memory Server CSet.

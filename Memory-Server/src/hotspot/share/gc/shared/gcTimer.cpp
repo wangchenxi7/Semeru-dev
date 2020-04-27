@@ -128,9 +128,16 @@ void TimePartitions::clear() {
   _longest_pause = Tickspan();
 }
 
+/**
+ * Semeru MS : The concurrent GC thread can contiguous run infinitely.
+ *  
+ */
 void TimePartitions::report_gc_phase_start(const char* name, const Ticks& time, GCPhase::PhaseType type) {
-  assert(_phases->length() <= 1000, "Too many recored phases?");
-
+  //assert(_phases->length() <= 1000, "Too many recored phases?");
+  if(_phases->length()%1000 == 0){
+    log_debug(semeru,mem_trace)("%s, Executed %d times. Too many recored phases? ", __func__, _phases->length());
+  }
+  
   int level = _active_phases.count();
 
   GCPhase phase;

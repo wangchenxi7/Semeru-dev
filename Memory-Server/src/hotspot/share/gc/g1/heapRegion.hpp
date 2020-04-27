@@ -415,8 +415,6 @@ class HeapRegion: public G1ContiguousSpace {
                             bool mangle_space = SpaceDecorator::Mangle);
 
 
-  void allocate_init_target_oop_queue(uint hrm_index);
-
   static int    LogOfHRGrainBytes;
   static int    LogOfHRGrainWords;
 

@@ -588,11 +588,34 @@ inline void G1SemeruCMTask::trim_target_object_queue_to_threshold(TargetObjQueue
 	// Drain the overflow stack first, so other threads can potentially steal.
 	while (target_obj_queue->pop_overflow(ref)) {
 		if (!target_obj_queue->try_push_to_taskqueue(ref)) {
+
+      log_debug(semeru,mem_trace)("ERROR in %s, Used the overflow queue.", __func__);
+      // // Enqueue the makred object into SemeruHeapRegion->_cross_region_ref_update_queue
+      // // [X] It's target_obj_queue's purpose to do de-duplication.
+      // oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+      // if(obj != NULL){
+      //   _curr_region->cross_region_ref_update_queue()->push(obj, NULL);
+      // }
+
 			dispatch_reference(ref);
-		}
+		}// failed to push into normal taskque
 	}
 
 	while (target_obj_queue->pop_local(ref, threshold)) {  // process all the content length than threshold.
+
+    // Enqueue the makred object into SemeruHeapRegion->_cross_region_ref_update_queue
+    // [X] It's target_obj_queue's purpose to do de-duplication.
+    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+    if(obj != NULL){
+
+      // debug
+      if(_curr_region->is_in(obj) == false){
+        log_debug(semeru,mem_compact)("%s, fidn a wrong obj 0x%lx, which is not current Region [0x%lx]", __func__, (size_t)obj, (size_t)_curr_region->hrm_index() );
+        continue;
+      }
+      _curr_region->cross_region_ref_update_queue()->push(obj, NULL);
+    }
+
 		dispatch_reference(ref);
 	}
 }
@@ -606,7 +629,6 @@ inline void G1SemeruCMTask::dispatch_reference(StarTask ref) {
 
 	if (ref.is_narrow()) {
 		//deal_with_reference((narrowOop*)ref);
-
     assert(false, "%s, Not support narrow oop ye \n",__func__);
 
 	} else {

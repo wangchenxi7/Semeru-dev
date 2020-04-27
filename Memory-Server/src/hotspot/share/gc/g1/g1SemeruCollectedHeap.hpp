@@ -239,6 +239,7 @@ public:
   rdma_padding* _debug_rdma_padding_flag_variable;
   rdma_padding* _debug_rdma_padding_target_obj_queue;
   rdma_padding* _debug_rdma_padding_alive_bitmap;
+  rdma_padding* _debug_rdma_padding_cross_region_ref_update_queue;
 
 
 private:

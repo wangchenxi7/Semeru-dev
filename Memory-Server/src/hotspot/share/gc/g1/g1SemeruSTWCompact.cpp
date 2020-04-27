@@ -341,12 +341,25 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					// This has to be finished bofore data copy, which may overwrite the original alive objects and their forwarding pointer.
 					phase2_adjust_intra_region_pointer(region_to_evacuate);
 
+					// Phase#2.1
+					// Record the new address for the objects in target_obj_queue
+					// Only these objects are cross-region referenced. 
+					// Their new addr is stored in the markOop for now.
+					record_new_addr_for_target_obj(region_to_evacuate);
+
+	
 
 					// Phase#3 Do the compaction
 					// Multiple worker threads do this parallelly
 					phase3_compact_region(region_to_evacuate);
 
-					// Phase#4 Inter-Region reference fields update.
+
+						// Phase#4 Inter-Region reference fields update.
+					// Should adjust the inter-region reference before do the compaction.
+					// 1) The target Region is in Memory Server CSet
+					// 2) The target Region is in Another Server(CPU server, or another Memory server)
+
+					
 
 					log_debug(semeru,mem_compact)("%s, Evacuation for Region[0x%lx] is done.", __func__, (size_t)region_to_evacuate->hrm_index() );
 				}
@@ -464,6 +477,48 @@ void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion
 
 
 
+
+/**
+ * Record the new address for the objects stored in Target_obj_queue.
+ * Assumption
+ * 	1) We are in a STW mode now. So no new cross-region reference will be added for this Region.
+ *  2) Invoke this function after calculate and put the new addr in the alive objects header, markOop.
+ *  	 After evacuation, the alive ojbects maybe override, and we get its new address.
+ *  3) The Target_obj_queue is drained. 
+ * 		 And all popped the objects are inserted into the _cross_region_ref_update_queue during its CM tracing procedure.
+ * 			e.g. in function 
+ * 
+ */
+void G1SemeruSTWCompactTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr){
+
+	log_debug(semeru, mem_compact)("%s, Store new address for the objects in Target_obj_queue of Region[0x%lx] , worker [0x%x] ", 
+																																								__func__, (size_t)hr->hrm_index(), this->_worker_id);
+	
+	HashQueue* cross_region_ref_ptr = hr->cross_region_ref_update_queue();
+	cross_region_ref_ptr->organize(); // sort and de-duplicate
+
+	size_t len = cross_region_ref_ptr->length(); // new length.
+	size_t i;
+	ElemPair* elem_ptr;
+	oop new_addr;
+
+	for( i =0; i< len; i++){
+		elem_ptr = cross_region_ref_ptr->retrieve_item(i);
+		//assert(elem_ptr->from != NULL, "enqueued an empty target obj");
+		// Debug
+		if(elem_ptr->from == NULL){
+			log_debug(semeru,mem_compact)("%s, get a NULL item[0x%lx] wrongly.", __func__, i);
+			continue;
+		}
+
+		new_addr = elem_ptr->from->forwardee();
+		elem_ptr->to = new_addr;
+		
+		//debug
+		log_trace(semeru,mem_compact)("%s, store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, i, (size_t)elem_ptr->from, (size_t)new_addr );
+	}// end of for
+
+}
 
 /**
  *  Phase#3 : Do a compaction for a single Region.

@@ -12,7 +12,7 @@
 #include "utilities/globalDefinitions.hpp"
 #include "memory/allocation.inline.hpp"
 #include "gc/shared/taskqueue.inline.hpp"
-
+#include "utilities/quickSort.hpp"
 
 
 #define RDMA_STRUCTURE_ALIGNMENT			16
@@ -33,8 +33,9 @@ enum CHeapAllocType {
   SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE,  // 3
   METADATA_SPACE_ALLOCTYPE,       // 4
 
-  ALLOC_TARGET_OBJ_QUEUE,         // 5,
-  BLOCK_OFFSET_TABLE_ALLCTYPE,    // 6, only for the Global structure
+  START_OF_QUEUE_WITH_REGION_INDEX,         // a holder to separate instance allocation and queue allocation.
+  ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE,         // 6,
+  CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE,  // 7, 
   NON_ALLOC_TYPE     // non type
 };
 
@@ -128,7 +129,9 @@ public:
   * new object instance #2.
   * Allocate object instances based on Alloc_type and index.
   * 
-  * [X] Each object instance should be equal here.
+  * 1) Each object instance should be equal here.
+  * 2) Commit the whole space at first allocation.
+  *    And then bump the pointer, CHeapRDMAObj<ClassType E, AllocType>::_alloc_ptr for each allocation.
   * 
   */
   ALWAYSINLINE void* operator new(size_t instance_size, size_t index ) throw() {
@@ -323,9 +326,6 @@ public:
 
 
 
-
-
-
       case METADATA_SPACE_ALLOCTYPE :
         // 1) commit all the reserved space for easy debuging
         //    First time entering the zone.
@@ -336,7 +336,7 @@ public:
           if( (char*)commit_at(KLASS_INSTANCE_OFFSET_SIZE_LIMIT, mtGC, requested_addr) ==  requested_addr ){
 
             log_debug(semeru, alloc)("Commit the start area to 0x%lx for METADATA_SPACE_ALLOCTYPE , size 0x%lx .", 
-                                                                (size_t)requested_addr, (size_t)SYNC_MEMORY_AND_CPU_SIZE_LIMIT);
+                                                                (size_t)requested_addr, (size_t)KLASS_INSTANCE_OFFSET_SIZE_LIMIT);
 
             old_val = CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr;  // NULL
             ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr), old_val);
@@ -353,12 +353,12 @@ public:
         // 2) this type space is already committed.
         //    Just return a start address back to caller && adjust the pointer value.
         requested_addr = CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr;
-        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + SYNC_MEMORY_AND_CPU_OFFSET + SYNC_MEMORY_AND_CPU_SIZE_LIMIT), 
+        assert((size_t)(requested_addr + commit_size) < (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT), 
                                                         "%s, Exceed the METADATA_SPACE_ALLOCTYPE's space range. \n", __func__ );
 
         // Before bump the alloc pointer.
         // Assume the the instance size are all the same for all the type under METADATA_SPACE_ALLOCTYPE
-        // assert( (size_t)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr,
+        // assert( (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + index * commit_size) == (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr,
         //     " Each element size of type  METADATA_SPACE_ALLOCTYPE should be equal.");
 
         // bump the pointer
@@ -369,6 +369,8 @@ public:
                                                                 (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
 
         break;
+
+
 
 
       case NON_ALLOC_TYPE :
@@ -411,7 +413,9 @@ public:
    * MT Safe :
    *  Make this allocation Multiple-Thread safe ?
    *  
-   * 
+   * Warning : For object array, the ClassType E, is the object array's type, 
+   *  e.g. For Target Object Queue, it should be StarTask
+   *       For Cross Region Ref Update Queue, it should be ElemPair.
    */
   ALWAYSINLINE void* operator new(size_t instance_size, size_t element_length, size_t index ) throw() {
     // Calculate the queue's entire size, 4KB alignment
@@ -422,7 +426,7 @@ public:
     char* ret;
     switch(Alloc_type)  // based on the instantiation of Template
     {
-      case ALLOC_TARGET_OBJ_QUEUE :
+      case ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE :
         requested_addr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + index * commit_size) ;
 
         assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET +TARGET_OBJ_SIZE_BYTE), 
@@ -430,11 +434,31 @@ public:
         
         // [?] How to handle the failure ?
         //     The _alloc_ptr is useless here.
-        old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr;
-        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE>::_alloc_ptr), old_val);
+        old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr;
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
         assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
         
         break;
+
+
+
+    case CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE :
+        requested_addr = (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + index * commit_size) ;
+
+        assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET +CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT), 
+                                                        "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
+        
+        // [?] How to handle the failure ?
+        //     The _alloc_ptr is useless here.
+        old_val = CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr;
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
+        assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+        
+        break;
+
+
+
+
 
       case NON_ALLOC_TYPE :
           //debug
@@ -806,22 +830,6 @@ private:
 
 
 
-/**
- * Semeru 
- *  
- *  CPU Server  - Producer 
- *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
- *     First, from thread stack variables. This is done during CPU server GC.
- *     Second, Cross-Region references recoreded by the Post Write Barrier ?
- *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
- *  
- *  Memory Server - Consumer 
- *     Receive the TargetObjQueue and use them as the scavenge roots.
- * 
- */
- typedef OverflowTargetObjQueue<StarTask, ALLOC_TARGET_OBJ_QUEUE>        TargetObjQueue;     // Override the typedef of OopTaskQueue
- //typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
-
 
 
 
@@ -948,6 +956,200 @@ public :
 
 
 
+
+
+
+/**
+ * Record the new address for the objects in Target Object Queue.
+ *  <key : old addr, value : new addr >
+ * 
+ *  a. Can't distinguish where is the source for the Target Object Queue
+ *     So, have to broadcast the HashQueue to all the other servers. 
+ * 
+ * b. The object array type, is struct ElemPair.
+ * 
+ * [?] Can we merge this queue with Target Object Queue to save some space ??
+ * 
+ */
+  struct ElemPair{
+    oop from;     // 8 bytes
+    oop to;       // 8 bytes
+  };
+
+class HashQueue : public CHeapRDMAObj<struct ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE> {
+
+public:
+
+  static int compare_elempair(const ElemPair a, const ElemPair b) {
+    if ((unsigned long long)a.from > (unsigned long long)b.from) {
+      return 1;
+    } else if ((unsigned long long)a.from == (unsigned long long)b.from) {
+      return 0;
+    } else {
+      return -1;
+    }
+  }
+
+private:
+
+  size_t _tot;
+  volatile size_t _length;
+  //Mutex _m; // abandoned.
+  size_t _region_index;
+
+  ElemPair* _queue; // Flexible array, must be the last field. length limitation : CROSS_REGION_REF_UPDATE_Q_LEN.
+
+public:
+  HashQueue(){
+
+  }
+
+  ~HashQueue(){clear();}
+
+  void reset() {
+    _length = 0;
+  }
+
+  // invoke the initialization function explicitly 
+  void initialize(size_t region_index) {
+    _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
+    _length = 0; // bump pointer
+    _region_index = region_index;
+    _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
+
+    log_debug(semeru,alloc)("%s, Cross region refernce update queue, 0x%lx,  _queue 0x%lx , length 0x%lx", __func__, (size_t)this, (size_t)_queue, (size_t)_tot);
+  }
+
+  void clear() {
+    if(_queue != NULL){
+      ArrayAllocator<ElemPair>::free(_queue, _tot);
+      _queue = NULL;
+      _tot = _length = 0;
+    }
+  }
+
+  void push(oop x, oop y) {
+    
+    //int i;
+    size_t new_value;
+    size_t old_value;
+   // MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+    
+    do{
+      new_value = _length + 1;
+      old_value = _length;
+    }while(Atomic::cmpxchg(new_value, &_length, old_value) != old_value);
+    
+    _queue[_length - 1].from = x;
+    _queue[_length - 1].to = y;
+
+    log_debug(semeru,mem_compact)("%s, enqueue target obj [0x%lx] <old_addr 0x%lx, new_addr 0x%lx>", __func__, _length - 1,  (size_t)x, (size_t)y);
+
+    // //mhr: debug
+    // if(_length%10000==0) {
+    //   printf("move_to_current_len: %d ", _length);
+    // }
+
+    // if(_length >= _tot) {
+    //   assert(false, "Not OK!");
+    // }
+
+    // for(i = 0; i < _length; i++) {
+    //   if((unsigned long long)_queue[i].from == (unsigned long long)(x)) {
+    //     _queue[i].to = y;
+    //     return;
+    //   }
+    // }
+    // MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+    // _queue[_length].from = x;
+    // _queue[_length].to = y;
+    // _length++;
+
+    //mhr: debug
+    if(_length%CROSS_REGION_REF_UPDATE_Q_LEN==0) {
+      tty->print("move_to_current_len: 0x%lx \n", _length);
+    }
+
+    if(_length >= _tot) {
+      assert(false, "Not OK!");
+    }
+
+  }
+
+  oop get(oop x){
+    // for(int i = 0; i < _length; i++) {
+    //   if(_queue[i].from == x) return _queue[i].to;
+    // }
+    // return NULL;
+    size_t v = (size_t)x;
+    size_t l = 0;
+    size_t r = _length - 1;
+    while(l < r) {
+      size_t mid = (l+r)/2;
+      if((size_t)_queue[mid].from < v) {
+        l = mid + 1;
+      }
+      else {
+        r = mid;
+      }
+    }
+    if((size_t)_queue[l].from == v)
+      return _queue[l].to;
+    else 
+      return NULL;
+  }
+
+  void organize(){
+    QuickSort::sort(_queue, _length, HashQueue::compare_elempair, true);
+    size_t new_length = 0;
+    for(size_t i = 0; i < _length; i ++) {
+      if(new_length == 0) {
+        new_length ++;
+        continue;
+      }
+      if(_queue[new_length - 1].from == _queue[i].from) {
+        _queue[new_length - 1].to = _queue[i].to;
+      }
+      else {
+        if(new_length != i) {
+          _queue[new_length] = _queue[i];
+        }
+        new_length ++;
+      }
+    }
+    _length = new_length;
+  }
+
+
+  size_t    length(){  return _length;  }
+  ElemPair* retrieve_item(size_t index) { 
+    assert(index < _length, "Exceed the stored length.");
+    return &_queue[index]; 
+  }
+  
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 /**
  * Semeru Memory Server
  *  
@@ -959,6 +1161,26 @@ public:
   size_t num_of_item;
   char* content[];
 };
+
+
+
+
+/**
+ * Semeru 
+ *  
+ *  CPU Server  - Producer 
+ *     CPU server builds the TargetObjQueue from 3 roots. And send the TargetQueue to Memory sever at the end of each CPU server GC.
+ *     First, from thread stack variables. This is done during CPU server GC.
+ *     Second, Cross-Region references recoreded by the Post Write Barrier ?
+ *     Third, the SATB buffer queue, recoreded by the Pre Write Barrier.
+ *  
+ *  Memory Server - Consumer 
+ *     Receive the TargetObjQueue and use them as the scavenge roots.
+ * 
+ */
+ typedef OverflowTargetObjQueue<StarTask, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>        TargetObjQueue;     // Override the typedef of OopTaskQueue
+ //typedef GenericTaskQueueSet<TargetObjQueue, mtGC>     TargetObjQueueSet;  // Assign to a global ?
+
 
 
 

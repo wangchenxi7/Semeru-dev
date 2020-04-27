@@ -882,7 +882,7 @@ private:
   G1SemeruCMOopClosure*       _semeru_cm_oop_closure; // the closure for scan a marked object
 
   // Region this task is scanning, NULL if we're not scanning any
-  SemeruHeapRegion*                 _curr_region;
+  SemeruHeapRegion*           _curr_region;
   // Local finger of this task, NULL if we're not scanning a region
   HeapWord*                   _finger;
   // Limit of the region this task is scanning, NULL if we're not scanning one

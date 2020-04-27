@@ -513,6 +513,9 @@ public:
   //     We can reuse the alive_bitmap for the compacted Region to record the objects having inter-Region references to be updated.
   void phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr);
 
+  // 
+  // Record the <old_addr, new_addr> for the objects stored in Target_obj_queue.
+  void record_new_addr_for_target_obj(SemeruHeapRegion* hr);
   
   // Phase 3,
 	void phase3_compact_region(SemeruHeapRegion* hr);  // Compact a single SemeruHeapRegion.

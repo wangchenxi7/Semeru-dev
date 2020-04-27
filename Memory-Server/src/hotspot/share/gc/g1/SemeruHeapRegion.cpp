@@ -560,6 +560,17 @@ void SemeruHeapRegion::allocate_init_target_oop_queue(uint hrm_index){
 	log_debug(semeru,alloc)("%s,Region[0x%x] target_obj_queue 0x%lx ", __func__,hrm_index, (size_t)_cpu_to_mem_gc->_target_obj_queue );
 }
 
+void SemeruHeapRegion::allocate_init_cross_region_ref_update_queue(uint hrm_index){
+  
+  // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
+  _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue();   // The instance should be allocated in RDMA Meta space.
+  _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index);
+	log_debug(semeru,alloc)("%s,Region[0x%x] cross_region_ref_update_queue [0x%lx, 0x%lx) ", __func__, 
+                                                                          hrm_index, 
+                                                                          (size_t)_sync_mem_cpu->_cross_region_ref_update_queue, 
+                                                                          (size_t)CHeapRDMAObj<ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr );
+}
+
 
 void SemeruHeapRegion::report_region_type_change(G1HeapRegionTraceType::Type to) {
   HeapRegionTracer::send_region_type_change( _cpu_to_mem_init->_hrm_index,

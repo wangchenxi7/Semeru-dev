@@ -251,14 +251,20 @@
 #define BLOCK_OFFSET_TABLE_OFFSET             (size_t)(KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)    // +3GB,  0x400,0C0,000,000
 #define BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT  (size_t)256*ONE_MB    // 1 : 512, can cover 128B heap.
 
-#define BOT_GLOBAL_STRUCT_OFFSET            (size_t)(BLOCK_OFFSET_TABLE_OFFSET + BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT)  // +3GB 4KB,  0x400,0C0,001,000
+#define BOT_GLOBAL_STRUCT_OFFSET            (size_t)(BLOCK_OFFSET_TABLE_OFFSET + BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT)  // +3GB 256MB,  0x400,0D0,000,000
 #define BOT_GLOBAL_STRUCT_SIZE_LIMIT        (size_t)(PAGE_SIZE) 
+
+// 5. Cross-Region reference update queue
+// Record the <old_addr, new_addr > for the target object queue.
+#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)   // 0x400,0D0,001,000
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(128*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 18)    // 256k per Region.
 
 
 //
 // x. End of RDMA structure commit size
 //
-#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT)
 
 
 // properties for the whole Semeru heap.
