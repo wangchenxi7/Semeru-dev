@@ -691,6 +691,10 @@ private:
 public:
   inline void do_oop(oop* p) { do_oop_work(p); }
   inline void do_oop(narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
+
 };
 
 class ShenandoahTraversalFixRootsTask : public AbstractGangTask {
@@ -771,6 +775,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 class ShenandoahTraversalWeakUpdateClosure : public OopClosure {
@@ -794,6 +801,10 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 class ShenandoahTraversalKeepAliveUpdateDegenClosure : public OopClosure {
@@ -816,6 +827,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
 };
 
 class ShenandoahTraversalSingleThreadKeepAliveUpdateClosure : public OopClosure {
@@ -839,6 +853,10 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 class ShenandoahTraversalSingleThreadKeepAliveUpdateDegenClosure : public OopClosure {
@@ -862,6 +880,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
 };
 
 class ShenandoahTraversalPrecleanTask : public AbstractGangTask {

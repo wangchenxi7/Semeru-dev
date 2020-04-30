@@ -38,9 +38,20 @@ void InstanceMirrorKlass::oop_oop_iterate_statics(oop obj, OopClosureType* closu
   T* p         = (T*)start_of_static_fields(obj);
   T* const end = p + java_lang_Class::static_oop_field_count_raw(obj);
 
-  for (; p < end; ++p) {
-    Devirtualizer::do_oop(closure, p);
-  }
+  	// Non-Semeru all fall into the Path#1.
+	// Semeru but not forwarded object alsp goes into Path#1.
+	if(!SemeruEnableMemPool || !obj->is_forwarded()){
+		// #1, the normal path
+    for (; p < end; ++p) {
+      Devirtualizer::do_oop(closure, p);
+    }
+  }else{
+    // #2, traver a forwardee object, go to the Semeru MS path.
+		// Pass the object information down to the oop iteration function.
+		for (; p < end; ++p) {
+			Devirtualizer::semeru_ms_do_oop(obj, closure, p);
+		}
+  }// end of else
 }
 
 template <typename T, class OopClosureType>

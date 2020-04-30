@@ -1042,7 +1042,7 @@ public:
     _queue[_length - 1].from = x;
     _queue[_length - 1].to = y;
 
-    log_debug(semeru,mem_compact)("%s, enqueue target obj [0x%lx] <old_addr 0x%lx, new_addr 0x%lx>", __func__, _length - 1,  (size_t)x, (size_t)y);
+    log_trace(semeru,mem_compact)("%s, enqueue target obj [0x%lx] <old_addr 0x%lx, new_addr 0x%lx>", __func__, _length - 1,  (size_t)x, (size_t)y);
 
     // //mhr: debug
     // if(_length%10000==0) {

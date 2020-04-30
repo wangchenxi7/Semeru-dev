@@ -110,6 +110,11 @@ public:
     fatal("NMethods should not have compressed oops embedded.");
   }
 
+  inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
+
+
   GrowableArray<oop*>* oops() {
     return &_oops;
   }
@@ -150,6 +155,10 @@ public:
   void do_oop(narrowOop* o) {
     do_oop_work(o);
   }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 ShenandoahCodeRoots::PaddedLock ShenandoahCodeRoots::_recorded_nms_lock;

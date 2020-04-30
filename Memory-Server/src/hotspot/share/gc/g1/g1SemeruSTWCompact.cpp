@@ -334,6 +334,9 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 					// Phase#1 Sumarize alive objects' destinazion
 					// 1) put forwarding pointer in alive object's markOop
+					//
+					// [??] Make this phase Concurrent ??
+					//
 					phase1_prepare_for_compact(region_to_evacuate);
 
 					// Phase#2 Adjust object's intra-Region feild pointer
@@ -354,10 +357,18 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					phase3_compact_region(region_to_evacuate);
 
 
-						// Phase#4 Inter-Region reference fields update.
+					// Phase#4 Inter-Region reference fields update.
 					// Should adjust the inter-region reference before do the compaction.
 					// 1) The target Region is in Memory Server CSet
 					// 2) The target Region is in Another Server(CPU server, or another Memory server)
+
+					// TO BE DONE.
+					//
+					// Synchronized with other servers, CPU server or Memory server, to get the cross-region-ref-update queue.
+					//
+
+
+					phase4_adjust_inter_region_pointer(region_to_evacuate);
 
 					
 
@@ -407,6 +418,8 @@ void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
 	G1SemeruCalculatePointersClosure semeru_ms_prepare(_semeru_sc, hr->alive_bitmap(), _cp, &_humongous_regions_removed);  
 	semeru_ms_prepare.do_heap_region(hr);
 
+	// update compaction_top to Region's top
+	_cp->update();
 }
 
 
@@ -434,15 +447,18 @@ void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
 class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
   G1SemeruSTWCompact* _semeru_sc;
   G1CMBitMap* _bitmap;
-  //uint _worker_id;
+  uint _worker_id;	// for debug
+	SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to G1SemeruSTWCompactTask->_inter_region_ref_queue
 
  public:
-  G1SemeruAdjustRegionClosure(G1SemeruSTWCompact* semeru_sc, G1CMBitMap* bitmap) :
+  G1SemeruAdjustRegionClosure(G1SemeruSTWCompact* semeru_sc, G1CMBitMap* bitmap, uint worker_id, SemeruCompactTaskQueue* inter_region_ref_queue) :
     _semeru_sc(semeru_sc),
-    _bitmap(bitmap) { }
+    _bitmap(bitmap), 
+		_worker_id(worker_id),
+		_inter_region_ref_queue(inter_region_ref_queue) { }
 
   bool do_heap_region(SemeruHeapRegion* r) {
-    G1SemeruAdjustClosure adjust_pointer(r);
+    G1SemeruAdjustClosure adjust_pointer(r, _inter_region_ref_queue); // build the closure by passing down the compact queue
     if (r->is_humongous()) {
       oop obj = oop(r->humongous_start_region()->bottom());  // get the humongous object
       obj->oop_iterate(&adjust_pointer, MemRegion(r->bottom(), r->top()));    // traverse the humongous object's fields.
@@ -470,8 +486,7 @@ void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
 
-
-	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap() );
+	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap(), _worker_id, &_inter_region_ref_queue );
 	adjust_region.do_heap_region(hr);
 }
 
@@ -544,16 +559,37 @@ void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
 	//
 	// [?]Check the compaction is not interrupped. How ?
 	//
+	
+	//check_overflow_taskqueue("At the end of phase3, copy");
 
-  // Once all objects have been moved the liveness information
-  // needs be cleared.
-  hr->alive_bitmap()->clear_region(hr);			// After compaction, clear the corresponding bitmap.0
-  hr->complete_compaction();
+
+
+
+	// clear process.
+	// 1) Restore Compaction,e.g. _compaction_top, information to normal fields, e.g. _top
+  // 2) Clear not used range.
+	hr->complete_compaction();
 }
 
 
 
+/**
+ * Update the fields points to other region.
+ * The region can be in current or other servers.
+ * 
+ * Warning. This is the old/original region, before compaction. 
+ * But the field addr stored in SemeruHeapRegion->_inter_region_ref_queue is the new address.
+ * 
+ */
+void G1SemeruSTWCompactTask::phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr){
 
+	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#4, Inter-Region reference adjustment, worker [0x%x] ", __func__, this->_worker_id);
+
+	// Check the item of G1SemeruSTWCompactTask->_inter_region_ref_queue
+	check_overflow_taskqueue("phase4 Debug");
+	
+
+}
 
 
 
@@ -793,6 +829,8 @@ size_t G1SemeruCompactRegionClosure::apply(oop obj) {
   oop(destination)->init_mark_raw();    // initialize the MarkOop.
   assert(oop(destination)->klass() != NULL, "should have a class");
 
+	log_debug(semeru,mem_compact)("Phase4,copy obj from 0x%lx to 0x%lx ", (size_t)obj_addr, (size_t)destination );
+
   return size;
 }
 
@@ -822,4 +860,52 @@ void G1SemeruSTWCompact::print_stats() {
 	}
 }
 
+
+
+// Drain the both overflow queue and taskqueue
+void G1SemeruSTWCompactTask::check_overflow_taskqueue( const char* message){
+  StarTask ref;
+  size_t count;
+  SemeruCompactTaskQueue* inter_region_ref_queue = this->inter_region_ref_taskqueue();
+
+  log_debug(semeru,mem_compact)("\n%s, start for Semeru MS CompactTask [0x%lx]", message, (size_t)worker_id() );
+
+
+  // #1 Drain the overflow queue
+  count =0;
+	while (inter_region_ref_queue->pop_overflow(ref)) {
+    oop const obj = RawAccess<>::oop_load((oop*)ref);
+		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+			 log_debug(semeru,mem_compact)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+
+		}else{
+       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
+    }
+
+    count++;
+  }
+
+
+  // #1 Drain the task queue
+  count =0;
+  while (inter_region_ref_queue->pop_local(ref, 0 /*threshold*/)) { 
+    oop const obj = RawAccess<>::oop_load((oop*)ref);
+		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+		 log_debug(semeru,mem_compact)(" ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+
+		}else{
+      log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );
+    }
+
+    count++;
+  }
+
+
+
+  assert(inter_region_ref_queue->is_empty(), "should drain the queue");
+
+  log_debug(semeru,mem_compact)("%s, End for Semeru MS CompactTask [0x%lx] \n", message, (size_t)worker_id());
+}
 

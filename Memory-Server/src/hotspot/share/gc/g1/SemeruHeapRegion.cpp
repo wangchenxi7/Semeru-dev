@@ -514,7 +514,8 @@ void SemeruHeapRegion::initialize(MemRegion mr,
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
   _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
 
-  // bitmap#2, used to record the fields with  
+  // OverflowTaskQueue, used to record the fields with  
+  //_inter_region_ref_queue =
 
   // assign the 1-sided rdma write check flag 
   G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();

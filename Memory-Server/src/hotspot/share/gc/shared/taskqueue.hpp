@@ -641,6 +641,8 @@ class StarTask {
     assert(((uintptr_t)p & COMPRESSED_OOP_MASK) == 0, "Information loss!");
     _holder = (void *)((uintptr_t)p | COMPRESSED_OOP_MASK);
   }
+
+  // Cast oop* to a StarTask
   StarTask(oop* p)       {
     assert(((uintptr_t)p & COMPRESSED_OOP_MASK) == 0, "Information loss!");
     _holder = (void*)p;
@@ -706,6 +708,8 @@ typedef GenericTaskQueueSet<OopStarTaskQueue, mtGC> OopStarTaskQueueSet;
 typedef OverflowTaskQueue<size_t, mtGC>             RegionTaskQueue;
 typedef GenericTaskQueueSet<RegionTaskQueue, mtGC>  RegionTaskQueueSet;
 
+
+typedef OverflowTaskQueue<StarTask, mtGC, TARGET_OBJ_QUEUE_SIZE>  SemeruCompactTaskQueue;
 
 
 #endif // SHARE_VM_GC_SHARED_TASKQUEUE_HPP

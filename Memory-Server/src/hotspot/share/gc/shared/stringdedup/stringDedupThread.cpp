@@ -64,6 +64,10 @@ class StringDedupSharedClosure: public OopClosure {
     oop java_string = RawAccess<>::oop_load(p);
     StringDedupTable::deduplicate(java_string, _stat);
   }
+
+  inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
 };
 
 // The CDS archive does not include the string dedupication table. Only the string

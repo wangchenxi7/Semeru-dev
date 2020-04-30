@@ -235,7 +235,7 @@ inline size_t SemeruHeapRegion::block_size(const HeapWord *addr) const {
 
 inline void SemeruHeapRegion::complete_compaction() {
 	// Reset space and bot after compaction is complete if needed.
-	reset_after_compaction();
+	reset_after_compaction();  // _top to _compaction_top.
 	if (used_region().is_empty()) {
 		reset_bot();
 	}

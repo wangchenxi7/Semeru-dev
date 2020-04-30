@@ -166,8 +166,12 @@ inline void Devirtualizer::semeru_ms_do_oop(oop obj, OopClosureType* closure, T*
 	debug_only(closure->verify(p));
 
 	semeru_ms_do_oop_no_verify(obj, closure, p);
+
 }
 
+
+// End of Semeru
+// 
 
 
 // Implementation of the non-virtual do_metadata dispatch.

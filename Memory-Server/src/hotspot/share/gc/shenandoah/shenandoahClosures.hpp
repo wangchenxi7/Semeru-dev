@@ -60,6 +60,10 @@ public:
   inline ShenandoahUpdateRefsClosure();
   inline void do_oop(oop* p);
   inline void do_oop(narrowOop* p);
+
+  inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 private:
   template <class T>
   inline void do_oop_work(T* p);

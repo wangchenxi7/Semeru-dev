@@ -62,6 +62,10 @@ public:
   virtual void do_oop(narrowOop* p) {
     ShouldNotReachHere();
   }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
 };
 
 class ZRelocateRootsTask : public ZTask {

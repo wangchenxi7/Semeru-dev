@@ -74,7 +74,9 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop o
 	T* p         = (T*)obj->obj_field_addr_raw<T>(map->offset());
 	T* const end = p + map->count();
 
-	if(obj->is_forwarded() == false ){
+	// Non-Semeru all fall into the Path#1.
+	// Semeru but not forwarded object alsp goes into Path#1.
+	if(!SemeruEnableMemPool || !obj->is_forwarded()){
 		// #1, the normal path
 		for (; p < end; ++p) {
 			Devirtualizer::do_oop(closure, p);

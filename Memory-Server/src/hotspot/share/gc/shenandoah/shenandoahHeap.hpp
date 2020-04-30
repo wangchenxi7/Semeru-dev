@@ -99,6 +99,10 @@ private:
 public:
   void do_oop(narrowOop* p);
   void do_oop(oop* p);
+
+  inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 };
 #endif
 

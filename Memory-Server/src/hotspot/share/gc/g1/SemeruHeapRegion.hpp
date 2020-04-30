@@ -589,7 +589,10 @@ public:
 
   // a oop* (&field) queue,
   // This queue is easy for updating the field value.
-  OopStarTaskQueue      *_inter_region_ref_queue;    // [??] NOT initialized yet
+  //
+  // [x] Move to G1SemeruSTWCompactTask. This can save space.
+  // 
+  //OopStarTaskQueue      *_inter_region_ref_queue;   
 
 
 

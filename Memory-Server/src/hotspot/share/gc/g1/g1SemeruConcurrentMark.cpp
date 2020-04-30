@@ -4005,3 +4005,4 @@ G1SemeruPrintRegionLivenessInfoClosure::~G1SemeruPrintRegionLivenessInfoClosure(
 												 bytes_to_mb(_total_remset_bytes),
 												 bytes_to_mb(_total_strong_code_roots_bytes));
 }
+

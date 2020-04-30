@@ -68,6 +68,8 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
 };
 
 ShenandoahMarkRefsSuperClosure::ShenandoahMarkRefsSuperClosure(ShenandoahObjToScanQueue* q, ReferenceProcessor* rp) :
@@ -518,6 +520,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+  inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 };
 
 class ShenandoahCMKeepAliveUpdateClosure : public OopClosure {
@@ -539,6 +544,10 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 };
 
 class ShenandoahWeakUpdateClosure : public OopClosure {
@@ -556,6 +565,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 class ShenandoahWeakAssertNotForwardedClosure : public OopClosure {
@@ -574,6 +586,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
 };
 
 class ShenandoahRefProcTaskProxy : public AbstractGangTask {
@@ -768,6 +783,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
 };
 
 class ShenandoahPrecleanTask : public AbstractGangTask {

@@ -31,6 +31,8 @@ class ZLoadBarrierOopClosure : public BasicOopIterateClosure {
 public:
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 
 #ifdef ASSERT
   virtual bool should_verify_oops() {
@@ -43,6 +45,9 @@ class ZNMethodOopClosure : public OopClosure {
 public:
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 };
 
 template <bool finalizable>
@@ -52,6 +57,9 @@ public:
 
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 
   virtual void do_klass(Klass* k);
   virtual void do_cld(ClassLoaderData* cld);
@@ -72,18 +80,25 @@ class ZPhantomKeepAliveOopClosure : public ZRootsIteratorClosure {
 public:
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 };
 
 class ZPhantomCleanOopClosure : public ZRootsIteratorClosure {
 public:
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 };
 
 class ZVerifyOopClosure : public ZRootsIteratorClosure, public BasicOopIterateClosure {
 public:
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 
   virtual ReferenceIterationMode reference_iteration_mode() {
     return DO_FIELDS;

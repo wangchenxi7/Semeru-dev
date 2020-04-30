@@ -40,9 +40,18 @@ void ObjArrayKlass::oop_oop_iterate_elements(objArrayOop a, OopClosureType* clos
 	T* p         = (T*)a->base_raw();
 	T* const end = p + a->length();
 
-	for (;p < end; p++) {
-		Devirtualizer::do_oop(closure, p);
+  if(!SemeruEnableMemPool || !a->is_forwarded()){
+    // Path#1. normal path. e.g. tracing.	
+		for (;p < end; p++) {
+			Devirtualizer::do_oop(closure, p);
+		}
+	}else{
+		// Path#2, Semeru MS compact.
+		for (;p < end; p++) {
+    	Devirtualizer::semeru_ms_do_oop((oop)a, closure, p);  // We only needs its start addr. And don't care it's a oop or objArrayOop.
+		}
 	}
+
 }
 
 template <typename T, class OopClosureType>
@@ -62,9 +71,19 @@ void ObjArrayKlass::oop_oop_iterate_elements_bounded(
 		end = h;
 	}
 
-	for (;p < end; ++p) {
-		Devirtualizer::do_oop(closure, p);
+	if(!SemeruEnableMemPool || !a->is_forwarded()){
+  // Path#1. normal path. e.g. tracing.	
+		for (;p < end; ++p) {
+			Devirtualizer::do_oop(closure, p);
+		}
+	}else{
+		// Path#2, Semeru MS compact.
+		for (;p < end; p++) {
+    	Devirtualizer::semeru_ms_do_oop((oop)a, closure, p);  // We only needs its start addr. And don't care it's a oop or objArrayOop.
+		}
 	}
+
+
 }
 
 template <typename T, typename OopClosureType>

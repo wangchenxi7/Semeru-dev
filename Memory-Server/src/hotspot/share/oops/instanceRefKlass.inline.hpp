@@ -41,16 +41,32 @@ template <typename T, class OopClosureType, class Contains>
 void InstanceRefKlass::do_referent(oop obj, OopClosureType* closure, Contains& contains) {
   T* referent_addr = (T*)java_lang_ref_Reference::referent_addr_raw(obj);
   if (contains(referent_addr)) {
-    Devirtualizer::do_oop(closure, referent_addr);
-  }
+
+    if(!SemeruEnableMemPool || !obj->is_forwarded()){
+      // Path#1. normal path. e.g. tracing.
+      Devirtualizer::do_oop(closure, referent_addr);
+    }else{
+      // Path#2, Semeru MS compact.
+      Devirtualizer::semeru_ms_do_oop(obj, closure, referent_addr);
+    }
+  
+  }// end of contains
 }
 
 template <typename T, class OopClosureType, class Contains>
 void InstanceRefKlass::do_discovered(oop obj, OopClosureType* closure, Contains& contains) {
   T* discovered_addr = (T*)java_lang_ref_Reference::discovered_addr_raw(obj);
   if (contains(discovered_addr)) {
-    Devirtualizer::do_oop(closure, discovered_addr);
-  }
+    
+    if(!SemeruEnableMemPool || !obj->is_forwarded()){
+      // Path#1. normal path. e.g. tracing.
+      Devirtualizer::do_oop(closure, discovered_addr);
+    }else{
+      // Path#2, Semeru MS compact.
+      Devirtualizer::semeru_ms_do_oop(obj, closure, discovered_addr);
+    }
+
+  }// end of contains
 }
 
 static inline oop load_referent(oop obj, ReferenceType type) {

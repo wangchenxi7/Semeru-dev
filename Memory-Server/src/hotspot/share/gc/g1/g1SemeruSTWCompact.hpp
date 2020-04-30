@@ -463,6 +463,8 @@ class G1SemeruSTWCompactTask : public AbstractGangTask {
   friend class G1SemeruPrepareCompactLiveClosure;
 
   // Phase#2 Pointer adjustment
+  friend class G1SemeruAdjustClosure;  // How to let this class's function to access fields of class G1SemeruSTWCompactTask ?
+  friend class G1SemeruAdjustLiveClosure;
 
   // phase#3 Compaction
   friend class G1SemeruCompactRegionClosure;
@@ -479,6 +481,10 @@ class G1SemeruSTWCompactTask : public AbstractGangTask {
   // Pass these statistic data to them.
   uint _humongous_regions_removed;
 
+  // At least as length as target object queue.
+  // Need to be initialized.  
+  SemeruCompactTaskQueue  _inter_region_ref_queue;
+
 public:
 
 	// Constructor 
@@ -487,12 +493,21 @@ public:
       _semeru_sc(semeru_sc),
       _worker_id(0),
       _cp(NULL),
-      _humongous_regions_removed(0) { }
+      _humongous_regions_removed(0) 
+  {
+
+    // do some initialization
+
+    // Allocate sapce for its real content, GenericTaskQueue->_elems
+    _inter_region_ref_queue.initialize();
+
+  }
 
 
 
 	// Deconstructor
 	~G1SemeruSTWCompactTask() { }
+
 
   // [x] The entry point of current Worker.
   //     This is executed by G1SemeruSTWCompact::semeru_stw_compact in a synchronized way.
@@ -522,10 +537,17 @@ public:
 
   // Phase 4,
   // Need to share data between CPU server and other Memory servers.
-	int phase4_inter_region_pointer();		// Inter-Region fields update ? Intra-Region reference is done during compaction.
+	void phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr);	// Inter-Region fields update ? Intra-Region reference is done during compaction.
 
 
-  
+  SemeruCompactTaskQueue* inter_region_ref_taskqueue()  { return &_inter_region_ref_queue;  }
+
+  uint worker_id()  { return _worker_id; }
+
+  //
+  // Debug functions.
+  //
+  void check_overflow_taskqueue( const char* message);
 
 
 
@@ -606,12 +628,25 @@ public:
  */
 class G1SemeruAdjustClosure : public BasicOopIterateClosure {
   SemeruHeapRegion* _curr_region;   // Current compacting Region.
+  SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to the G1SemeruSTWCompactTask->_inter_region_ref_queue
 
   template <class T> static inline void adjust_intra_region_pointer(T* p, SemeruHeapRegion* hr);
+
+  // Used for Semeru Memory Server Compaction.
+  // This is a static function
+  template <class T> static inline void semeru_ms_adjust_intra_region_pointer(oop obj, T* p, SemeruHeapRegion* hr, SemeruCompactTaskQueue* inter_region_ref_queue);
+
 public:
-  G1SemeruAdjustClosure(SemeruHeapRegion* curr_region) : _curr_region(curr_region) { }
+  G1SemeruAdjustClosure(SemeruHeapRegion* curr_region, SemeruCompactTaskQueue* inter_region_ref_queue) : 
+  _curr_region(curr_region),
+  _inter_region_ref_queue(inter_region_ref_queue) { }
 
   template <class T> void do_oop_work(T* p) { adjust_intra_region_pointer(p , _curr_region); }
+
+  // Used for Semeru Memory Server Compaction.
+  // Pass in the object information containing the field p.
+  template <class T> void semeru_ms_do_oop_work(oop obj, T* p) { semeru_ms_adjust_intra_region_pointer(obj, p , _curr_region, _inter_region_ref_queue); }
+
 
 
   virtual void do_oop(oop* p);

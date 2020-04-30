@@ -219,6 +219,10 @@ public:
   void do_oop(narrowOop* o) {
     ShouldNotCallThis();
   }
+
+  inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
 };
 
 VerifyQueueClosure::VerifyQueueClosure() :
