@@ -69,6 +69,9 @@ template <typename T>
 inline void MarkAndPushClosure::do_oop_work(T* p)            { MarkSweep::mark_and_push(p); }
 inline void MarkAndPushClosure::do_oop(oop* p)               { do_oop_work(p); }
 inline void MarkAndPushClosure::do_oop(narrowOop* p)         { do_oop_work(p); }
+inline void MarkAndPushClosure::semeru_ms_do_oop(oop obj, oop* p)               { do_oop_work(p); }
+inline void MarkAndPushClosure::semeru_ms_do_oop(oop obj, narrowOop* p)               { do_oop_work(p); }
+
 inline void MarkAndPushClosure::do_klass(Klass* k)           { MarkSweep::follow_klass(k); }
 inline void MarkAndPushClosure::do_cld(ClassLoaderData* cld) { MarkSweep::follow_cld(cld); }
 
@@ -98,6 +101,15 @@ template <typename T>
 void AdjustPointerClosure::do_oop_work(T* p)           { MarkSweep::adjust_pointer(p); }
 inline void AdjustPointerClosure::do_oop(oop* p)       { do_oop_work(p); }
 inline void AdjustPointerClosure::do_oop(narrowOop* p) { do_oop_work(p); }
+inline void AdjustPointerClosure::semeru_ms_do_oop(oop obj, oop* p){
+  log_debug(semeru,mem_compact)("Warning in %s, invoked out out Semeru MS compact.",__func__);
+  do_oop_work(p);
+}
+inline void AdjustPointerClosure::semeru_ms_do_oop(oop obj, narrowOop* p){
+  log_debug(semeru,mem_compact)("Warning in %s, invoked out out Semeru MS compact.",__func__);
+  do_oop_work(p);
+}
+
 
 
 inline int MarkSweep::adjust_pointers(oop obj) {

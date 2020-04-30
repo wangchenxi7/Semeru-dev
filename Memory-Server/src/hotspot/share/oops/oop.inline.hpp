@@ -374,7 +374,12 @@ bool oopDesc::is_forwarded() const {
 	return mark_raw()->is_marked();
 }
 
-// Used by scavengers
+/**
+ * Store the new addr, p, into current object's markOop field.
+ * 
+ * Used by scavengers
+ *
+ */ 
 void oopDesc::forward_to(oop p) {
 	assert(check_obj_alignment(p),
 				 "forwarding to something not aligned");
@@ -383,7 +388,7 @@ void oopDesc::forward_to(oop p) {
 	assert(!is_archived_object(oop(this)) &&
 				 !is_archived_object(p),
 				 "forwarding archive object");
-	markOop m = markOopDesc::encode_pointer_as_mark(p);
+	markOop m = markOopDesc::encode_pointer_as_mark(p);  // Build the encoded markOop value based on new_addr p.
 	assert(m->decode_pointer() == p, "encoding must be reversable");
 	set_mark_raw(m);
 }
@@ -463,7 +468,7 @@ void oopDesc::oop_iterate(OopClosureType* cl, MemRegion mr) {
 /**
  * Tag : abstract of oop fields iterate with return the oop size
  * 	
- * [?] Klass information share between CPU server and Memory server.	
+ * [x] Klass information share between CPU server and Memory server.	
  * 
  */
 template <typename OopClosureType>

@@ -167,6 +167,10 @@ protected:
     KeepAliveClosure(ScanWeakRefClosure* cl);
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
+
+    virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+    virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
   };
 
   class FastKeepAliveClosure: public KeepAliveClosure {
@@ -177,6 +181,9 @@ protected:
     FastKeepAliveClosure(DefNewGeneration* g, ScanWeakRefClosure* cl);
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
+
+    virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+    virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
   };
 
   class FastEvacuateFollowersClosure: public VoidClosure {

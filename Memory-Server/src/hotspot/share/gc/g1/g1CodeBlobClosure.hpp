@@ -45,6 +45,10 @@ class G1CodeBlobClosure : public CodeBlobClosure {
     void do_oop(oop* o);
     void do_oop(narrowOop* o);
 
+
+    inline void semeru_ms_do_oop(oop obj, oop* o) { do_oop(o);  }
+    inline void semeru_ms_do_oop(oop obj,narrowOop* o) { do_oop(o);  }
+
     void set_nm(nmethod* nm) {
       _nm = nm;
     }

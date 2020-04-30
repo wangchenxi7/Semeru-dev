@@ -1305,6 +1305,10 @@ class JNILocalsDumper : public OopClosure {
   void set_frame_number(int n) { _frame_num = n; }
   void do_oop(oop* obj_p);
   void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+
+  inline void semeru_ms_do_oop(oop obj, oop* obj_p)  { do_oop(obj_p);  }
+  inline void semeru_ms_do_oop(oop obj, narrowOop* obj_p) { ShouldNotReachHere(); }
+
 };
 
 
@@ -1333,6 +1337,9 @@ class JNIGlobalsDumper : public OopClosure {
   }
   void do_oop(oop* obj_p);
   void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+
+  inline void semeru_ms_do_oop(oop obj, oop* obj_p)  { do_oop(obj_p);  }
+  inline void semeru_ms_do_oop(oop obj, narrowOop* obj_p) { ShouldNotReachHere(); }
 };
 
 void JNIGlobalsDumper::do_oop(oop* obj_p) {
@@ -1365,6 +1372,10 @@ class MonitorUsedDumper : public OopClosure {
     writer()->write_objectID(*obj_p);
   }
   void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+
+  inline void semeru_ms_do_oop(oop obj, oop* obj_p)  { do_oop(obj_p);  }
+  inline void semeru_ms_do_oop(oop obj, narrowOop* obj_p) { ShouldNotReachHere(); }
+
 };
 
 

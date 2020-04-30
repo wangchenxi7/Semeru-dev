@@ -2493,6 +2493,9 @@ class VerifyAllOopsClosure: public BasicOopIterateClosure {
 
   virtual void do_oop(oop* p)       { VerifyAllOopsClosure::do_oop_work(p); }
   virtual void do_oop(narrowOop* p) { VerifyAllOopsClosure::do_oop_work(p); }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
 };
 
 void CompactibleFreeListSpace::verify() const {

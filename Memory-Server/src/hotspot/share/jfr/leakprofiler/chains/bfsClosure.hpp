@@ -68,6 +68,9 @@ class BFSClosure : public BasicOopIterateClosure {
 
   virtual void do_oop(oop* ref);
   virtual void do_oop(narrowOop* ref);
+  virtual void semeru_ms_do_oop(oop obj, oop* ref);
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* ref);
+
 };
 
 #endif // SHARE_VM_JFR_LEAKPROFILER_CHAINS_BFSCLOSURE_HPP

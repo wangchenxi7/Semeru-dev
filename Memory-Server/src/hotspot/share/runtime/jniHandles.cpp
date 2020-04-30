@@ -315,6 +315,12 @@ public:
     guarantee(oopDesc::is_oop_or_null(RawAccess<>::oop_load(root)), "Invalid oop");
   }
   virtual void do_oop(narrowOop* root) { ShouldNotReachHere(); }
+
+  virtual void semeru_ms_do_oop(oop obj, oop* root) {
+    guarantee(oopDesc::is_oop_or_null(RawAccess<>::oop_load(root)), "Invalid oop");
+  }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* root) { ShouldNotReachHere(); }
+
 };
 
 void JNIHandles::verify() {
@@ -601,6 +607,10 @@ public:
   CountJNIHandleClosure(): _count(0) {}
   virtual void do_oop(oop* ooph) { _count++; }
   virtual void do_oop(narrowOop* unused) { ShouldNotReachHere(); }
+
+  virtual void semeru_ms_do_oop(oop obj, oop* ooph) { _count++; }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
   int count() { return _count; }
 };
 

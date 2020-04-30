@@ -248,6 +248,18 @@ class VerifyContainsOopClosure : public OopClosure {
     ShouldNotReachHere();
   }
 
+  void semeru_ms_do_oop(oop obj, oop* p) {
+    if (p != NULL && oopDesc::equals(NativeAccess<AS_NO_KEEPALIVE>::oop_load(p), _target)) {
+      _found = true;
+    }
+  }
+
+  void semeru_ms_do_oop(oop obj, narrowOop* p) {
+    // The ChunkedHandleList should not contain any narrowOop
+    ShouldNotReachHere();
+  }
+
+
   bool found() const {
     return _found;
   }

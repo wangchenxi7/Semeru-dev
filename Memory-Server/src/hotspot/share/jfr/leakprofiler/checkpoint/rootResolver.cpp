@@ -66,6 +66,10 @@ class ReferenceLocateClosure : public OopClosure {
   virtual void do_oop(oop* ref);
   virtual void do_oop(narrowOop* ref);
 
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
+
   bool complete() const {
     return _complete;
   }

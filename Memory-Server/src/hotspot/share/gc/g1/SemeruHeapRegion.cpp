@@ -510,9 +510,11 @@ void SemeruHeapRegion::initialize(MemRegion mr,
   reset_bot();
 
 
-  // Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
+  // bitmap#1, Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
   _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
+
+  // bitmap#2, used to record the fields with  
 
   // assign the 1-sided rdma write check flag 
   G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
@@ -697,6 +699,9 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* p)       { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, oop* p)       { do_oop_work(p); }
+
 
   bool failures()           { return _failures; }
   bool has_oops_in_region() { return _has_oops_in_region; }
@@ -862,6 +867,9 @@ public:
   SemeruVerifyLiveClosure(G1SemeruCollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
   virtual void do_oop(narrowOop* p) { do_oop_work(p); }
   virtual void do_oop(oop* p) { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj, oop* p)  { do_oop_work(p); }
+
 
   template <class T>
   void do_oop_work(T* p) {
@@ -919,6 +927,9 @@ public:
   SemeruVerifyRemSetClosure(G1SemeruCollectedHeap* g1h, VerifyOption vo) : G1VerificationClosure(g1h, vo) {}
   virtual void do_oop(narrowOop* p) { do_oop_work(p); }
   virtual void do_oop(oop* p) { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj, oop* p) { do_oop_work(p); }
+
 
   template <class T>
   void do_oop_work(T* p) {
@@ -998,6 +1009,9 @@ public:
   }
   virtual inline void do_oop(oop* p) { do_oop_work(p); }
   virtual inline void do_oop(narrowOop* p) { do_oop_work(p); }
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) { do_oop_work(p); }
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+
 
   // This closure provides its own oop verification code.
   debug_only(virtual bool should_verify_oops() { return false; })
@@ -1199,3 +1213,61 @@ void SemeruHeapRegion::prepare_for_compaction(CompactPoint* cp) {
   // Not used for G1 anymore, but pure virtual in Space.
   ShouldNotReachHere();
 }
+
+
+
+
+// Drain the both overflow queue and taskqueue
+void SemeruHeapRegion::check_target_obj_queue( const char* message){
+  StarTask ref;
+  size_t count;
+  TargetObjQueue* target_obj_queue = this->target_obj_queue();
+
+  log_trace(semeru,rdma)("\n%s, start for Region[0x%lx]", message, target_obj_queue->_region_index);
+
+
+  // #1 Drain the overflow queue
+  count =0;
+	while (target_obj_queue->pop_overflow(ref)) {
+    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+			log_trace(semeru,rdma)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+
+      if(this->is_in(obj) == false){
+        log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)obj, (size_t)this->hrm_index() );
+      }
+
+		}else{
+      log_trace(semeru,rdma)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
+    }
+
+    count++;
+  }
+
+
+  // #1 Drain the task queue
+  count =0;
+  while (target_obj_queue->pop_local(ref, 0 /*threshold*/)) { 
+    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+			log_trace(semeru,rdma)(" ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+
+      if(this->is_in(obj) == false){
+        log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] 0x%lx, to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)(oop*)ref, (size_t)obj, (size_t)this->hrm_index() );
+      }
+		}else{
+      log_trace(semeru,rdma)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );
+    }
+
+    count++;
+  }
+
+
+
+  assert(target_obj_queue->is_empty(), "should drain the queue");
+
+  log_trace(semeru,rdma)("%s, End for Region[0x%lx] \n", message, target_obj_queue->_region_index);
+}
+

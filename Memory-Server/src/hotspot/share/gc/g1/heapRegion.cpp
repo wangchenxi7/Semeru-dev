@@ -425,6 +425,8 @@ public:
 
   void do_oop(narrowOop* p) { do_oop_work(p); }
   void do_oop(oop* p)       { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, oop* p) {do_oop_work(p);}
+  void semeru_ms_do_oop(oop obj, narrowOop* p) {do_oop_work(p);}
 
   bool failures()           { return _failures; }
   bool has_oops_in_region() { return _has_oops_in_region; }

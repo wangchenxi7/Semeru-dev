@@ -54,15 +54,45 @@ inline void InstanceKlass::release_set_methods_jmethod_ids(jmethodID* jmeths) {
 // By force inlining the following functions, we get similar GC performance
 // as the previous macro based implementation.
 
+// template <typename T, class OopClosureType>
+// ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop obj, OopClosureType* closure) {
+// 	T* p         = (T*)obj->obj_field_addr_raw<T>(map->offset());
+// 	T* const end = p + map->count();
+
+// 	for (; p < end; ++p) {
+// 		Devirtualizer::do_oop(closure, p);
+// 	}
+// }
+
+
+/**
+ * Semeru MS support
+ *  
+ */
 template <typename T, class OopClosureType>
 ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop obj, OopClosureType* closure) {
 	T* p         = (T*)obj->obj_field_addr_raw<T>(map->offset());
 	T* const end = p + map->count();
 
-	for (; p < end; ++p) {
-		Devirtualizer::do_oop(closure, p);
+	if(obj->is_forwarded() == false ){
+		// #1, the normal path
+		for (; p < end; ++p) {
+			Devirtualizer::do_oop(closure, p);
+		}
+	}else{
+		// #2, traver a forwardee object, go to the Semeru MS path.
+		// Pass the object information down to the oop iteration function.
+		for (; p < end; ++p) {
+			Devirtualizer::semeru_ms_do_oop(obj, closure, p);
+		}
 	}
+
+
 }
+
+
+
+
 
 template <typename T, class OopClosureType>
 ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map_reverse(OopMapBlock* map, oop obj, OopClosureType* closure) {

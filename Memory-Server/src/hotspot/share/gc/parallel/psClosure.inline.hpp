@@ -47,6 +47,11 @@ public:
   PSRootsClosure(PSPromotionManager* pm) : _promotion_manager(pm) { }
   void do_oop(oop* p)       { PSRootsClosure::do_oop_work(p); }
   void do_oop(narrowOop* p) { PSRootsClosure::do_oop_work(p); }
+
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
+
 };
 
 typedef PSRootsClosure</*promote_immediately=*/false> PSScavengeRootsClosure;
@@ -82,6 +87,10 @@ public:
       }
     }
   }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+  
 
   void set_scanned_cld(ClassLoaderData* cld) {
     assert(_scanned_cld == NULL || cld == NULL, "Should always only handling one cld at a time");

@@ -30,6 +30,10 @@ void MarkBitMap::print_on_error(outputStream* st, const char* prefix) const {
   _bm.print_on_error(st, prefix);
 }
 
+// Object allocation is HeapWord, 8 bytes, alignment.
+// So, 1 bit for each 8 bytes.
+// When makring 1 bit dirty, means an object is alive, whose start addr is the marked HeapWord.
+// Heap Size : bitmap = 64 : 1. 
 size_t MarkBitMap::compute_size(size_t heap_size) {
   return ReservedSpace::allocation_align_size_up(heap_size / mark_distance());
 }

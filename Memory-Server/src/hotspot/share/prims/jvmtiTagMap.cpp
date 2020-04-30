@@ -2597,6 +2597,10 @@ class SimpleRootsClosure : public OopClosure {
 
   }
   virtual void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
 };
 
 // A supporting closure used to process JNI locals
@@ -2636,6 +2640,10 @@ class JNILocalRootsClosure : public OopClosure {
     _continue = CallbackInvoker::report_jni_local_root(_thread_tag, _tid, _depth, _method, o);
   }
   virtual void do_oop(narrowOop* obj_p) { ShouldNotReachHere(); }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
 };
 
 

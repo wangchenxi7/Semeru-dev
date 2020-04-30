@@ -60,6 +60,9 @@ class ParKeepAliveClosure: public DefNewGeneration::KeepAliveClosure {
   ParKeepAliveClosure(ParScanWeakRefClosure* cl);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p)  { do_oop(p);  }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
+
 };
 
 // The state needed by thread performing parallel young-gen collection.
@@ -256,6 +259,9 @@ class KeepAliveClosure: public DefNewGeneration::KeepAliveClosure {
   KeepAliveClosure(ScanWeakRefClosure* cl);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p);
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p);
+
 };
 
 template <typename OopClosureType1, typename OopClosureType2>

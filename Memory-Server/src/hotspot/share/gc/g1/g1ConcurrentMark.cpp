@@ -1460,6 +1460,10 @@ public:
 
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
+	
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
+
 
 	template <class T> void do_oop_work(T* p) {
 		if (_cm->has_overflown()) {

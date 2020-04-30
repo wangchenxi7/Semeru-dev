@@ -103,6 +103,9 @@ public:
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(oop* p)          { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p)    { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
 };
 
 /**
@@ -133,6 +136,16 @@ public:
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(oop* p)          { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p)    { do_oop_work(p); }
+
+	// semeru
+	virtual void semeru_ms_do_oop(oop obj, oop* p)	{
+		log_debug(semeru, mem_compact)("Warning in %s, invoked out of Semeru MS compact.",__func__);
+		do_oop_work(p);
+	}
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p)	{
+		log_debug(semeru, mem_compact)("Warning in %s, invoked out of Semeru MS compact.",__func__);
+		do_oop_work(p);
+	}
 
 	// We need to do reference discovery while processing evacuated objects.
 	virtual ReferenceIterationMode reference_iteration_mode() { return DO_DISCOVERED_AND_DISCOVERY; }
@@ -209,6 +222,9 @@ public:
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(oop* p)       { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj, oop* p)       { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
 };
 
 class G1CLDScanClosure : public CLDClosure {
@@ -249,6 +265,10 @@ public:
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj,  oop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,  narrowOop* p) { do_oop_work(p); }
+
 };
 
 // Closure to scan the root regions during concurrent marking
@@ -348,6 +368,9 @@ public:
 	template <class T> void do_oop_work(T* p);
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
 
 
 	// Override the verify functions.

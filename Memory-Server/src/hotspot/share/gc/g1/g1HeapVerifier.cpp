@@ -78,6 +78,11 @@ public:
 
   void do_oop(oop* p)       { do_oop_work(p); }
   void do_oop(narrowOop* p) { do_oop_work(p); }
+
+
+   void semeru_ms_do_oop(oop obj, oop* p) { do_oop_work(p);  }
+   void semeru_ms_do_oop(oop obj,narrowOop* p) { do_oop_work(p);  }
+
 };
 
 class G1VerifyCodeRootOopClosure: public OopClosure {
@@ -131,6 +136,10 @@ public:
   void do_oop(oop* p) { do_oop_work(p); }
   void do_oop(narrowOop* p) { do_oop_work(p); }
 
+
+  void semeru_ms_do_oop(oop obj, oop* p) { do_oop_work(p); }
+  void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+
   void set_nmethod(nmethod* nm) { _nm = nm; }
   bool failures() { return _failures; }
 };
@@ -158,6 +167,9 @@ class YoungRefCounterClosure : public OopClosure {
   YoungRefCounterClosure(G1CollectedHeap* g1h) : _g1h(g1h), _count(0) {}
   void do_oop(oop* p)       { if (_g1h->is_in_young(*p)) { _count++; } }
   void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+
+  virtual  void semeru_ms_do_oop(oop obj, narrowOop* p) { ShouldNotReachHere(); }
+	virtual  void semeru_ms_do_oop(oop obj,      oop* p)  { if (_g1h->is_in_young(*p)) { _count++; } }
 
   int count() { return _count; }
   void reset_count() { _count = 0; };

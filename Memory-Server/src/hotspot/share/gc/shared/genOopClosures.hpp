@@ -184,6 +184,10 @@ class ScanWeakRefClosure: public OopClosure {
   ScanWeakRefClosure(DefNewGeneration* g);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 };
 
 #endif // INCLUDE_SERIALGC

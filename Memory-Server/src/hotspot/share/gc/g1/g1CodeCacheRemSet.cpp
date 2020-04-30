@@ -275,6 +275,15 @@ class CleanCallback : public StackObj {
       do_oop_work(o);
     }
 
+
+    void semeru_ms_do_oop(oop obj, narrowOop* o) {
+      do_oop_work(o);
+    }
+
+    void semeru_ms_do_oop(oop obj, oop* o) {
+      do_oop_work(o);
+    }
+
     template <typename T>
     void do_oop_work(T* p) {
       if (_hr->is_in(RawAccess<>::oop_load(p))) {

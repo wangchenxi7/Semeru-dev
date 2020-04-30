@@ -115,6 +115,9 @@ class PushAndMarkClosure: public MetadataVisitingOopIterateClosure {
                      bool concurrent_precleaning);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p){ do_oop(p); };
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p){ do_oop(p); };
+
 };
 
 // In the parallel case, the bit map and the
@@ -139,6 +142,9 @@ class ParPushAndMarkClosure: public MetadataVisitingOopIterateClosure {
                         OopTaskQueue* work_queue);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual inline  void semeru_ms_do_oop(oop obj, narrowOop* p)  {  do_oop(p); }
 };
 
 // The non-parallel version (the parallel version appears further below).
@@ -305,6 +311,9 @@ class CMSInnerParMarkAndPushClosure: public MetadataVisitingOopIterateClosure {
                                 OopTaskQueue* work_queue);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p)  {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)  {  do_oop(p); }
+
 };
 
 // A parallel (MT) version of the above, used when
@@ -326,6 +335,9 @@ class CMSParKeepAliveClosure: public MetadataVisitingOopIterateClosure {
                          CMSBitMap* bit_map, OopTaskQueue* work_queue);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p)  { do_oop(p);  };
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  };
+
 };
 
 #endif // SHARE_VM_GC_CMS_CMSOOPCLOSURES_HPP

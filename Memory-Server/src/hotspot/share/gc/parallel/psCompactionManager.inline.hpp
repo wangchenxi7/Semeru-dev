@@ -47,6 +47,9 @@ public:
   template <typename T> void do_oop_nv(T* p)      { _compaction_manager->mark_and_push(p); }
   virtual void do_oop(oop* p)                     { do_oop_nv(p); }
   virtual void do_oop(narrowOop* p)               { do_oop_nv(p); }
+  virtual void semeru_ms_do_oop(oop obj, oop* p)           { do_oop_nv(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)           { do_oop_nv(p); }
+
 
   // This closure provides its own oop verification code.
   debug_only(virtual bool should_verify_oops()    { return false; })
@@ -61,6 +64,9 @@ public:
   template <typename T> void do_oop_nv(T* p)      { _compaction_manager->mark_and_push(p); }
   virtual void do_oop(oop* p)                     { do_oop_nv(p); }
   virtual void do_oop(narrowOop* p)               { do_oop_nv(p); }
+  virtual void semeru_ms_do_oop(oop obj, oop* p)                     { do_oop_nv(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)               { do_oop_nv(p); }
+
 
   void do_klass_nv(Klass* k)                      { _compaction_manager->follow_klass(k); }
   void do_cld_nv(ClassLoaderData* cld)            { _compaction_manager->follow_class_loader(cld); }

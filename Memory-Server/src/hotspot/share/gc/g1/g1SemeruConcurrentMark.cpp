@@ -1948,6 +1948,9 @@ public:
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
 
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 	template <class T> void do_oop_work(T* p) {
 		if (_semeru_cm->has_overflown()) {
 			return;
@@ -3576,6 +3579,14 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				setup_for_region(claimed_region);
 				assert(_curr_region == claimed_region, "invariant");
 				log_debug(semeru,mem_trace)("%s, get Region[0x%x] to scan. \n",__func__, claimed_region->hrm_index());
+
+
+				//debug Check the content.
+				// Drain the target Obj Queue here
+				if(claimed_region->hrm_index() == 0x6){
+					tty->print("\n Warning in %s, Drain the Region[0x6] for debug. \n\n", __func__);
+					claimed_region->check_target_obj_queue("Check TQ");
+				}
 
 				break; // break out of while loop.
 			}

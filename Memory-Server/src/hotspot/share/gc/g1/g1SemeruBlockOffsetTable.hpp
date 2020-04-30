@@ -89,10 +89,10 @@ public:
   // that covers mem_region_words words.
   static size_t compute_size(size_t mem_region_words) {
     size_t number_of_slots = (mem_region_words / BOTConstants::N_words);   // number of slots/blocks:  e.g. 32GB heap.  4G words/(64 word per block)
-    size_t block_off_table_words = ReservedSpace::allocation_align_size_up(number_of_slots); // page alignment.
-    assert(block_off_table_words*HeapWordSize <= BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT, "Exceed size limitations.");
+    size_t block_off_table_bytes = ReservedSpace::allocation_align_size_up(number_of_slots); // page alignment.
+    assert(block_off_table_bytes <= BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT, "Exceed size limitations.");
 
-    return block_off_table_words;       // 1 byte,u_char, per slot.
+    return block_off_table_bytes;       // 1 byte,u_char, per slot.
   }
 
   // Returns how many bytes of the heap a single byte of the BOT corresponds to.

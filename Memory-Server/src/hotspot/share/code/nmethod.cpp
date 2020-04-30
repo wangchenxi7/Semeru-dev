@@ -1791,6 +1791,10 @@ public:
   }
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
 
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }
+
+
 #ifndef PRODUCT
   void maybe_print(oop* p) {
     LogTarget(Trace, gc, nmethod) lt;
@@ -2166,6 +2170,10 @@ public:
                   p2i(*p), p2i(p), (int)((intptr_t)p - (intptr_t)_nm));
   }
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }  
+
 };
 
 void nmethod::verify() {
@@ -2289,6 +2297,10 @@ public:
     (*p)->print();
   }
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* unused) { ShouldNotReachHere(); }  
+
 };
 
 void nmethod::verify_scavenge_root_oops() {

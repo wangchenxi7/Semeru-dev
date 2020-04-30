@@ -166,6 +166,9 @@ class OopStorageParIterPerf::Closure : public OopClosure {
 public:
   virtual void do_oop(oop* p) { guarantee(*p == NULL, "expected NULL"); }
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+  virtual void semeru_ms_do_oop(oop obj, oop* p) { guarantee(*p == NULL, "expected NULL"); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { ShouldNotReachHere(); }
+
 };
 
 Tickspan OopStorageParIterPerf::run_task(Task* task, uint nthreads) {

@@ -3737,6 +3737,11 @@ public:
 		 _g1h->set_humongous_is_live(obj);
 		}
 	}
+
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop(p); }
+	virtual inline void semeru_ms_do_oop(oop obj,      oop* p) { do_oop(p); }
+
+
 };
 
 // Copying Keep Alive closure - can be called from both
@@ -3757,6 +3762,10 @@ public:
 
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
+	
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
+
 
 	template <class T> void do_oop_work(T* p) {
 		oop obj = RawAccess<>::oop_load(p);
@@ -5082,6 +5091,10 @@ public:
 
 	void do_oop(oop* p)       { do_oop_work(p); }
 	void do_oop(narrowOop* p) { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
+
 };
 
 class UnregisterNMethodOopClosure: public OopClosure {
@@ -5108,6 +5121,9 @@ public:
 
 	void do_oop(oop* p)       { do_oop_work(p); }
 	void do_oop(narrowOop* p) { do_oop_work(p); }
+
+	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
 };
 
 // Returns true if the reference points to an object that

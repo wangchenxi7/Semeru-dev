@@ -41,19 +41,28 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
 
   oop obj = CompressedOops::decode_not_null(heap_oop);
 
-	// if this obj is within current scanning Region.
+	// There are 2 pathes for field update, based on if this obj is within current scanning Region.
+  //
 	if( !curr_region->is_in(obj)){
 		// Path #2, Inter-Region reference. Record and adjust it  in Phase#4.
-		log_debug(semeru, mem_compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)obj );
+    // Even the target object is in a Region on current Memory Server's CSet.
+    // We also need to use its SemeruHeapRegion->_cross_region_ref_update_queue to update this fields.
+    // Because we don't know if the refererenced target Region is already compacted, whose forwarding pointer can be overrided, 
+    // or that Region will not be compacted at all for this STW window.
 
-		// if the target object is in another Region, we don't to handle it.
-		// When a Region is compacted, we send the new address of the Target Oop to its source to update them.
-		//  --- incoming inter-Region ref ---> current Region --- outgoing inter-region ref-->
+		// We use a bitmap,_inter_region_ref_bitmap, to record the fields points to object in another Region.
+    // The _inter_region_ref_bitmap is only used in Memory server. No need to allocate into the RDMA Meta space.
+    // It's also safe to delete after the compaction.
 		#ifdef ASSERT
 		
-		tty->print("%s, mark the objects dirty in _inter_region_ref_bitmap. Not implemented. \n",__func__);
+		log_debug(semeru, mem_compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)obj );
 		//_curr_region->_inter_region_ref_bitmap.
 
+    // Push the &field, oop*, of p into queue.
+    // Attention, use the new address of the field. The address after compaction.
+    StarTask new_field_addr;
+
+    //_inter_region_ref_queue->push()
 
 
 		#endif
@@ -93,6 +102,9 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
 
 inline void G1SemeruAdjustClosure::do_oop(oop* p)       { do_oop_work(p); }
 inline void G1SemeruAdjustClosure::do_oop(narrowOop* p) { do_oop_work(p); }
+
+inline void G1SemeruAdjustClosure::semeru_ms_do_oop(oop obj, oop* p) { do_oop_work(p); }
+inline void G1SemeruAdjustClosure::semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
 
 
 

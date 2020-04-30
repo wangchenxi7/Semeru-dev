@@ -719,6 +719,9 @@ void /*ParNewGeneration::*/KeepAliveClosure::do_oop_work(T* p) {
 
 void /*ParNewGeneration::*/KeepAliveClosure::do_oop(oop* p)       { KeepAliveClosure::do_oop_work(p); }
 void /*ParNewGeneration::*/KeepAliveClosure::do_oop(narrowOop* p) { KeepAliveClosure::do_oop_work(p); }
+void /*ParNewGeneration::*/KeepAliveClosure::semeru_ms_do_oop(oop obj, oop* p)       { KeepAliveClosure::do_oop_work(p); }
+void /*ParNewGeneration::*/KeepAliveClosure::semeru_ms_do_oop(oop obj, narrowOop* p)       { KeepAliveClosure::do_oop_work(p); }
+
 
 template <class T> void ScanClosureWithParBarrier::do_oop_work(T* p) {
   T heap_oop = RawAccess<>::oop_load(p);

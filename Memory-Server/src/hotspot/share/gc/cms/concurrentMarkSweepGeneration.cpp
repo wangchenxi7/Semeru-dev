@@ -2396,6 +2396,10 @@ class VerifyCLDOopsCLDClosure : public CLDClosure {
     VerifyCLDOopsClosure(CMSBitMap* bitmap) : _bitmap(bitmap) { }
     void do_oop(oop* p)       { guarantee(*p == NULL || _bitmap->isMarked((HeapWord*) *p), "Should be marked"); }
     void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+    
+    void semeru_ms_do_oop(oop obj, oop* p)       { guarantee(*p == NULL || _bitmap->isMarked((HeapWord*) *p), "Should be marked"); }
+    void semeru_ms_do_oop(oop obj, narrowOop* p) { ShouldNotReachHere(); }
+
   } _oop_closure;
  public:
   VerifyCLDOopsCLDClosure(CMSBitMap* bitmap) : _oop_closure(bitmap) {}

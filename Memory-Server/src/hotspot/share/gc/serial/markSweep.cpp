@@ -141,6 +141,9 @@ template <class T> inline void MarkSweep::follow_root(T* p) {
 
 void MarkSweep::FollowRootClosure::do_oop(oop* p)       { follow_root(p); }
 void MarkSweep::FollowRootClosure::do_oop(narrowOop* p) { follow_root(p); }
+void MarkSweep::FollowRootClosure::semeru_ms_do_oop(oop obj, oop* p)       { follow_root(p); }
+void MarkSweep::FollowRootClosure::semeru_ms_do_oop(oop obj, narrowOop* p)       { follow_root(p); }
+
 
 void PreservedMark::adjust_pointer() {
   MarkSweep::adjust_pointer(&_obj);
@@ -216,6 +219,9 @@ MarkSweep::KeepAliveClosure MarkSweep::keep_alive;
 
 void MarkSweep::KeepAliveClosure::do_oop(oop* p)       { MarkSweep::KeepAliveClosure::do_oop_work(p); }
 void MarkSweep::KeepAliveClosure::do_oop(narrowOop* p) { MarkSweep::KeepAliveClosure::do_oop_work(p); }
+void MarkSweep::KeepAliveClosure::semeru_ms_do_oop(oop obj, oop* p)       { MarkSweep::KeepAliveClosure::do_oop_work(p); }
+void MarkSweep::KeepAliveClosure::semeru_ms_do_oop(oop obj, narrowOop* p)       { MarkSweep::KeepAliveClosure::do_oop_work(p); }
+
 
 void MarkSweep::initialize() {
   MarkSweep::_gc_timer = new (ResourceObj::C_HEAP, mtGC) STWGCTimer();

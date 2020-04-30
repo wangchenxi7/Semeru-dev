@@ -56,6 +56,11 @@ public:
     ShouldNotReachHere();
   }
 
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p)  { do_oop(p);  }
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
+
+
   bool is_unloading() const {
     return _is_unloading;
   }

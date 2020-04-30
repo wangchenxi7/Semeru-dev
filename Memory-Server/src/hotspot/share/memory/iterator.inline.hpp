@@ -130,6 +130,46 @@ inline void Devirtualizer::do_oop(OopClosureType* closure, T* p) {
 	do_oop_no_verify(closure, p);
 }
 
+//
+// Semeru MS
+
+/**
+ * Call a virtual function of the derived class.
+ *  
+ * [?] What's the purpose of the function pointer, 
+ * 	void (Receiver::*)(T, T*)    // The derived class fucntion pointer
+ * 	void (Base::*)(T, T*)				// the base class function pointer, a pure virtual function.
+ * 
+ */
+template <typename T, typename Receiver, typename Base, typename OopClosureType>
+static typename EnableIf<!IsSame<Receiver, Base>::value, void>::type
+call_do_oop(void (Receiver::*)(oop, T*), void (Base::*)(oop, T*), OopClosureType* closure, oop obj, T* p ) {
+	// Sanity check
+//	STATIC_ASSERT((!IsSame<OopClosureType, OopIterateClosure>::value));  // [?] What's the purpose this check ??
+	closure->OopClosureType::semeru_ms_do_oop(obj, p);
+}
+
+
+template <typename OopClosureType, typename T>
+inline void Devirtualizer::semeru_ms_do_oop_no_verify(oop obj, OopClosureType* closure, T* p) {
+	// derivced oopClosure::do_oop addr,  base OopClosure:do_oop addr, derived closre, parameter p
+	call_do_oop<T>(&OopClosureType::semeru_ms_do_oop, &OopClosure::semeru_ms_do_oop, closure, obj, p);
+}
+
+
+/**
+ * Pass the object information down to oop iteration function.
+ *  
+ */
+template <typename OopClosureType, typename T>
+inline void Devirtualizer::semeru_ms_do_oop(oop obj, OopClosureType* closure, T* p) {
+	debug_only(closure->verify(p));
+
+	semeru_ms_do_oop_no_verify(obj, closure, p);
+}
+
+
+
 // Implementation of the non-virtual do_metadata dispatch.
 
 template <typename Receiver, typename Base, typename OopClosureType>

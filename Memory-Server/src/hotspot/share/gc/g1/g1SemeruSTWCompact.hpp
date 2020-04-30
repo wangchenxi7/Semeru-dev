@@ -597,7 +597,7 @@ public:
  *  if this is a intra-Region reference
  *      adjust it.
  *  else if inter-Region reference
- *      Record the object &&
+ *      Record the field &&
  *      Delay the processing to phase#4.
  * 
  * More Explanation
@@ -612,8 +612,13 @@ public:
   G1SemeruAdjustClosure(SemeruHeapRegion* curr_region) : _curr_region(curr_region) { }
 
   template <class T> void do_oop_work(T* p) { adjust_intra_region_pointer(p , _curr_region); }
+
+
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p);
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p);
+
 
   virtual ReferenceIterationMode reference_iteration_mode() { return DO_FIELDS; }
 };

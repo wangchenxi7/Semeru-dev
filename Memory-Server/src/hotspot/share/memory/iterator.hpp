@@ -46,18 +46,30 @@ class OopClosure : public Closure {
  public:
   virtual void do_oop(oop* o) = 0;
   virtual void do_oop(narrowOop* o) = 0;
+
+  // Semeru MS
+  virtual void semeru_ms_do_oop(oop obj, oop* o) = 0;  // a pure virtual function.
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* o) = 0;  // a pure virtual function.
+
 };
 
 class DoNothingClosure : public OopClosure {
  public:
   virtual void do_oop(oop* p)       {}
   virtual void do_oop(narrowOop* p) {}
+  virtual void semeru_ms_do_oop(oop obj, oop* o)  {}
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* o)  {}
+
 };
 extern DoNothingClosure do_nothing_cl;
 
 // OopIterateClosure adds extra code to be run during oop iterations.
 // This is needed by the GC and is extracted to a separate type to not
 // pollute the OopClosure interface.
+//
+// [x] Why don't implement the pure virtual fucntions of base class ? e.g. the do_oop()
+//    Because this derived class is never defined as an instance.
+//    It's pure intermediate class. This is ok.
 class OopIterateClosure : public OopClosure {
  private:
   ReferenceDiscoverer* _ref_discoverer;
@@ -71,6 +83,11 @@ class OopIterateClosure : public OopClosure {
 
  public:
   ReferenceDiscoverer* ref_discoverer() const { return _ref_discoverer; }
+
+  // Semeru 
+  virtual void semeru_ms_do_oop(oop obj, oop* o)  { ShouldNotReachHere(); }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* o)  {ShouldNotReachHere();}
+
 
   // Iteration of InstanceRefKlasses differ depending on the closure,
   // the below enum describes the different alternatives.
@@ -357,6 +374,12 @@ class Devirtualizer {
   template <typename OopClosureType>             static void do_klass(OopClosureType* closure, Klass* k);
   template <typename OopClosureType>             static void do_cld(OopClosureType* closure, ClassLoaderData* cld);
   template <typename OopClosureType>             static bool do_metadata(OopClosureType* closure);
+
+  // Semeru Memory Server
+  // Pass the object information to the oop iterate function
+  template <typename OopClosureType, typename T> static void semeru_ms_do_oop(oop obj, OopClosureType* closure, T* p);
+  template <typename OopClosureType, typename T> static void semeru_ms_do_oop_no_verify(oop obj, OopClosureType* closure, T* p);
+
 };
 
 class OopIteratorClosureDispatch {

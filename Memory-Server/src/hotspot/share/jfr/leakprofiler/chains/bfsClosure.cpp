@@ -241,3 +241,22 @@ void BFSClosure::do_oop(narrowOop* ref) {
     closure_impl(UnifiedOop::encode(ref), pointee);
   }
 }
+
+// Same as do_oop()
+void BFSClosure::semeru_ms_do_oop(oop obj, oop* ref) {
+  assert(ref != NULL, "invariant");
+  assert(is_aligned(ref, HeapWordSize), "invariant");
+  const oop pointee = *ref;
+  if (pointee != NULL) {
+    closure_impl(ref, pointee);
+  }
+}
+
+void BFSClosure::semeru_ms_do_oop(oop obj, narrowOop* ref) {
+  assert(ref != NULL, "invariant");
+  assert(is_aligned(ref, sizeof(narrowOop)), "invariant");
+  const oop pointee = RawAccess<>::oop_load(ref);
+  if (pointee != NULL) {
+    closure_impl(UnifiedOop::encode(ref), pointee);
+  }
+}

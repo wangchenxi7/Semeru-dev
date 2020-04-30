@@ -222,19 +222,6 @@ public:
   size_t        _marked_alive_bytes;   // Marked alive objects
 
 
-
-  // DEBUG feilds
-  #ifdef ASSERT
-  // objects contain inter-Region reference
-  // For our current design, we don't need this bitmap.
-  // Because every compcated Region needs to send the new address of target objects to the source.
-  G1CMBitMap             _inter_region_ref_bitmap;
-
-
-  #endif
-  // end of debug
-
-
   //
   // functions
   //
@@ -590,6 +577,21 @@ public:
   // Returns the block size of the given (dead, potentially having its class unloaded) object
   // starting at p extending to at most the prev TAMS using the given mark bitmap.
   inline size_t block_size_using_bitmap(const HeapWord* p, const G1CMBitMap* const prev_bitmap) const;
+
+public:
+  // Semeru Memory Server dedicated fields
+  // These fields are only used by Memory server, no need to synchronize with CPU server.
+
+
+  // Use StarTask queue to store the oop*, not the oop, who points to object in another Region.
+  // objects contain inter-Region reference
+  //G1CMBitMap             _inter_region_ref_bitmap;
+
+  // a oop* (&field) queue,
+  // This queue is easy for updating the field value.
+  OopStarTaskQueue      *_inter_region_ref_queue;    // [??] NOT initialized yet
+
+
 
 
  public:
@@ -1146,6 +1148,15 @@ public:
 
   void verify_rem_set(VerifyOption vo, bool *failures) const;
   void verify_rem_set() const;
+
+
+
+  //
+  // Debug functions
+  void check_target_obj_queue(const char* message);
+
+
+
 };
 
 

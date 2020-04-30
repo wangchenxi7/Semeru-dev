@@ -57,6 +57,9 @@ class ParScanWithBarrierClosure: public ParScanClosure {
     ParScanClosure(g, par_scan_state) {}
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p)  { do_oop(p);  }
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
+
 };
 
 class ParScanWithoutBarrierClosure: public ParScanClosure {
@@ -66,6 +69,9 @@ class ParScanWithoutBarrierClosure: public ParScanClosure {
     ParScanClosure(g, par_scan_state) {}
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) { do_oop(p);  }
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
 };
 
 class ParRootScanWithBarrierTwoGensClosure: public ParScanClosure {
@@ -75,6 +81,9 @@ class ParRootScanWithBarrierTwoGensClosure: public ParScanClosure {
     ParScanClosure(g, par_scan_state) {}
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p) { do_oop(p);  }
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
 };
 
 class ParRootScanWithoutBarrierClosure: public ParScanClosure {
@@ -84,6 +93,9 @@ class ParRootScanWithoutBarrierClosure: public ParScanClosure {
     ParScanClosure(g, par_scan_state) {}
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop( oop obj, oop* p){  do_oop(p);  };
+  virtual void semeru_ms_do_oop( oop obj, narrowOop* p){  do_oop(p);  };
+
 };
 
 class ParScanWeakRefClosure: public ScanWeakRefClosure {
@@ -95,6 +107,9 @@ class ParScanWeakRefClosure: public ScanWeakRefClosure {
                         ParScanThreadState* par_scan_state);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+
+  virtual inline void semeru_ms_do_oop(oop obj, oop* p)  { do_oop(p);  }
+  virtual inline void semeru_ms_do_oop(oop obj, narrowOop* p)  { do_oop(p);  }
 };
 
 class ParEvacuateFollowersClosure: public VoidClosure {

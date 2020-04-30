@@ -54,7 +54,7 @@ class PSPromotionManager {
   friend class PSRefProcTaskExecutor;
  private:
   static PaddedEnd<PSPromotionManager>* _manager_array;
-  static OopStarTaskQueueSet*           _stack_array_depth;
+  static OopStarTaskQueueSet*           _stack_array_depth;   // oop* queue, used for Young GC ?
   static PreservedMarksSet*             _preserved_marks_set;
   static PSOldGen*                      _old_gen;
   static MutableSpace*                  _young_space;

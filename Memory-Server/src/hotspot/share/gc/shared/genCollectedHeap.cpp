@@ -796,6 +796,16 @@ public:
     assert(!GenCollectedHeap::heap()->is_in_partial_collection(*p),
       "Referent should not be scavengable.");  }
   virtual void do_oop(narrowOop* p) { ShouldNotReachHere(); }
+
+  virtual void semeru_msdo_oop(oop obj, oop* p) {
+    assert(!GenCollectedHeap::heap()->is_in_partial_collection(*p),
+      "Referent should not be scavengable.");  }
+  virtual void semeru_msdo_oop(oop obj, narrowOop* p) { ShouldNotReachHere(); }
+
+  inline void semeru_ms_do_oop(oop obj, oop* obj_p)  { do_oop(obj_p);  }
+  inline void semeru_ms_do_oop(oop obj, narrowOop* obj_p) { ShouldNotReachHere(); } 
+
+
 };
 static AssertNonScavengableClosure assert_is_non_scavengable_closure;
 #endif

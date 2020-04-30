@@ -109,6 +109,10 @@ public:
   }
   virtual void do_oop(oop* p)       { PSKeepAliveClosure::do_oop_work(p); }
   virtual void do_oop(narrowOop* p) { PSKeepAliveClosure::do_oop_work(p); }
+
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
+  virtual void semeru_ms_do_oop(oop obj,       oop* p) { do_oop_work(p); }
+
 };
 
 class PSEvacuateFollowersClosure: public VoidClosure {

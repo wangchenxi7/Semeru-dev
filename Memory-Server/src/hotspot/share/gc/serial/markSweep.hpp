@@ -60,6 +60,9 @@ class MarkSweep : AllStatic {
    public:
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
+    virtual void semeru_ms_do_oop(oop obj, oop*);
+    virtual void semeru_ms_do_oop(oop obj, narrowOop*);
+
   };
 
   class FollowStackClosure: public VoidClosure {
@@ -79,6 +82,9 @@ class MarkSweep : AllStatic {
    public:
     virtual void do_oop(oop* p);
     virtual void do_oop(narrowOop* p);
+    virtual void semeru_ms_do_oop(oop obj, oop* p);
+    virtual void semeru_ms_do_oop(oop obj, narrowOop* p);
+
   };
 
   //
@@ -175,6 +181,9 @@ public:
   template <typename T> void do_oop_work(T* p);
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
+  virtual void semeru_ms_do_oop(oop obj, oop* p);
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p);
+
 
   virtual bool do_metadata() { return true; }
   virtual void do_klass(Klass* k);
@@ -191,6 +200,11 @@ class AdjustPointerClosure: public BasicOopsInGenClosure {
   virtual void do_oop(oop* p);
   virtual void do_oop(narrowOop* p);
   virtual ReferenceIterationMode reference_iteration_mode() { return DO_FIELDS; }
+  
+  // Semeru
+  virtual void semeru_ms_do_oop(oop obj, oop* p);
+  virtual void semeru_ms_do_oop(oop obj, narrowOop* p);
+
 
   // This closure provides its own oop verification code.
   debug_only(virtual bool should_verify_oops() { return false; })

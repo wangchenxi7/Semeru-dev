@@ -1322,6 +1322,8 @@ class PushAndMarkVerifyClosure: public MetadataVisitingOopIterateClosure {
                            CMSMarkStack*  mark_stack);
   void do_oop(oop* p);
   void do_oop(narrowOop* p);
+  inline void semeru_ms_do_oop(oop obj, oop* p) {  do_oop(p); }
+  inline void semeru_ms_do_oop(oop obj, narrowOop* p) {  do_oop(p); }
 
   // Deal with a stack overflow condition
   void handle_stack_overflow(HeapWord* lost);

@@ -1031,14 +1031,13 @@ public:
   void push(oop x, oop y) {
     
     //int i;
-    size_t new_value;
+    //size_t new_value;
     size_t old_value;
    // MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
     
     do{
-      new_value = _length + 1;
-      old_value = _length;
-    }while(Atomic::cmpxchg(new_value, &_length, old_value) != old_value);
+      old_value = _length; // Only read _length once
+    }while(Atomic::cmpxchg(old_value +1, &_length, old_value) != old_value);
     
     _queue[_length - 1].from = x;
     _queue[_length - 1].to = y;
@@ -1082,10 +1081,10 @@ public:
     // }
     // return NULL;
     size_t v = (size_t)x;
-    size_t l = 0;
-    size_t r = _length - 1;
+    int l = 0;
+    int r = _length - 1;
     while(l < r) {
-      size_t mid = (l+r)/2;
+      int mid = (l+r)/2;
       if((size_t)_queue[mid].from < v) {
         l = mid + 1;
       }
