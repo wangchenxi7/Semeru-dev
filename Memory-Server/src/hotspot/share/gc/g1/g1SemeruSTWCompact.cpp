@@ -367,8 +367,16 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					// Synchronized with other servers, CPU server or Memory server, to get the cross-region-ref-update queue.
 					//
 
+					// Debug Drain the CompactTask _cross_region_ref_update_queue
+					//check_overflow_taskqueue("phase4 prepare.");
 
-					phase4_adjust_inter_region_pointer(region_to_evacuate);
+					// Check the Region's cross_region_ref queue
+					check_cross_region_reg_queue(region_to_evacuate, "Before phase4");
+
+					//debug
+					// Can't update cross-region reference before the end of STW window.
+					if(region_to_evacuate->hrm_index()  == 0x6)
+						phase4_adjust_inter_region_pointer(region_to_evacuate);
 
 					
 
@@ -510,7 +518,7 @@ void G1SemeruSTWCompactTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr
 																																								__func__, (size_t)hr->hrm_index(), this->_worker_id);
 	
 	HashQueue* cross_region_ref_ptr = hr->cross_region_ref_update_queue();
-	cross_region_ref_ptr->organize(); // sort and de-duplicate
+	//cross_region_ref_ptr->organize(); // sort and de-duplicate
 
 	size_t len = cross_region_ref_ptr->length(); // new length.
 	size_t i;
@@ -519,14 +527,13 @@ void G1SemeruSTWCompactTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr
 
 	for( i =0; i< len; i++){
 		elem_ptr = cross_region_ref_ptr->retrieve_item(i);
-		//assert(elem_ptr->from != NULL, "enqueued an empty target obj");
-		// Debug
+		
+		// For HashMap, it's ok to find some items to null.
 		if(elem_ptr->from == NULL){
-			log_debug(semeru,mem_compact)("%s, get a NULL item[0x%lx] wrongly.", __func__, i);
 			continue;
 		}
 
-		new_addr = elem_ptr->from->forwardee();
+		new_addr = elem_ptr->from->forwardee(); // If the object is not moved, to can also be null.
 		elem_ptr->to = new_addr;
 		
 		//debug
@@ -573,6 +580,121 @@ void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
 
 
 
+
+
+
+/**
+ * Drain the both overflow queue and taskqueue
+ * 
+ * Update by following the outgoing direction.
+ * 
+ * [XX] Slow Version [XX]
+ * 	The problem is that, we need to check the target region for each objects.
+ * 
+ * 
+ */
+void G1SemeruSTWCompactTask::update_cross_region_ref_taskqueue(){
+  StarTask ref;
+	oop new_target_oop_addr;
+	oop old_target_oop_addr;
+	SemeruHeapRegion* target_region;
+  size_t count;
+  SemeruCompactTaskQueue* inter_region_ref_queue = this->inter_region_ref_taskqueue();
+
+  log_trace(semeru,mem_compact)("\n%s, start for updating Inter-Region ref, worker[0x%lx]", __func__, (size_t)worker_id() );
+
+
+  // #1 Drain the overflow queue
+  count =0;
+	while (inter_region_ref_queue->pop_overflow(ref)) {
+
+		 // the old addr can points to Regions in other severs.
+		 // We have to fetch these Regions' _cross_region_ref_update_queue here.
+    old_target_oop_addr = RawAccess<>::oop_load((oop*)ref);		
+		if(old_target_oop_addr!= NULL ){
+
+			assert((size_t)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
+
+			target_region = _semeru_sc->_semeru_h->heap_region_containing(old_target_oop_addr); // [??] This is too slow ?
+
+			new_target_oop_addr = target_region->cross_region_ref_update_queue()->get(old_target_oop_addr);
+			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
+			//Debug
+			if(new_target_oop_addr == (oop)MAX_SIZE_T){
+				tty->print("Overflow :Wrong in %s, old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
+																																			(size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+				continue;
+			}
+
+			if(new_target_oop_addr!=NULL )
+				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
+			else
+				log_trace(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+
+			log_trace(semeru,mem_compact)(" Overflow: update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
+										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
+																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
+
+		}else{
+       log_trace(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+    }
+
+    count++;
+  }// end of while
+
+
+  // #1 Drain the task queue
+  count =0;
+  while (inter_region_ref_queue->pop_local(ref, 0 /*threshold*/)) { 
+
+ 		 // the old addr can points to Regions in other severs.
+		 // We have to fetch these Regions' _cross_region_ref_update_queue here.
+    old_target_oop_addr = RawAccess<>::oop_load((oop*)ref);		
+		if(old_target_oop_addr!= NULL ){
+
+			assert((size_t)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
+
+			target_region = _semeru_sc->_semeru_h->heap_region_containing(old_target_oop_addr); // [??] This is too slow ?
+
+			new_target_oop_addr = target_region->cross_region_ref_update_queue()->get(old_target_oop_addr);
+			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
+			//Debug
+			if(new_target_oop_addr == (oop)MAX_SIZE_T){
+				tty->print("Wrong in %s, old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
+																																			(size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+				continue;
+			}
+
+			if(new_target_oop_addr!=NULL)
+				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
+			else
+				log_trace(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+
+			log_trace(semeru,mem_compact)(" update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
+										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
+																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
+
+		}else{
+       log_trace(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+    }
+    count++;
+  }// end of while
+
+  assert(inter_region_ref_queue->is_empty(), "should drain the queue");
+
+  log_trace(semeru,mem_compact)("%s, End for updating Inter-Region ref, worker[0x%lx] \n", __func__, (size_t)worker_id());
+}
+
+
+
+
+
+
+
+
+
+
+
 /**
  * Update the fields points to other region.
  * The region can be in current or other servers.
@@ -585,9 +707,8 @@ void G1SemeruSTWCompactTask::phase4_adjust_inter_region_pointer(SemeruHeapRegion
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#4, Inter-Region reference adjustment, worker [0x%x] ", __func__, this->_worker_id);
 
-	// Check the item of G1SemeruSTWCompactTask->_inter_region_ref_queue
-	check_overflow_taskqueue("phase4 Debug");
-	
+	// Drain current CompactTask's cross region ref update queue.
+	update_cross_region_ref_taskqueue();
 
 }
 
@@ -829,7 +950,7 @@ size_t G1SemeruCompactRegionClosure::apply(oop obj) {
   oop(destination)->init_mark_raw();    // initialize the MarkOop.
   assert(oop(destination)->klass() != NULL, "should have a class");
 
-	log_debug(semeru,mem_compact)("Phase4,copy obj from 0x%lx to 0x%lx ", (size_t)obj_addr, (size_t)destination );
+	log_trace(semeru,mem_compact)("Phase4,copy obj from 0x%lx to 0x%lx ", (size_t)obj_addr, (size_t)destination );
 
   return size;
 }
@@ -861,6 +982,37 @@ void G1SemeruSTWCompact::print_stats() {
 }
 
 
+/**
+ * Just print, not pop any items. 
+ */
+void G1SemeruSTWCompactTask::check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message){
+	size_t length = hr->cross_region_ref_update_queue()->length();
+	size_t i;
+	HashQueue* cross_region_reg_queue = hr->cross_region_ref_update_queue();
+	ElemPair* q_iter;
+
+	tty->print("%s,check_cross_region_reg_queue, Start for Region[0x%lx] \n", message, (size_t)hr->hrm_index() );
+
+	for(i=0; i < length; i++){
+		q_iter = cross_region_reg_queue->retrieve_item(i);
+		
+		if(q_iter->from != NULL){
+					// error Check
+			if(hr->is_in_reserved(q_iter->from) == false ){
+				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)hr->hrm_index() );
+			}else{
+				tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+			}
+
+		}
+
+
+
+	}
+
+	tty->print("%s,check_cross_region_reg_queue, End for Region[0x%lx] \n", message, (size_t)hr->hrm_index() );
+
+}
 
 // Drain the both overflow queue and taskqueue
 void G1SemeruSTWCompactTask::check_overflow_taskqueue( const char* message){
@@ -876,8 +1028,8 @@ void G1SemeruSTWCompactTask::check_overflow_taskqueue( const char* message){
 	while (inter_region_ref_queue->pop_overflow(ref)) {
     oop const obj = RawAccess<>::oop_load((oop*)ref);
 		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
-			 log_debug(semeru,mem_compact)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
-										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+			 log_debug(semeru,mem_compact)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx",
+										           																								count, (size_t)(oop*)ref ,(size_t)obj);
 
 		}else{
        log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
@@ -892,8 +1044,8 @@ void G1SemeruSTWCompactTask::check_overflow_taskqueue( const char* message){
   while (inter_region_ref_queue->pop_local(ref, 0 /*threshold*/)) { 
     oop const obj = RawAccess<>::oop_load((oop*)ref);
 		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
-		 log_debug(semeru,mem_compact)(" ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
-										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+		 log_debug(semeru,mem_compact)(" ref[0x%lx] 0x%lx points to obj 0x%lx",
+										           																	count, (size_t)(oop*)ref ,(size_t)obj);
 
 		}else{
       log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );

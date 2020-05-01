@@ -486,6 +486,7 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
   // Mark the object alive (grey) before push them into G1SemeruCMTask->_semeru_task_queue
   // At this time, each Region has its own alive_bitmap. Not like the global _next_bitmap which covers the whole heap.
   if( !mark_in_alive_bitmap(_worker_id, obj) ) {  // Mark object alive in alive_bitmap
+    // Skip the already marked objects.
     return false;
   }
 
@@ -556,8 +557,8 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
   // 2) GC can update the cross-region referenced caused by alive object evacuation.
   if(_curr_region->is_in_reserved(obj) == false ){
 
-		log_trace(semeru,mem_trace)("%s, Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx). Update RemSet ? ", __func__, 
-																			_curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
+		log_trace(semeru,mem_trace)("%s, Referenced obj 0x%lx is Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx). SKIP", __func__, 
+																			(size_t)obj, _curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
 
     return false;
   }
@@ -571,9 +572,9 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
 
 
 //
-// Target object queue related
+// [Abandoned] Target object queue related
+//  We merged the TargetObjQueue with CrossRegionRefUpdateQueue.
 //
-
 inline void G1SemeruCMTask::trim_target_object_queue(TargetObjQueue* target_obj_queue) {
 	StarTask ref;
 	do {
@@ -605,16 +606,16 @@ inline void G1SemeruCMTask::trim_target_object_queue_to_threshold(TargetObjQueue
 
     // Enqueue the makred object into SemeruHeapRegion->_cross_region_ref_update_queue
     // [X] It's target_obj_queue's purpose to do de-duplication.
-    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
-    if(obj != NULL){
+    // oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+    // if(obj != NULL){
 
-      // debug
-      if(_curr_region->is_in(obj) == false){
-        log_debug(semeru,mem_compact)("%s, fidn a wrong obj 0x%lx, which is not current Region [0x%lx]", __func__, (size_t)obj, (size_t)_curr_region->hrm_index() );
-        continue;
-      }
-      _curr_region->cross_region_ref_update_queue()->push(obj, NULL);
-    }
+    //   // debug
+    //   if(_curr_region->is_in(obj) == false){
+    //     log_debug(semeru,mem_compact)("%s, fidn a wrong obj 0x%lx, which is not current Region [0x%lx]", __func__, (size_t)obj, (size_t)_curr_region->hrm_index() );
+    //     continue;
+    //   }
+    //   _curr_region->cross_region_ref_update_queue()->push(obj, NULL);
+    // }
 
 		dispatch_reference(ref);
 	}
@@ -634,6 +635,40 @@ inline void G1SemeruCMTask::dispatch_reference(StarTask ref) {
 	} else {
 		deal_with_reference((oop*)ref);
 	}
+}
+
+
+
+//
+// Proces Cross Region Reference Update Queue
+//
+
+/**
+ * mark object alive and push them into G1SemeruCMTask->_semeru_task_queue
+ */
+inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_ref_q) {
+
+  oop obj;  // For semeru, we only yse non compressed oop.
+
+  for(size_t i = 1; i < cross_region_ref_q->length(); i ++) {
+    obj = cross_region_ref_q->retrieve_item(i)->from;  // target object, addr before compaction
+
+    if(obj == NULL) {
+      // This is a Hash queue, its item can be null.
+      continue;
+    }
+
+    //assert(_curr_region->is_in(obj) , "Wrong obj in Region[0x%lx]'s cross region ref queue.", (size_t)obj );
+    if(_curr_region->is_in(obj) == false){
+      log_info(semeru,mem_trace)("Warning in %s, obj 0x%lx is NOT in current Region[0x%lx]", __func__, (size_t)obj, cross_region_ref_q->_region_index);
+      return;
+    }
+    
+    log_trace(semeru,mem_trace)("%s, get an obj 0x%lx from Region[0x%lx]->corss_region_ref_q ", __func__, (size_t)obj, cross_region_ref_q->_region_index );
+
+    make_reference_alive(obj);
+  }// end of for.
+
 }
 
 

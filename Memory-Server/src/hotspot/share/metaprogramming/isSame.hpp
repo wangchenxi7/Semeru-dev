@@ -32,7 +32,7 @@
 template <typename X, typename Y>
 struct IsSame: public FalseType {};
 
-template <typename X>
+template <typename X>  // so, isSame<type#1 ,type#1> will match this define.
 struct IsSame<X, X>: public TrueType {};
 
 #endif // SHARE_VM_METAPROGRAMMING_ISSAME_HPP

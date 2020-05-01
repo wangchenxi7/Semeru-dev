@@ -1140,6 +1140,12 @@ public:
   inline void dispatch_reference(StarTask ref);
 
 
+  //
+  // Cross Region reference queue
+  //
+  inline void scan_cross_region_ref_queue(HashQueue* cross_region_ref_q);
+
+
 };
 
 // Class that's used to to print out per-region liveness

@@ -3082,7 +3082,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 		if (task_entry.is_null()) {
 			break;
 		}
-		assert(task_entry.is_array_slice() || oopDesc::is_oop(task_entry.obj()), "Element " PTR_FORMAT " must be an array slice or oop", p2i(task_entry.obj()));
+		assert(task_entry.is_array_slice() || oopDesc::semeru_is_oop(task_entry.obj()), "Element " PTR_FORMAT " must be an array slice or oop", p2i(task_entry.obj()));
 		bool success = _semeru_task_queue->push(task_entry);
 		// We only call this when the local queue is empty or under a
 		// given target limit. So, we do not expect this push to fail.
@@ -3508,18 +3508,35 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// 1.2) Process a Normal Region.
 
 				// Concurrently Scan the Region poited by _curr_region.
-				TargetObjQueue* target_obj_q = _curr_region->target_obj_queue();
+				// TargetObjQueue* target_obj_q = _curr_region->target_obj_queue();
 
-				log_debug(semeru,mem_trace)("%s, get Region[0x%lx]'s targetObjQueue[0x%lx]: 0x%lx. item size 0x%lx \n",__func__,
+				// log_debug(semeru,mem_trace)("%s, get Region[0x%lx]'s targetObjQueue[0x%lx]: 0x%lx. item size 0x%lx \n",__func__,
+				// 																																	(size_t)_curr_region->hrm_index(), 
+				// 																																	(size_t)target_obj_q->_region_index, 
+				// 																																	(size_t)target_obj_q,
+				// 																																	(size_t)target_obj_q->bottom());
+
+				// //Add a RDMA Debug check
+				// assert(_curr_region->hrm_index() == target_obj_q->_region_index, "TargetObjQueue and Region aren't match.");
+				// // everything is good, process the target obj queue.
+				// trim_target_object_queue(target_obj_q);
+
+
+				//
+				// Switch to use the _cross_region_ref_update_queue
+
+				HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
+
+				log_debug(semeru,mem_trace)("%s, get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
 																																					(size_t)_curr_region->hrm_index(), 
-																																					(size_t)target_obj_q->_region_index, 
-																																					(size_t)target_obj_q,
-																																					(size_t)target_obj_q->bottom());
+																																					(size_t)cross_region_ref_queue->_region_index, 
+																																					(size_t)cross_region_ref_queue,
+																																					(size_t)cross_region_ref_queue->length() );
 
-				//Add a RDMA Debug check
-				assert(_curr_region->hrm_index() == target_obj_q->_region_index, "TargetObjQueue and Region aren't match.");
-				// everything is good, process the target obj queue.
-				trim_target_object_queue(target_obj_q);
+				assert(_curr_region->hrm_index() == cross_region_ref_queue->_region_index, "TargetObjQueue and Region aren't match.");
+
+				scan_cross_region_ref_queue(cross_region_ref_queue);
+
 			}
 
 			// 1.2） At this point we have either completed iterating over the
@@ -3581,12 +3598,15 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				log_debug(semeru,mem_trace)("%s, get Region[0x%x] to scan. \n",__func__, claimed_region->hrm_index());
 
 
-				//debug Check the content.
+				//debug Check the target obj queue content.
 				// Drain the target Obj Queue here
-				if(claimed_region->hrm_index() == 0x6){
-					tty->print("\n Warning in %s, Drain the Region[0x6] for debug. \n\n", __func__);
-					claimed_region->check_target_obj_queue("Check TQ");
-				}
+				// if(claimed_region->hrm_index() == 0x6){
+				// 	tty->print("\n Warning in %s, Drain the Region[0x6] for debug. \n\n", __func__);
+				// 	claimed_region->check_target_obj_queue("Check TQ");
+				// }
+
+				// Check the Cross_region_ref queue 
+				claimed_region->check_cross_region_reg_queue("Check after cliaming.");
 
 				break; // break out of while loop.
 			}

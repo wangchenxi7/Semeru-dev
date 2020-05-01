@@ -34,6 +34,7 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/macros.hpp"
 
+
 inline Klass* InstanceKlass::array_klasses_acquire() const {
 	return OrderAccess::load_acquire(&_array_klasses);
 }
@@ -67,8 +68,12 @@ inline void InstanceKlass::release_set_methods_jmethod_ids(jmethodID* jmeths) {
 
 /**
  * Semeru MS support
- *  
+ * 
+ * [?] How to modify the oop iteration, let Semeru MS G1SemeruAdjustClosure goes into semeru_ms_do_oop only ?
+ * 
  */
+class G1SemeruAdjustClosure;
+
 template <typename T, class OopClosureType>
 ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop obj, OopClosureType* closure) {
 	T* p         = (T*)obj->obj_field_addr_raw<T>(map->offset());
@@ -76,7 +81,8 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_map(OopMapBlock* map, oop o
 
 	// Non-Semeru all fall into the Path#1.
 	// Semeru but not forwarded object alsp goes into Path#1.
-	if(!SemeruEnableMemPool || !obj->is_forwarded()){
+	//if(!SemeruEnableMemPool || !obj->is_forwarded()){
+	if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
 		// #1, the normal path
 		for (; p < end; ++p) {
 			Devirtualizer::do_oop(closure, p);

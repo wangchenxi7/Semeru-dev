@@ -535,6 +535,7 @@ void G1SemeruConcurrentMarkThread::run_service() {
           // Do the Compact action.
 					log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
 
+          // Debug for now.
           _semeru_sc->semeru_stw_compact();
         }
 

@@ -40,7 +40,8 @@ void ObjArrayKlass::oop_oop_iterate_elements(objArrayOop a, OopClosureType* clos
 	T* p         = (T*)a->base_raw();
 	T* const end = p + a->length();
 
-  if(!SemeruEnableMemPool || !a->is_forwarded()){
+  //if(!SemeruEnableMemPool || !a->is_forwarded()){
+	if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
     // Path#1. normal path. e.g. tracing.	
 		for (;p < end; p++) {
 			Devirtualizer::do_oop(closure, p);
@@ -71,7 +72,8 @@ void ObjArrayKlass::oop_oop_iterate_elements_bounded(
 		end = h;
 	}
 
-	if(!SemeruEnableMemPool || !a->is_forwarded()){
+	//if(!SemeruEnableMemPool || !a->is_forwarded()){
+	if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
   // Path#1. normal path. e.g. tracing.	
 		for (;p < end; ++p) {
 			Devirtualizer::do_oop(closure, p);

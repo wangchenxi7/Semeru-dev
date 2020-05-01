@@ -1158,7 +1158,7 @@ public:
   // Debug functions
   void check_target_obj_queue(const char* message);
 
-
+  void check_cross_region_reg_queue( const char* message);
 
 };
 

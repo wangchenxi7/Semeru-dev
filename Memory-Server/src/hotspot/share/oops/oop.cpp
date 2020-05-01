@@ -131,6 +131,29 @@ bool oopDesc::is_oop(oop obj, bool ignore_mark_word) {
   return !SafepointSynchronize::is_at_safepoint();
 }
 
+
+//
+// Semeru MS
+bool oopDesc::semeru_is_oop(oop obj, bool ignore_mark_word) {
+  if (!Universe::semeru_heap()->is_oop(obj)) {
+    return false;
+  }
+
+  // Header verification: the mark is typically non-NULL. If we're
+  // at a safepoint, it must not be null.
+  // Outside of a safepoint, the header could be changing (for example,
+  // another thread could be inflating a lock on this object).
+  if (ignore_mark_word) {
+    return true;
+  }
+  if (obj->mark_raw() != NULL) {
+    return true;
+  }
+  return !SafepointSynchronize::is_at_safepoint();
+}
+
+
+
 // used only for asserts and guarantees
 bool oopDesc::is_oop_or_null(oop obj, bool ignore_mark_word) {
   return obj == NULL ? true : is_oop(obj, ignore_mark_word);

@@ -178,16 +178,20 @@ bool CollectedHeap::request_concurrent_phase(const char* phase) {
 	return false;
 }
 
+// Check for both Control JVM heap and Semeru JVM heap.
 bool CollectedHeap::is_oop(oop object) const {
 	if (!check_obj_alignment(object)) {
 		return false;
 	}
 
-	if (!is_in_reserved(object)) {
+	if (!is_in_reserved(object) && !is_in_semeru_reserved(object)  ) {
+		log_debug(semeru)("%s, obj 0x%lx check falied #1.", __func__, (size_t)object );
 		return false;
 	}
 
-	if (is_in_reserved(object->klass_or_null())) {
+	// klass instance can't in the reserved space ?
+	if (is_in_reserved(object->klass_or_null()) ||  is_in_semeru_reserved(object->klass_or_null()) ) {
+		log_debug(semeru)("%s, obj 0x%lx check falied #2.", __func__, (size_t)object );
 		return false;
 	}
 

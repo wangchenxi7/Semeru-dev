@@ -125,6 +125,7 @@
 #define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
 #define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
 
+#define MAX_SIZE_T   (size_t)-1
 
 //
 // RDMA Related
@@ -183,8 +184,8 @@
 
 // 1.1 Target object queue , 128MB
 #define TARGET_OBJ_OFFSET     (size_t)0            // 0x400,000,000,000
-#define TARGET_OBJ_SIZE_BYTE  (size_t)256*ONE_MB   // 128M bytes
-#define TARGET_OBJ_QUEUE_SIZE (size_t)(1<< 20)		 // length per queue. The total size should include Instance size 
+#define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
+#define TARGET_OBJ_QUEUE_SIZE	(size_t)(1<<20)		// length per queue. //mhr: modify
 
 // 1.2 Small meta data
 
@@ -257,8 +258,10 @@
 // 5. Cross-Region reference update queue
 // Record the <old_addr, new_addr > for the target object queue.
 #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)   // 0x400,0D0,001,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(256*ONE_MB) // 4MB + 4KB per Region.
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 18)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(128*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 19)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
+#define HASH_MUL                              (size_t)1000000007
 
 
 //

@@ -974,7 +974,9 @@ public :
   struct ElemPair{
     oop from;     // 8 bytes
     oop to;       // 8 bytes
+    uint nex;
   };
+
 
 class HashQueue : public CHeapRDMAObj<struct ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE> {
 
@@ -990,30 +992,37 @@ public:
     }
   }
 
-private:
+//private:
 
+  size_t _key_tot;
   size_t _tot;
+  size_t _num;
   volatile size_t _length;
-  //Mutex _m; // abandoned.
   size_t _region_index;
+
+  Mutex _m;
 
   ElemPair* _queue; // Flexible array, must be the last field. length limitation : CROSS_REGION_REF_UPDATE_Q_LEN.
 
 public:
-  HashQueue(){
+  HashQueue():_m(Mutex::leaf, FormatBuffer<128>("HashQueue"), true, Monitor::_safepoint_check_never){
 
   }
 
   ~HashQueue(){clear();}
 
   void reset() {
-    _length = 0;
+    memset(_queue, 0, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
+    _length = _key_tot + 1;
+    _num = 0;
   }
 
   // invoke the initialization function explicitly 
   void initialize(size_t region_index) {
     _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
-    _length = 0; // bump pointer
+    _key_tot = CROSS_REGION_REF_UPDATE_Q_LEN_SQRT;
+    _length = _key_tot + 1; // bump pointer
+    _num = 0;
     _region_index = region_index;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
 
@@ -1024,49 +1033,53 @@ public:
     if(_queue != NULL){
       ArrayAllocator<ElemPair>::free(_queue, _tot);
       _queue = NULL;
-      _tot = _length = 0;
+      _tot = _length = _key_tot = 0;
+      _num = 0;
+    }
+  }
+
+  void insert(uint index, oop x, oop y) {
+    MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+    if(_queue[index].from == NULL) {
+      _queue[index].from = x;
+      _queue[index].to = y;
+      _queue[index].nex = 0;
+      _num ++;
+      return;
+    }
+    while(_queue[index].nex != 0 && (size_t)_queue[index].from != (size_t)x) {
+      index = _queue[index].nex;
+    }
+    if((size_t)_queue[index].from == (size_t)x) {
+      _queue[index].to = y;
+    }
+    else{
+      _queue[index].nex = _length;
+      _queue[_length].from = x;
+      _queue[_length].to = y;
+      _queue[_length].nex = 0;
+      _length++;
+      _num++;
     }
   }
 
   void push(oop x, oop y) {
+
+    //printf("Push oop: 0x%lx, klass 0x%lx, ", (size_t)x, (size_t)x->klass());
+    if((size_t)x->klass()<0x400000000000) {
+      printf("Wrong!");
+    }
+    //printf("size %d", x->size());
+
+
+    size_t k = (size_t)x;
+    uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+    insert(hash_k, x, y);
     
-    //int i;
-    //size_t new_value;
-    size_t old_value;
-   // MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
-    
-    do{
-      old_value = _length; // Only read _length once
-    }while(Atomic::cmpxchg(old_value +1, &_length, old_value) != old_value);
-    
-    _queue[_length - 1].from = x;
-    _queue[_length - 1].to = y;
-
-    log_trace(semeru,mem_compact)("%s, enqueue target obj [0x%lx] <old_addr 0x%lx, new_addr 0x%lx>", __func__, _length - 1,  (size_t)x, (size_t)y);
-
-    // //mhr: debug
-    // if(_length%10000==0) {
-    //   printf("move_to_current_len: %d ", _length);
-    // }
-
-    // if(_length >= _tot) {
-    //   assert(false, "Not OK!");
-    // }
-
-    // for(i = 0; i < _length; i++) {
-    //   if((unsigned long long)_queue[i].from == (unsigned long long)(x)) {
-    //     _queue[i].to = y;
-    //     return;
-    //   }
-    // }
-    // MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
-    // _queue[_length].from = x;
-    // _queue[_length].to = y;
-    // _length++;
 
     //mhr: debug
-    if(_length%CROSS_REGION_REF_UPDATE_Q_LEN==0) {
-      tty->print("move_to_current_len: 0x%lx \n", _length);
+    if(_length%0x1000==0) {
+      printf("move_to_current_len: 0x%lx ", _length);
     }
 
     if(_length >= _tot) {
@@ -1075,53 +1088,31 @@ public:
 
   }
 
+  /**
+   * Get the item by key.
+   *  
+   */
   oop get(oop x){
-    // for(int i = 0; i < _length; i++) {
-    //   if(_queue[i].from == x) return _queue[i].to;
-    // }
-    // return NULL;
-    size_t v = (size_t)x;
-    int l = 0;
-    int r = _length - 1;
-    while(l < r) {
-      int mid = (l+r)/2;
-      if((size_t)_queue[mid].from < v) {
-        l = mid + 1;
-      }
-      else {
-        r = mid;
-      }
+    size_t k = (size_t)x;
+    uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+    while(_queue[hash_k].nex != 0 && k != (size_t)_queue[hash_k].from) {
+      hash_k = _queue[hash_k].nex;
     }
-    if((size_t)_queue[l].from == v)
-      return _queue[l].to;
-    else 
-      return NULL;
+    if(k == (size_t)_queue[hash_k].from) {
+      return _queue[hash_k].to;
+    }
+    else{
+      log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
+      return (oop)MAX_SIZE_T;  // No this key, return unsigned long max.
+    }
   }
 
-  void organize(){
-    QuickSort::sort(_queue, _length, HashQueue::compare_elempair, true);
-    size_t new_length = 0;
-    for(size_t i = 0; i < _length; i ++) {
-      if(new_length == 0) {
-        new_length ++;
-        continue;
-      }
-      if(_queue[new_length - 1].from == _queue[i].from) {
-        _queue[new_length - 1].to = _queue[i].to;
-      }
-      else {
-        if(new_length != i) {
-          _queue[new_length] = _queue[i];
-        }
-        new_length ++;
-      }
-    }
-    _length = new_length;
+  bool is_empty() {
+    return (_num == 0);
   }
 
-
-  size_t    length(){  return _length;  }
-  ElemPair* retrieve_item(size_t index) { 
+  inline size_t    length(){  return _length;  }
+  inline ElemPair* retrieve_item(size_t index) { 
     assert(index < _length, "Exceed the stored length.");
     return &_queue[index]; 
   }

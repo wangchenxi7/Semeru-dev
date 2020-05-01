@@ -56,7 +56,24 @@ void OopIterateClosure::verify(T* p) {
 		T heap_oop = RawAccess<>::oop_load(p);
 		if (!CompressedOops::is_null(heap_oop)) {
 			oop o = CompressedOops::decode_not_null(heap_oop);
-			assert(Universe::heap()->is_in_closed_subset(o) || Universe::semeru_heap()->is_in_closed_subset(o) ,
+
+			#ifdef ASSERT
+			if(SemeruEnableMemPool){
+				// size_t region_of_p = (size_t)p >> SemeruHeapRegion::SemeruLogOfHRGrainBytes; // 16MB Region
+				// size_t region_of_o = (size_t)o >> SemeruHeapRegion::SemeruLogOfHRGrainBytes;
+				size_t region_of_p = (size_t)p >> 24; // 16MB Region
+				size_t region_of_o = (size_t)o >> 24;
+				if(region_of_p != region_of_o   ){
+					tty->print("%s, p 0x%lx and o 0x%lx are not in same Region. \n",__func__, (size_t)p, (size_t)o);
+				}
+			}
+			#endif
+
+			// In some cases, the pointed object may not in the semeru heap's closed subset.
+			// e.g. There is a reference,p, from Region[0x6] to Region[0x7]
+			// Region[0x7] is compacted and p is not updated yet. And this will lead o is not the compacted Region[0x7]
+			// For Semeru MS compaction, the cross-region update is in phase 4. but this function can be invoked in phase2.
+			assert(Universe::heap()->is_in_closed_subset(o) || Universe::semeru_heap()->is_in_semeru_reserved(o) ,
 						 "should be in closed *p " PTR_FORMAT " " PTR_FORMAT, p2i(p), p2i(o));
 		}
 	}

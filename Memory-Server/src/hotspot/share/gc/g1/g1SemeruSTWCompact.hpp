@@ -539,6 +539,9 @@ public:
   // Need to share data between CPU server and other Memory servers.
 	void phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr);	// Inter-Region fields update ? Intra-Region reference is done during compaction.
 
+  // Drain && process the G1SemeruSTWCompactTask->_inter_region_ref_queue
+  void update_cross_region_ref_taskqueue();
+
 
   SemeruCompactTaskQueue* inter_region_ref_taskqueue()  { return &_inter_region_ref_queue;  }
 
@@ -548,7 +551,7 @@ public:
   // Debug functions.
   //
   void check_overflow_taskqueue( const char* message);
-
+  void check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message);
 
 
 };

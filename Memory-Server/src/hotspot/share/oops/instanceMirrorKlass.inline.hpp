@@ -40,7 +40,8 @@ void InstanceMirrorKlass::oop_oop_iterate_statics(oop obj, OopClosureType* closu
 
   	// Non-Semeru all fall into the Path#1.
 	// Semeru but not forwarded object alsp goes into Path#1.
-	if(!SemeruEnableMemPool || !obj->is_forwarded()){
+	//if(!SemeruEnableMemPool || !obj->is_forwarded()){
+  if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
 		// #1, the normal path
     for (; p < end; ++p) {
       Devirtualizer::do_oop(closure, p);

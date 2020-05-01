@@ -35,19 +35,21 @@
 template <class T> 
 inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapRegion* curr_region) {
   
-  // Warning.
-  // For current design, we should not reach here.
-  // Go to semeru_ms_adjust_intra_region_pointer
-  log_info(semeru,mem_compact)("\nERROR in %s. Should Not Reach Here. \n\n", __func__);
-  ShouldNotReachHere();
-
-
   T heap_oop = RawAccess<>::oop_load(p);
   if (CompressedOops::is_null(heap_oop)) {
     return;
   }
 
   oop obj = CompressedOops::decode_not_null(heap_oop);
+
+  log_info(semeru,mem_compact)("\n Warning in %s. Should Not Reach Here ? or obj 0x%lx is not moved. \n\n", __func__, (size_t)obj );
+
+
+  // Warning - Only when one object is not moved, it can reach here.
+  // For current design, we should not reach here.
+  // Go to semeru_ms_adjust_intra_region_pointer
+  ShouldNotReachHere();
+
 
 	// There are 2 pathes for field update, based on if this obj is within current scanning Region.
   //

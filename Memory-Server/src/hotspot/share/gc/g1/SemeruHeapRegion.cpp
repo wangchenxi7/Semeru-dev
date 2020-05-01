@@ -1272,3 +1272,32 @@ void SemeruHeapRegion::check_target_obj_queue( const char* message){
   log_trace(semeru,rdma)("%s, End for Region[0x%lx] \n", message, target_obj_queue->_region_index);
 }
 
+
+
+/**
+ * Just print, not pop any items. 
+ */
+void SemeruHeapRegion::check_cross_region_reg_queue(  const char* message){
+	size_t length = this->cross_region_ref_update_queue()->length();
+	size_t i;
+	HashQueue* cross_region_reg_queue = this->cross_region_ref_update_queue();
+	ElemPair* q_iter;
+
+	tty->print("%s,check_cross_region_reg_queue, Start for Region[0x%lx] \n", message, (size_t)this->hrm_index() );
+
+	for(i=0; i < length; i++){
+		q_iter = cross_region_reg_queue->retrieve_item(i);
+		if(q_iter->from != NULL){
+			if(this->is_in_reserved(q_iter->from) == false ){
+				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)this->hrm_index() );
+			}else{
+				tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+			}
+		}// non-null
+
+
+	}
+
+	tty->print("%s,check_cross_region_reg_queue, End for Region[0x%lx] \n", message, (size_t)this->hrm_index() );
+
+}

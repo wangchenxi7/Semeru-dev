@@ -42,7 +42,8 @@ void InstanceRefKlass::do_referent(oop obj, OopClosureType* closure, Contains& c
   T* referent_addr = (T*)java_lang_ref_Reference::referent_addr_raw(obj);
   if (contains(referent_addr)) {
 
-    if(!SemeruEnableMemPool || !obj->is_forwarded()){
+    //if(!SemeruEnableMemPool || !obj->is_forwarded()){
+    if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
       // Path#1. normal path. e.g. tracing.
       Devirtualizer::do_oop(closure, referent_addr);
     }else{
@@ -58,7 +59,8 @@ void InstanceRefKlass::do_discovered(oop obj, OopClosureType* closure, Contains&
   T* discovered_addr = (T*)java_lang_ref_Reference::discovered_addr_raw(obj);
   if (contains(discovered_addr)) {
     
-    if(!SemeruEnableMemPool || !obj->is_forwarded()){
+    //if(!SemeruEnableMemPool || !obj->is_forwarded()){
+    if(IsSame<OopClosureType, G1SemeruAdjustClosure>::value == false ){
       // Path#1. normal path. e.g. tracing.
       Devirtualizer::do_oop(closure, discovered_addr);
     }else{
