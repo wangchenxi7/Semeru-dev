@@ -94,7 +94,8 @@ _num_regions(0)
 
 
 flags_of_cpu_server_state::flags_of_cpu_server_state():
-_is_cpu_server_in_stw(false)
+_is_cpu_server_in_stw(false),
+_exchange_done(false)
 {
 	
 	// debug
@@ -102,5 +103,20 @@ _is_cpu_server_in_stw(false)
 		tty->print("%s, invoke the constructor successfully.\n", __func__);
 		tty->print("%s, start address of current instance : 0x%lx , address of field _is_cpu_server_in_stw : 0x%lx \n", __func__,
 																															(size_t)this, (size_t)&(this->_is_cpu_server_in_stw)	);
+	#endif
+}
+
+
+flags_of_mem_server_state::flags_of_mem_server_state():
+_mem_server_wait_on_data_exchange(false),
+_is_mem_server_in_compact(false),
+_compacted_region_length(0)
+{
+	
+	// debug
+	#ifdef ASSERT
+		tty->print("%s, invoke the constructor successfully.\n", __func__);
+		tty->print("%s, start address of current instance : 0x%lx , address of first field _mem_server_wait_on_data_exchange : 0x%lx \n", __func__,
+																															(size_t)this, (size_t)&(this->_mem_server_wait_on_data_exchange)	);
 	#endif
 }

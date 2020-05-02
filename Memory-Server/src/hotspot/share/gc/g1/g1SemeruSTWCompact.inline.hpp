@@ -145,7 +145,7 @@ inline void G1SemeruAdjustClosure::semeru_ms_adjust_intra_region_pointer(oop src
 		assert(src_obj->is_forwarded(), "The source object must already forwarded.");
     assert(src_obj->forwardee() != NULL, "Must be a legal forwarding pointer." );
 
-		log_debug(semeru,mem_compact)("%s, Record an inter-Region reference src_obj 0x%lx[ field 0x%lx ] --> obj 0x%lx", 
+		log_trace(semeru,mem_compact)("%s, Record an inter-Region reference src_obj 0x%lx[ field 0x%lx ] --> obj 0x%lx", 
                                                       __func__, (size_t)src_obj, (size_t)p, (size_t)obj );
 		//_curr_region->_inter_region_ref_bitmap.
 
@@ -156,7 +156,7 @@ inline void G1SemeruAdjustClosure::semeru_ms_adjust_intra_region_pointer(oop src
     T* new_field_addr =  (T*)((char*)src_obj->forwardee() + field_offset) ;  // T is oop.
 
 
-    log_debug(semeru,mem_compact)("%s, enqueue the new addr. new obj addr 0x%lx, new field addr 0x%lx \n", 
+    log_trace(semeru,mem_compact)("%s, enqueue the new addr. new obj addr 0x%lx, new field addr 0x%lx \n", 
                                                         __func__, (size_t)src_obj->forwardee(), (size_t)new_field_addr );
 
     // curr_region is the old/original Region.

@@ -529,14 +529,16 @@ void G1SemeruConcurrentMarkThread::run_service() {
  
         if (_semeru_sc->has_aborted()) {
           // Abort the compact phase, continue the  concurrent tracing.
-          log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact is aborted. \n",__func__);
+          log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact is aborted OR there is no scanned Region in CSet . \n",__func__);
           break;
-        } else {
+        } else if( !_semeru_sc->_mem_server_cset->is_compact_finished()) {
           // Do the Compact action.
 					log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
 
           // Debug for now.
           _semeru_sc->semeru_stw_compact();
+        }else{
+           log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact has no scanned Region in CSet . \n",__func__);
         }
 
       } // End of STW Compact code block

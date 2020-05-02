@@ -899,17 +899,75 @@ public :
  *  Memory server only read the value of them.
  *  These varialbes are valotile, every time Memory server needs to read the value from memory.
  * 
+ * Size limitations, 1 page,4KB
+ * 
  */
 class flags_of_cpu_server_state : public CHeapRDMAObj<flags_of_cpu_server_state>{
-	private :
-		volatile bool _is_cpu_server_in_stw;
+	//private :
+  public:
+
+    // CPU server states
+    //
+    volatile bool _is_cpu_server_in_stw;
+    volatile bool _exchange_done;
+
 
 	public :
 		flags_of_cpu_server_state();
 
-		inline bool is_cpu_server_in_stw()	{	return _is_cpu_server_in_stw;	}
+    //mhr: modify
+    //mhr: new
+    inline void	set_cpu_server_in_stw()			{	_is_cpu_server_in_stw = true;		}
+		inline void set_cpu_server_in_mutator()	{	_is_cpu_server_in_stw = false;	}
+
+    inline volatile bool is_cpu_server_in_stw()	{	return _is_cpu_server_in_stw;	}
 
 };
+
+
+/**
+ *  Semeru
+ *  For CPU server, this is read only class.
+ *  4K Bytes.
+ */
+class flags_of_mem_server_state : public CHeapRDMAObj<flags_of_mem_server_state>{
+	//private :
+  public:
+
+    // Memory server states
+    //
+
+    // CPU server needs to keep reading the data until this value changed to false.
+    volatile bool _mem_server_wait_on_data_exchange;
+
+    volatile bool _is_mem_server_in_compact;
+
+    // Thread same structure
+    uint _compacted_regions[128];  // assume max regions num is 128.  512 Bytes.
+    volatile size_t _compacted_region_length;
+
+	public :
+		flags_of_mem_server_state();
+
+
+    inline volatile bool is_mem_server_in_compact()  { return _is_mem_server_in_compact; }
+    inline volatile size_t mem_server_compcated_region_length() { return _compacted_region_length;  }
+
+    // Add a claimed Region index.
+    // MT safe.
+    inline void add_claimed_region(uint region_index){
+      size_t available_slot;
+
+      do{
+        available_slot = _compacted_region_length;
+      }while( Atomic::cmpxchg(available_slot+1, &_compacted_region_length, available_slot ) != available_slot );
+
+      _compacted_regions[available_slot] = region_index;
+    }
+
+
+};
+
 
 
 

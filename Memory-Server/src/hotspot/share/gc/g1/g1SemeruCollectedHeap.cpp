@@ -1994,6 +1994,10 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 	area_size  = FLAGS_OF_CPU_SERVER_STATE_SIZE;
 	_cpu_server_flags				=	new(area_size, area_start) flags_of_cpu_server_state();
 
+	area_start = rdma_rs.base() + FLAGS_OF_MEM_SERVER_STATE_OFFSET;
+	area_size  = FLAGS_OF_MEM_SERVER_STATE_SIZE;
+	_mem_server_flags				=	new(area_size, area_start) flags_of_mem_server_state();
+
 	area_start =  rdma_rs.base() + FLAGS_OF_CPU_WRITE_CHECK_OFFSET;
 	area_size  = FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT;
 	_rdma_write_check_flags = new(area_size, area_start) flags_of_rdma_write_check(area_start, area_size, sizeof(uint32_t)); 
@@ -2006,6 +2010,8 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 																							(size_t)_recv_mem_server_cset, (size_t)_recv_mem_server_cset->_region_cset  );
 		log_debug(semeru, alloc)("	flags_of_cpu_server_state  0x%lx, flexible array 0x%lx",  
 																							(size_t)_cpu_server_flags, (size_t)0 );
+		log_debug(semeru, alloc)("	flags_of_mem_server_state  0x%lx, flexible array 0x%lx",  
+																							(size_t)_mem_server_flags, (size_t)0 );
 		log_debug(semeru, alloc)("	flags_of_rdma_write_check  0x%lx, flexible array 0x%lx",  
 																							(size_t)_rdma_write_check_flags, (size_t)_rdma_write_check_flags->one_sided_rdma_write_check_flags_base );
 		log_debug(semeru, alloc)("%s, Meta data allocation End \n", __func__);

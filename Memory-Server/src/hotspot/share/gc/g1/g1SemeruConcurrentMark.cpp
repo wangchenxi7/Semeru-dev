@@ -3390,7 +3390,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	// enable stealing when the termination protocol is enabled
 	// and do_marking_step() is not being called serially.
 	bool do_stealing = do_termination && !is_serial;
-	bool is_cpu_server_in_stw = false;	// default assumption is that, cpu server is running  mutators.
+	flags_of_cpu_server_state* cpu_srever_flags = _semeru_h->cpu_server_flags();
 	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
 
 	//[x] the expected time for current marking step
@@ -3564,7 +3564,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			}
 
 			// CPU server is in STW mode now, try to use this time window to do evacuation.
-			if(is_cpu_server_in_stw == true){
+			if(cpu_srever_flags->_is_cpu_server_in_stw == true){
 				log_debug(semeru,mem_trace)("%s, is_cpu_server_in_stw is true. switch to Memory Server Compact.", __func__);
 				goto out_tracing;
 			}
@@ -3581,7 +3581,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// If the CPU server is in STW mode, claim and trace one Region at least. 
 			// And then stop concurrent tracing and try to compact the CM-scanned Regions.	
 			// [?] If the CM-scanned Region is empty, try to trace && compact a Region there until the end of CPU STW mode.
-			is_cpu_server_in_stw = _semeru_h->is_cpu_server_in_stw();
+			
 
 			// We are going to try to claim a new region. We should have
 			// given up on the previous one.
@@ -3606,7 +3606,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// }
 
 				// Check the Cross_region_ref queue 
-				claimed_region->check_cross_region_reg_queue("Check after cliaming.");
+				//claimed_region->check_cross_region_reg_queue("Check after cliaming.");
 
 				break; // break out of while loop.
 			}
@@ -3621,15 +3621,15 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 			// [x] If abort the tracing after cliaming the Region, leave the region to _curr_region and relaunch the do_semeru_marking_step.
 			log_debug(semeru, mem_trace)("%s, has_aborted() %d,is_cpu_server_in_stw %d, is_cm_scan_finished %d .", __func__,
-																	has_aborted(), is_cpu_server_in_stw, _semeru_cm->mem_server_cset()->is_cm_scan_finished());
+																	has_aborted(), cpu_srever_flags->_is_cpu_server_in_stw, _semeru_cm->mem_server_cset()->is_cm_scan_finished());
 
-		}while (!has_aborted() && !is_cpu_server_in_stw && !_semeru_cm->mem_server_cset()->is_cm_scan_finished());
+		}while (!has_aborted() && !cpu_srever_flags->_is_cpu_server_in_stw && !_semeru_cm->mem_server_cset()->is_cm_scan_finished());
 
 
 		// End of CSet processing.
 		// If reach here, all the regions in memory server CSet should be already processed already.
 		if (!has_aborted() && _curr_region == NULL) {
-			assert(_semeru_cm->out_of_memory_server_cset() || is_cpu_server_in_stw == true,
+			assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished()|| cpu_srever_flags->_is_cpu_server_in_stw == true,
 						 "at this point we should be out of regions");
 		}
 
@@ -3646,7 +3646,7 @@ out_tracing:
 	if (!has_aborted() ) {
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
-		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || is_cpu_server_in_stw == true,
+		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true,
 					 "at this point we should be out of regions");
 		
 	}
@@ -3668,7 +3668,7 @@ out_tracing:
 	//
 
 	// Attempt at work stealing from other task's queues.
-	if (do_stealing && !has_aborted()  &&  is_cpu_server_in_stw == false ) {
+	if (do_stealing && !has_aborted()  &&  cpu_srever_flags->_is_cpu_server_in_stw == false ) {
 		// We have not aborted. This means that we have finished all that
 		// we could. Let's try to do some stealing...
 
@@ -3705,7 +3705,7 @@ out_tracing:
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be concurrently pushing objects on it.
 		// Separated the asserts so that we know which one fires.
-		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || is_cpu_server_in_stw == true  , "only way to reach here");
+		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 		assert(_semeru_task_queue->size() == 0, "only way to reach here");
 		_termination_start_time_ms = os::elapsedVTime() * 1000.0;
 
@@ -3730,7 +3730,7 @@ out_tracing:
 			// all other tasks have finished. We separated the guarantees so
 			// that, if a condition is false, we can immediately find out
 			// which one.
-			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || is_cpu_server_in_stw == true  , "only way to reach here");
+			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");

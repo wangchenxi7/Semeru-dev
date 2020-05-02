@@ -213,6 +213,7 @@ public :
   // Memory server has to read  the value from memory every time.
   // the fileds of flags_of_cpu_server_state are  all volatile.
   flags_of_cpu_server_state* _cpu_server_flags;
+  flags_of_mem_server_state* _mem_server_flags;
 
   flags_of_rdma_write_check* _rdma_write_check_flags;
 
@@ -220,9 +221,10 @@ public :
 
 
   flags_of_cpu_server_state* cpu_server_flags()   { return _cpu_server_flags;  }
-  bool is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  } // abandon this function.
+  //bool volatile is_cpu_server_in_stw()   { return _cpu_server_flags->is_cpu_server_in_stw();  } // abandon this function.
 
 
+  flags_of_mem_server_state* mem_server_flags()   { return _mem_server_flags;  }
 
 
 

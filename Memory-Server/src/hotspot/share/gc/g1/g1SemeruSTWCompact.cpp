@@ -309,7 +309,9 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		assert(Thread::current()->is_ConcurrentGC_thread(), "Not a concurrent GC thread");
 		ResourceMark rm;			// [?] What's this resource used for ?
 		double start_vtime = os::elapsedVTime();
-		bool is_cpu_server_in_stw = false;
+		//volatile bool *is_cpu_server_in_stw = ;
+		flags_of_cpu_server_state* cpu_server_flags  = _semeru_sc->_semeru_h->cpu_server_flags();
+		flags_of_mem_server_state* mem_server_flags	 = _semeru_sc->_semeru_h->mem_server_flags();
 
 		_worker_id = worker_id;
 		_cp = _semeru_sc->compaction_point(_worker_id); // [X] Remember to reset the compaction_point at the end of this work.
@@ -323,7 +325,8 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		do{
 				// Check CPU server STW states.
 				// Compact one Region at least. When we reach here, we already confirmed the cpu server STW mode.
-				is_cpu_server_in_stw = _semeru_sc->_semeru_h->is_cpu_server_in_stw();
+				if(cpu_server_flags->_is_cpu_server_in_stw == false)
+					break; // end the compaction.
 
 				// Start: When the compacting for a Region is started,
 				// do not interrupt it until the end of compacting.
@@ -331,6 +334,10 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id, region_to_evacuate);
 				if(region_to_evacuate != NULL){
 					log_debug(semeru,mem_compact)("%s, Claimed Region[0x%lx] to be evacuted.", __func__, (size_t)region_to_evacuate->hrm_index() );
+
+					// If Claimed, must finish the compacting.
+					//
+					mem_server_flags->add_claimed_region(region_to_evacuate->hrm_index());
 
 					// Phase#1 Sumarize alive objects' destinazion
 					// 1) put forwarding pointer in alive object's markOop
@@ -357,35 +364,86 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					phase3_compact_region(region_to_evacuate);
 
 
-					// Phase#4 Inter-Region reference fields update.
-					// Should adjust the inter-region reference before do the compaction.
-					// 1) The target Region is in Memory Server CSet
-					// 2) The target Region is in Another Server(CPU server, or another Memory server)
 
-					// TO BE DONE.
-					//
-					// Synchronized with other servers, CPU server or Memory server, to get the cross-region-ref-update queue.
-					//
 
 					// Debug Drain the CompactTask _cross_region_ref_update_queue
 					//check_overflow_taskqueue("phase4 prepare.");
 
 					// Check the Region's cross_region_ref queue
-					check_cross_region_reg_queue(region_to_evacuate, "Before phase4");
-
-					//debug
-					// Can't update cross-region reference before the end of STW window.
-					if(region_to_evacuate->hrm_index()  == 0x6)
-						phase4_adjust_inter_region_pointer(region_to_evacuate);
-
-					
+					//check_cross_region_reg_queue(region_to_evacuate, "Before phase4");					
 
 					log_debug(semeru,mem_compact)("%s, Evacuation for Region[0x%lx] is done.", __func__, (size_t)region_to_evacuate->hrm_index() );
 				}
 
 			// End: Check if we need to stop the compacting work
 			// and switch to the inter-region fields update phase.
-		}while( is_cpu_server_in_stw && region_to_evacuate != NULL && !_semeru_sc->has_aborted() );
+		}while( cpu_server_flags->_is_cpu_server_in_stw && region_to_evacuate != NULL && !_semeru_sc->has_aborted() );
+
+
+
+		//
+		// Do the Phase#4, update inter-Region reference here.
+		//
+
+					// Phase#4 Inter-Region reference fields update.
+					// Should adjust the inter-region reference before do the compaction.
+					// 1) The target Region is in Memory Server CSet
+					// 2) The target Region is in Another Server(CPU server, or another Memory server)
+
+					// A.Synchronize with other comacption threads .
+					//
+					// B. Synchronized with other servers, CPU server or Memory server, to get the cross-region-ref-update queue.
+					// 1）We have finished compact one Region, update its Cross_region_ref_queue to CPU server.
+					// 2) If we recieved STW windown end signal, send current cross_region_ref_queue and Wait for information back
+					// 3) After 2) is done, start update all the inter-region reference.
+
+
+					//
+					// Warning : This is a single compaction thread model.
+					//
+
+					// End condition
+					// 1) STW window is closed.
+          // 2) Empty the scanned Region CSet. 
+					if(cpu_server_flags->_is_cpu_server_in_stw == false ||
+						  region_to_evacuate == NULL ){
+
+						log_debug(semeru,mem_compact)("%s, STW Window is closed ? %d . or Memoery Server Compacting is Finished ? %d.\n", 
+																				__func__, cpu_server_flags->_is_cpu_server_in_stw, region_to_evacuate == NULL ? true : false  );
+
+						// wait on cross_region_reference exchange
+						mem_server_flags->_mem_server_wait_on_data_exchange = true; // cpu server can send its data.
+						
+						// If the memory server finished the compaction earlier than CPU server's evacuation, busy wit on the lock.
+						//
+						// start exchange ==>> 
+		
+						log_debug(semeru,mem_compact)("%s, Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__);
+						while(cpu_server_flags->_exchange_done == false){
+						// memory server busy wait on the RDMA flag.
+						// 1) CPU server(and other server) needs to send their data here.
+						// 2) CPU server needs to read data from current this.
+						//
+						// CPU server and other server needs to use different pages!!
+						}
+
+						// Busy wait on exchanging finished <===
+
+
+
+						//debug
+						// Can't update cross-region reference before the end of STW window.
+						log_debug(semeru,mem_compact)("%s, Start updating inter-region reference.\n", __func__);
+						phase4_adjust_inter_region_pointer(region_to_evacuate);
+					
+						mem_server_flags->_is_mem_server_in_compact = false; // compaction is totally done.
+					
+						log_debug(semeru,mem_compact)("%s, Memoery Server Compacting is totally Finished.\n", __func__);
+					}// STW window is going to close.
+
+
+
+
 
 
 		//
@@ -394,7 +452,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		// 1) The CPU STW window is closed.
 		// 2) All the scanned Regions are processed.
 		// 3) The CPU server is changed to none STW mode. 
-		assert(_semeru_sc->mem_server_scanned_cset()->is_compact_finished() || is_cpu_server_in_stw == false  || _semeru_sc->has_aborted(),
+		assert(_semeru_sc->mem_server_scanned_cset()->is_compact_finished() || cpu_server_flags->_is_cpu_server_in_stw == false  || _semeru_sc->has_aborted(),
 										"%s, Semeru Memoery server's compaction stop unproperly. \n", __func__ );
 		
 
@@ -995,7 +1053,7 @@ void G1SemeruSTWCompactTask::check_cross_region_reg_queue( SemeruHeapRegion* hr,
 
 	for(i=0; i < length; i++){
 		q_iter = cross_region_reg_queue->retrieve_item(i);
-		
+
 		if(q_iter->from != NULL){
 					// error Check
 			if(hr->is_in_reserved(q_iter->from) == false ){

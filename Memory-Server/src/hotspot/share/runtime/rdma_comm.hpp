@@ -83,7 +83,7 @@ enum region_status{
 		SEND_SINGLE_CHUNK,		// send the remote_addr/rkey of a single Chunk. Useless now.
 		FREE_SIZE,						// Send free size information && the registered whole Java heap to remote CPU server.
 		EVICT,        			  // 5
-		ACTIVITY,				
+		ACTIVITY,				      // Debug item, used as "End of STW Window "
 		
 		STOP,					        //7, upper SIGNALs are used by server, below SIGNALs are used by client.
 
