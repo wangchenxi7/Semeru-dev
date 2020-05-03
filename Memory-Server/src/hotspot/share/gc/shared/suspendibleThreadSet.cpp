@@ -39,8 +39,8 @@ void SuspendibleThreadSet_init() {
   assert(_synchronize_wakeup == NULL, "STS already initialized");
   _synchronize_wakeup = new Semaphore();
 }
-
-bool SuspendibleThreadSet::is_synchronized() {
+// This is the last thread ?
+bool SuspendibleThreadSet::is_synchronized() {  
   assert_lock_strong(STS_lock);
   assert(_nthreads_stopped <= _nthreads, "invariant");
   return _nthreads_stopped == _nthreads;
@@ -79,13 +79,15 @@ void SuspendibleThreadSet::yield() {
         guarantee((now - _suspend_all_start) * 1000.0 < (double)ConcGCYieldTimeout, "Long delay");
       }
       // This yield completes the request, so inform the requestor.
-      _synchronize_wakeup->signal();
+      _synchronize_wakeup->signal();  // #1 if this is the last thread, wakeup other threads
     }
+
+    // If other thread wants to wakeup this thread, need to set _suspend_all to false.
     while (_suspend_all) {
-      ml.wait(Mutex::_no_safepoint_check_flag);
+      ml.wait(Mutex::_no_safepoint_check_flag);  // #2, threads may wait here until wakenup by other threads.
     }
     assert(_nthreads_stopped > 0, "Invalid");
-    _nthreads_stopped--;
+    _nthreads_stopped--;                         // if the thread is wakenup, decrease the _nthreads_stopped counter.
   }
 }
 
@@ -98,6 +100,7 @@ void SuspendibleThreadSet::yield() {
  *  1) For here, seems VM_thread uses a Mutex, _suspend_all, to protect a bool variable, _suspend_all ?
  *  2) And then it uses the semaphore, _synchronize_wakeup, to suspend, wakeup other mutator threads.
  *  
+ *  [?] GC threads, e.g. WorkGang can also by synchronized() by this function ?
  * 
  *  [?] The check instructions are inserted by compiler, e.g. JIT or interpreter ?
  * 

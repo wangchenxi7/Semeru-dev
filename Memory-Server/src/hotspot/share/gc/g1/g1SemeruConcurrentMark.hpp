@@ -456,14 +456,6 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
 
   // Semeru memory sever
 
-  //  Every SemeruHeapRegion should has its own _alive_bitmap.
-  //  Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
-  //  So it's better to cut the bitmap into slices, one slice per SemeruHeapRegion.
-  //
-  //  Move these fields to G1SemeruCMTask
-  //G1CMBitMap*             _alive_bitmap; // Points to the scanning Region's bitmap. SemeruHeapRegion->alive_bitmap
-  //G1CMBitMap*             _dest_bitmap;  
-
   // Heap bounds
   MemRegion const         _heap;
 

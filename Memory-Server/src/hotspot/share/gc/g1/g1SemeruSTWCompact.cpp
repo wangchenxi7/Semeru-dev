@@ -329,7 +329,10 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 
 				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id(), region_to_evacuate);
 				if(region_to_evacuate != NULL){
-					log_debug(semeru,mem_compact)("%s, Claimed Region[0x%lx] to be evacuted.", __func__, (size_t)region_to_evacuate->hrm_index() );
+					log_debug(semeru,mem_compact)("%s, worker[0x%x] Claimed Region[0x%lx] to be evacuted.", __func__, worker_id(), (size_t)region_to_evacuate->hrm_index() );
+
+					if(region_to_evacuate->hrm_index() == 0x7)
+						check_cross_region_reg_queue(region_to_evacuate, "Before phase1, Region[0x7]");	
 
 					// If Claimed, must finish the compacting.
 					//
@@ -366,7 +369,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 					// Check the Region's cross_region_ref queue
 					//check_cross_region_reg_queue(region_to_evacuate, "Before phase4");					
 
-					log_debug(semeru,mem_compact)("%s, Evacuation for Region[0x%lx] is done.", __func__, (size_t)region_to_evacuate->hrm_index() );
+					log_debug(semeru,mem_compact)("%s, worker[0x%x] Evacuation for Region[0x%lx] is done.", __func__, worker_id(), (size_t)region_to_evacuate->hrm_index() );
 				}
 
 			// End: Check if we need to stop the compacting work
@@ -378,6 +381,9 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 
 		// Only the last thread can set the flags value.
 		// The Inter_region_ref queue can be non-empty when we get a termination offer.
+		// 1) [?] Will this sync these threads here ? 
+		//     and then go into the next block at the same time ?
+		// 2) Can we also do work stealing here ?
 		bool all_task_finished =	_semeru_sc->terminator()->offer_semeru_compact_termination(this);
 		if(all_task_finished){
 		//
@@ -419,7 +425,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 						//
 						// start exchange ==>> 
 		
-						log_debug(semeru,mem_compact)("%s, Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__);
+						log_debug(semeru,mem_compact)("%s, worker[0x%x] Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__, worker_id());
 						while(cpu_server_flags->_exchange_done == false){
 						// memory server busy wait on the RDMA flag.
 						// 1) CPU server(and other server) needs to send their data here.
@@ -452,7 +458,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 						  region_to_evacuate == NULL ){
 
 				// Busy wait on the data exchange finished.
-				log_debug(semeru,mem_compact)("%s, Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__);
+				log_debug(semeru,mem_compact)("%s, worker[0x%x] Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__, worker_id() );
 				while(cpu_server_flags->_exchange_done == false){
 					// memory server busy wait on the RDMA flag.
 					// 1) CPU server(and other server) needs to send their data here.
@@ -463,6 +469,11 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 
 				log_debug(semeru,mem_compact)("%s, Start updating inter-region reference. worker[0x%x] \n", __func__, worker_id() );
 				phase4_adjust_inter_region_pointer(region_to_evacuate);
+
+				//
+				// Can we do work stealing here ??
+				//
+
 
 			} // cpu STW windown closed, or evacuated all the scanned Regions.
 
@@ -485,6 +496,8 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 		// statistics 
 		double end_vtime = os::elapsedVTime();
 		_semeru_sc->update_accum_task_vtime(worker_id(), end_vtime - start_vtime);
+
+		log_debug(semeru,mem_compact)("%s, worker[0x%x] terminated. ", __func__, worker_id());
 	}
 
 
@@ -501,7 +514,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
  */
 void G1SemeruSTWCompactTerminatorTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
 
-	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#1, preparation, worker [0x%x] ", __func__, this->_worker_id);
+	log_debug(semeru, mem_compact)("%s, worker[0x%x] Enter Semeru MS Compact Phase#1, preparation ", __func__, worker_id());
 
 	// get _cp from G1SemeruSTWCompact->compaction_point(worker_id)
 	G1SemeruCalculatePointersClosure semeru_ms_prepare(_semeru_sc, hr->alive_bitmap(), _cp, &_humongous_regions_removed);  
@@ -573,7 +586,7 @@ class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
 
 void G1SemeruSTWCompactTerminatorTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr){
 
-	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
+	log_debug(semeru, mem_compact)("%s, worker[0x%x]  Enter Semeru MS Compact Phase#2, pointer adjustment. ", __func__, this->_worker_id);
 
 	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap(), _worker_id, _inter_region_ref_queue );
 	adjust_region.do_heap_region(hr);
@@ -606,6 +619,9 @@ void G1SemeruSTWCompactTerminatorTask::record_new_addr_for_target_obj(SemeruHeap
 	ElemPair* elem_ptr;
 	oop new_addr;
 
+	log_debug(semeru, mem_compact)("%s, worker[0x%x] Cross_region_ref_queue of Region[0x%lx], lenth 0x%lx  ", 
+																														__func__, worker_id(),  (size_t)hr->hrm_index(),  len );
+
 	for( i =0; i< len; i++){
 		elem_ptr = cross_region_ref_ptr->retrieve_item(i);
 		
@@ -618,7 +634,8 @@ void G1SemeruSTWCompactTerminatorTask::record_new_addr_for_target_obj(SemeruHeap
 		elem_ptr->to = new_addr;
 		
 		//debug
-		log_trace(semeru,mem_compact)("%s, store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, i, (size_t)elem_ptr->from, (size_t)new_addr );
+		log_trace(semeru,mem_compact)("%s, worker[0x%x] store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, 
+																				worker_id(), i, (size_t)elem_ptr->from, (size_t)new_addr );
 	}// end of for
 
 }
@@ -682,7 +699,7 @@ void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
   size_t count;
   SemeruCompactTaskQueue* inter_region_ref_queue = this->inter_region_ref_taskqueue();
 
-  log_trace(semeru,mem_compact)("\n%s, start for updating Inter-Region ref, worker[0x%lx]", __func__, (size_t)worker_id() );
+  log_debug(semeru,mem_compact)("\n%s, start for updating Inter-Region ref, worker[0x%lx]", __func__, (size_t)worker_id() );
 
 
   // #1 Drain the overflow queue
@@ -702,22 +719,23 @@ void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
 			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
 			//Debug
 			if(new_target_oop_addr == (oop)MAX_SIZE_T){
-				tty->print("Overflow :Wrong in %s, old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
-																																			(size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+				tty->print("Overflow :Wrong in %s,  worker[0x%x]  old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
+																																		worker_id(), (size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
 				continue;
 			}
 
-			if(new_target_oop_addr!=NULL )
+			if(new_target_oop_addr!=NULL ){
 				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
-			else
-				log_trace(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+			}else{
+				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+			}
 
-			log_trace(semeru,mem_compact)(" Overflow: update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
+			log_debug(semeru,mem_compact)(" Overflow: update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
 										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
 																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
 
 		}else{
-       log_trace(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
     }
 
     count++;
@@ -741,29 +759,30 @@ void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
 			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
 			//Debug
 			if(new_target_oop_addr == (oop)MAX_SIZE_T){
-				tty->print("Wrong in %s, old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
-																																			(size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+				tty->print(" Wrong in %s, worker[0x%x]  old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
+																																worker_id(), (size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
 				continue;
 			}
 
-			if(new_target_oop_addr!=NULL)
+			if(new_target_oop_addr!=NULL){
 				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
-			else
-				log_trace(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+			}else{
+				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+			}
 
-			log_trace(semeru,mem_compact)(" update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
+			log_debug(semeru,mem_compact)(" update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
 										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
 																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
 
 		}else{
-       log_trace(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+       log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
     }
     count++;
   }// end of while
 
   assert(inter_region_ref_queue->is_empty(), "should drain the queue");
 
-  log_trace(semeru,mem_compact)("%s, End for updating Inter-Region ref, worker[0x%lx] \n", __func__, (size_t)worker_id());
+  log_debug(semeru,mem_compact)("%s, End for updating Inter-Region ref, worker[0x%lx] \n", __func__, (size_t)worker_id());
 }
 
 
@@ -813,7 +832,7 @@ G1SemeruCalculatePointersClosure::G1SemeruCalculatePointersClosure( G1SemeruSTWC
 	_humongous_regions_removed(humongous_regions_removed) { 
 
 		#ifdef ASSERT
-			tty->print("%s, initialized G1SemeruCalculatePointersClosure. ", __func__);
+			tty->print("%s, initialized G1SemeruCalculatePointersClosure. \n", __func__);
 		#endif
 }
 

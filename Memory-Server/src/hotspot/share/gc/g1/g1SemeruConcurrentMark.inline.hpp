@@ -650,7 +650,7 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
 
   oop obj;  // For semeru, we only yse non compressed oop.
 
-  for(size_t i = 1; i < cross_region_ref_q->length(); i ++) {
+  for(size_t i = 0; i < cross_region_ref_q->length(); i ++) {
     obj = cross_region_ref_q->retrieve_item(i)->from;  // target object, addr before compaction
 
     if(obj == NULL) {

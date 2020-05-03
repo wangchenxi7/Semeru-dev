@@ -1163,9 +1163,10 @@ public:
 		double start_vtime = os::elapsedVTime();
 
 		{
-			//debug
-			//SuspendibleThreadSetJoiner sts_join;		// [?] gdb Concurrent marking threads always get stuck here ??
-			log_debug(semeru, mem_trace)("%s, Trace current Region.", __func__);
+			// Join the multiple mark workers,
+			// Only one can exit the block.
+			SuspendibleThreadSetJoiner sts_join;		// [?] gdb Concurrent marking threads always get stuck here ??
+			log_debug(semeru, mem_trace)("%s, Schedule worker[0x%x] to do Concurrent Mark.", __func__, worker_id );
 
 			assert(worker_id < _semeru_cm->active_tasks(), "invariant");
 
@@ -1189,7 +1190,6 @@ public:
 					//_semeru_cm->do_yield_check();		// yield for what ? Must pair with SuspendibleThreadSetJoiner
 
 					// [XX] if task has_aborted(), then re-do the marking until finished.
-					// Usually, 
 				} while (!_semeru_cm->has_aborted() && task->has_aborted());  
 		
 			}
@@ -1200,10 +1200,6 @@ public:
 
 		double end_vtime = os::elapsedVTime();
 		_semeru_cm->update_accum_task_vtime(worker_id, end_vtime - start_vtime);
-
-
-		// When exit the function, current worker thread will exeit automatically.
-		_semeru_cm->mem_server_cset()->scan_finished();  // Notify others, current scanning work is finished.
 	}
 
 	G1SemeruCMConcurrentMarkingTask(G1SemeruConcurrentMark* semeru_cm) :
@@ -1485,12 +1481,15 @@ void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 
 	// Do the preparing work for both CM and Remark/Compact.
 	mem_server_cset()->prepare_for_scan();  // Mark scanning start
-	//mem_server_cset()->prepare_for_compact();  // [?] no need to prepare for compacting here ??
+	//mem_server_cset()->prepare_for_compact();  // Move to compact phase
 
 	// Schedule the multiple concurrent workers to run.
 	//
 	G1SemeruCMConcurrentMarkingTask marking_task(this);
 	_concurrent_workers->run_task(&marking_task);			// The G1SemeruConcurrentMarkThread will wait here until all workers finished.
+
+	// When exit the function, current worker thread will exeit automatically.
+	mem_server_cset()->scan_finished();  // Notify others, current scanning work is finished.
 	print_stats();
 }
 
@@ -3393,27 +3392,12 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	flags_of_cpu_server_state* cpu_srever_flags = _semeru_h->cpu_server_flags();
 	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
 
-	//[x] the expected time for current marking step
-	// If spend more time than the G1SemeruCMTask->_time_target_ms, abort current tracing task and yield.
-	// And then we have to reschedule a tracing for current Region.
-	// For Memory Server, it's a contiguous tracing, we abandon this check.
-	// _time_target_ms = time_target_ms - diff_prediction_ms;		
-
-
-	// // set up the variables that are used in the work-based scheme to
-	// // call the regular clock method
-	// _words_scanned = 0;
-	// _refs_reached  = 0;
-	// recalculate_limits();
-
 	// clear all flags
 	clear_has_aborted();				// [?] What's this used for ?
 	_has_timed_out = false;
 	// _draining_satb_buffers = false;
 
 	++_calls;
-
-	
 
 	//	Set the CM closure, used to drain the G1SemeruCMTask->_task_queue
 	//	This is also the main closure for CM.
@@ -3433,12 +3417,6 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	}
 
 
-	
-	// For semeru, this queue should be empty now before scan the Target Object Queue.
-	// // ...then partially drain the local queue and the global stack
-	// // [?] why do these 2 partially drain before scan the  Target Object Queue.
-	// drain_local_queue(true);
-	// drain_global_stack(true);
 
 	//
 	// 1) Concurrently tracing all the Regions in Memory Server's Collection Set. 
@@ -3507,27 +3485,11 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			
 				// 1.2) Process a Normal Region.
 
-				// Concurrently Scan the Region poited by _curr_region.
-				// TargetObjQueue* target_obj_q = _curr_region->target_obj_queue();
-
-				// log_debug(semeru,mem_trace)("%s, get Region[0x%lx]'s targetObjQueue[0x%lx]: 0x%lx. item size 0x%lx \n",__func__,
-				// 																																	(size_t)_curr_region->hrm_index(), 
-				// 																																	(size_t)target_obj_q->_region_index, 
-				// 																																	(size_t)target_obj_q,
-				// 																																	(size_t)target_obj_q->bottom());
-
-				// //Add a RDMA Debug check
-				// assert(_curr_region->hrm_index() == target_obj_q->_region_index, "TargetObjQueue and Region aren't match.");
-				// // everything is good, process the target obj queue.
-				// trim_target_object_queue(target_obj_q);
-
-
-				//
-				// Switch to use the _cross_region_ref_update_queue
-
+				// The source queue for the Region.
 				HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
 
-				log_debug(semeru,mem_trace)("%s, get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
+																																					worker_id(),
 																																					(size_t)_curr_region->hrm_index(), 
 																																					(size_t)cross_region_ref_queue->_region_index, 
 																																					(size_t)cross_region_ref_queue,
@@ -3545,12 +3507,10 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// The purpose is to limit the tracing memory footprint to reduce the CM conflict with mutators.
 			// if already aborted, leave the enqueued items to the rest procedures.
 
-			log_debug(semeru,mem_trace)("%s, Drain reference queue for Region[0x%x]",__func__, _curr_region->hrm_index());
+			log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
 			drain_local_queue(false);
 			drain_global_stack(false);
 
-			// swtich current Regions next/prev top value ?
-			//_curr_region->note_end_of_marking();
 
 			_curr_region->set_region_cm_scanned(); // if setted by Remark, it's ok.
 			_semeru_cm->mem_server_cset()->add_cm_scanned_regions(_curr_region);	// Add the scanned Region into scanned_region list.
@@ -3559,13 +3519,13 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// Finish Site#1
 			// Processed all the freshly scanned Regions.
 			if(	_semeru_cm->mem_server_cset()->is_cm_scan_finished()){
-				log_debug(semeru,mem_trace)("%s, processed all  the freshly evicted region.",__func__);
+				log_debug(semeru,mem_trace)("%s, worker[0x%x]  processed all  the freshly evicted region.",__func__, worker_id() );
 			//	_semeru_cm->mem_server_cset()->scan_finished();  // [?] is this the right place to notify the finish of CM scanning ?
 			}
 
 			// CPU server is in STW mode now, try to use this time window to do evacuation.
 			if(cpu_srever_flags->_is_cpu_server_in_stw == true){
-				log_debug(semeru,mem_trace)("%s, is_cpu_server_in_stw is true. switch to Memory Server Compact.", __func__);
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] is_cpu_server_in_stw is true. switch to Memory Server Compact.", __func__, worker_id());
 				goto out_tracing;
 			}
 
@@ -3589,7 +3549,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// Yes, we managed to claim one
 				setup_for_region(claimed_region);
 				assert(_curr_region == claimed_region, "invariant");
-				log_debug(semeru,mem_trace)("%s, get Region[0x%x] to scan. \n",__func__, claimed_region->hrm_index());
+				log_debug(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
 
 
 				//debug Check the target obj queue content.
@@ -3600,7 +3560,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// }
 
 				// Check the Cross_region_ref queue 
-				//claimed_region->check_cross_region_reg_queue("Check after cliaming.");
+				// if(claimed_region->hrm_index() == 0x7)
+				//	claimed_region->check_cross_region_reg_queue("Check after cliaming.");
 
 				break; // break out of while loop.
 			}
@@ -3614,7 +3575,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 
 			// [x] If abort the tracing after cliaming the Region, leave the region to _curr_region and relaunch the do_semeru_marking_step.
-			log_debug(semeru, mem_trace)("%s, has_aborted() %d,is_cpu_server_in_stw %d, is_cm_scan_finished %d .", __func__,
+			log_debug(semeru, mem_trace)("%s, worker[0x%x] has_aborted() %d,is_cpu_server_in_stw %d, is_cm_scan_finished %d .", __func__,
+																	worker_id(),
 																	has_aborted(), cpu_srever_flags->_is_cpu_server_in_stw, _semeru_cm->mem_server_cset()->is_cm_scan_finished());
 
 		}while (!has_aborted() && !cpu_srever_flags->_is_cpu_server_in_stw && !_semeru_cm->mem_server_cset()->is_cm_scan_finished());
@@ -3649,7 +3611,7 @@ out_tracing:
 	//		 Actually, all of  them should already be processed.
 	// Since we've done everything else, we can now totally drain the
 	// local queue and global stack.
-	log_debug(semeru,mem_trace)("%s, 2nd, times Drain reference queue for current scanning.",__func__);
+	log_debug(semeru,mem_trace)("%s, worker[0x%x] 2nd, times Drain reference queue for current scanning.",__func__, worker_id() );
 	drain_local_queue(false);
 	drain_global_stack(false);
 
@@ -3662,18 +3624,33 @@ out_tracing:
 	//
 
 	// Attempt at work stealing from other task's queues.
-	if (do_stealing && !has_aborted()  &&  cpu_srever_flags->_is_cpu_server_in_stw == false ) {
+	// Because we want all the marking threads exit at the same time.
+	// Case#1. if we find CPU server is in STW window, try to drain current task as soon as posible.
+	//         But not to claim new regions to mark.
+	//    
+	// [Warning] If we decide to steal work from a queue, we need to switch it's _curr_region to that queue.
+	if (do_stealing && !has_aborted() ) {
 		// We have not aborted. This means that we have finished all that
 		// we could. Let's try to do some stealing...
+		log_debug(semeru,mem_trace)("%s, worker[0x%x] start stealing work.. ", __func__, worker_id());
 
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
-		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() && _semeru_task_queue->size() == 0,
+		assert( cpu_srever_flags->_is_cpu_server_in_stw == true || _semeru_task_queue->size() == 0,
 					 "only way to reach here");
 
 		while (!has_aborted()) {
 			G1SemeruTaskQueueEntry entry;
 			if (_semeru_cm->try_stealing(_worker_id, entry)) {
+
+				// switch processing Region.
+				// Don't care entry is oop or array slice, only want its address.
+				// _curr_region should be NULL.
+				if(_curr_region == NULL || !_curr_region->is_in_reserved(entry.obj()) ){
+					_curr_region = _semeru_h->hrm()->addr_to_region((HeapWord*)entry.obj());
+					setup_for_region(_curr_region); // switch other fields to this Region.
+				}
+
 				scan_task_entry(entry);
 
 				// And since we're towards the end, let's totally drain the
@@ -3685,6 +3662,8 @@ out_tracing:
 			}
 		} // not aborted, keep stealing work from other thread.
 
+		// Reset current worker's  fields agian
+		clear_region_fields();
 	}
 
 
@@ -3732,7 +3711,8 @@ out_tracing:
 		} else {
 			// Apparently there's more work to do. Let's abort this task. It
 			// will restart it and we can hopefully find more things to do.
-			log_debug(semeru,mem_trace)("%s, Set current G1SemeruConcurrentMark task aborted.",__func__);
+			// Case#1. goto steal work from another thread's taskqueue.
+			log_debug(semeru,mem_trace)("%s, Worker[0x%x], Set current G1SemeruConcurrentMark task aborted. Re-schedule to steal.",__func__, worker_id());
 			set_has_aborted();
 		}
 		
@@ -3815,7 +3795,8 @@ out_tracing:
 
 	//unsigned int microseconds = 10000000; //10s.
 	//usleep(microseconds);
-	log_debug(semeru,mem_trace)("%s, Running thread(worker), %s, gc_id %d, 0x%lx finished work. \n", __func__,
+	log_debug(semeru,mem_trace)("%s, Running thread(worker 0x%x), %s, gc_id %d, 0x%lx finished work. \n", __func__,
+																													worker_id(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
 																													(size_t)Thread::current());

@@ -57,17 +57,17 @@ void OopIterateClosure::verify(T* p) {
 		if (!CompressedOops::is_null(heap_oop)) {
 			oop o = CompressedOops::decode_not_null(heap_oop);
 
-			#ifdef ASSERT
-			if(SemeruEnableMemPool){
-				// size_t region_of_p = (size_t)p >> SemeruHeapRegion::SemeruLogOfHRGrainBytes; // 16MB Region
-				// size_t region_of_o = (size_t)o >> SemeruHeapRegion::SemeruLogOfHRGrainBytes;
-				size_t region_of_p = (size_t)p >> 24; // 16MB Region
-				size_t region_of_o = (size_t)o >> 24;
-				if(region_of_p != region_of_o   ){
-					tty->print("%s, p 0x%lx and o 0x%lx are not in same Region. \n",__func__, (size_t)p, (size_t)o);
-				}
-			}
-			#endif
+			// #ifdef ASSERT
+			// if(SemeruEnableMemPool){
+			// 	// size_t region_of_p = (size_t)p >> SemeruHeapRegion::SemeruLogOfHRGrainBytes; // 16MB Region
+			// 	// size_t region_of_o = (size_t)o >> SemeruHeapRegion::SemeruLogOfHRGrainBytes;
+			// 	size_t region_of_p = (size_t)p >> 24; // 16MB Region
+			// 	size_t region_of_o = (size_t)o >> 24;
+			// 	if(region_of_p != region_of_o   ){
+			// 		tty->print("%s, p 0x%lx and o 0x%lx are not in same Region. \n",__func__, (size_t)p, (size_t)o);
+			// 	}
+			// }
+			// #endif
 
 			// In some cases, the pointed object may not in the semeru heap's closed subset.
 			// e.g. There is a reference,p, from Region[0x6] to Region[0x7]
