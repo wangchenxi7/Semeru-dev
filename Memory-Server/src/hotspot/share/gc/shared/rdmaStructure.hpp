@@ -966,6 +966,41 @@ class flags_of_mem_server_state : public CHeapRDMAObj<flags_of_mem_server_state>
     }
 
 
+
+    /**
+     * It's ok to set these flags multiple times.
+     *  
+     */
+    void set_all_flags_to_start_mode(){
+      // sync#1
+
+      // sync #2 finished
+      _mem_server_wait_on_data_exchange = false;
+
+      // Sync #3, all done
+      _is_mem_server_in_compact = true;
+
+    }
+
+
+    /**
+     * It's ok to set these flags multiple times.
+     *  
+     */
+    void set_all_flags_to_end_mode(){
+      // Sync #1 read the STW window ended.
+      // if possible stop claimed Region.
+      // OR
+      // Finish current compaction.
+
+      // sync #2 finished
+      _mem_server_wait_on_data_exchange = true;
+
+      // Sync #3, all done
+      _is_mem_server_in_compact = false;
+
+    }
+
 };
 
 

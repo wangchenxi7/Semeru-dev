@@ -43,8 +43,8 @@ class SemeruHeapRegion;
 class G1SemeruCollectedHeap;
 class G1SemeruConcurrentMark;
 class G1SemeruConcurrentMarkThread;
-//class G1SemeruSTWTask;
-class G1SemeruSTWCompactTask;
+class G1SemeruSTWCompactTerminatorTask;
+class G1SemeruSTWCompactGangTask;
 class G1SemeruCMCSetRegions;
 
 
@@ -78,10 +78,11 @@ class G1SemeruAdjustClosure;
 class G1SemeruSTWCompact : public CHeapObj<mtGC> {
   friend class G1SemeruConcurrentMarkThread;          // Use the same thread of concurrent marking.
 	friend class G1SemeruConcurrentMark;								// Reuse all the concurrent thread resource of CM.
-  friend class G1CMBitMapClosure;                     // [?] The data copy is bit closure based.    
-  friend class G1SemeruSTWCompactTask;								// STW Compact workGang
-  // friend class G1SemeruSTWTask;												// the code task to be executed.			
+  friend class G1CMBitMapClosure;                     // [x] All the phases are bitmap based closure.    
+  friend class G1SemeruSTWCompactGangTask;						// STW Compact workGang
+  friend class G1SemeruSTWCompactTerminatorTask;			// the code task to be executed.			
 
+public:
   // [?] Seems that G1SemeruConcurrentMarkThread is only a manager of all the concurrent threads.
   //     The real concurrent threads are stored in _concurrent_workers.
   G1SemeruConcurrentMarkThread*     _semeru_cm_thread;    // The manager of all the concurrent threads
@@ -96,9 +97,9 @@ class G1SemeruSTWCompact : public CHeapObj<mtGC> {
   uint                    _max_num_tasks;    		// Maximum number of semeru concurrent tasks
   uint                    _num_active_tasks; 		// Number of tasks currently active
 
-  // [?] If this structure is only defined code task, why do need to keep so many versions ?
-	//		 Each worker_id keeps one.
-  // G1SemeruSTWTask**       _tasks;         // Task queue array (max_worker_id length)
+  G1SemeruSTWCompactTerminatorTask** _compact_tasks;   // the code to be executed.
+  SemeruCompactTaskQueueSet*  _compact_task_queues;   // Points to  G1SemeruSTWCompactGangTask->_inter_region_ref_queue
+  TaskTerminator              _terminator;  // For multiple termination
 
 
   // True: marking is concurrent, false: we're in STW Compact.
@@ -167,7 +168,7 @@ private:
 
   bool                    concurrent()       { return _concurrent; }
   uint                    active_tasks()     { return _num_active_tasks; }
-  //ParallelTaskTerminator* terminator() const { return _terminator.terminator(); }
+  ParallelTaskTerminator* terminator() const { return _terminator.terminator(); }
 
   // Claims the next available region to be scanned by a marking
   // task/thread. It might return NULL if the next region is empty or
@@ -188,7 +189,13 @@ private:
 	// Claim a Scanned Region.
  	SemeruHeapRegion* claim_region_for_comapct(uint worker_id, SemeruHeapRegion* prev_compact);
 
-
+  // Returns the TerminatorTask with the given id
+  G1SemeruSTWCompactTerminatorTask* task(uint id) {
+    // During initial mark we use the parallel gc threads to do some work, so
+    // we can only compare against _max_num_tasks.
+    assert(id < _max_num_tasks, "Task id %u not within bounds up to %u", id, _max_num_tasks);
+    return _compact_tasks[id];
+  }
 
 
   // Semeru Memory Server
@@ -207,7 +214,7 @@ private:
 
 
   // // Returns the task with the given id
-  // G1SemeruSTWTask* task(uint id) {
+  // G1SemeruSTWCompactTerminatorTask* task(uint id) {
   //   // During initial mark we use the parallel gc threads to do some work, so
   //   // we can only compare against _max_num_tasks.
   //   assert(id < _max_num_tasks, "Task id %u not within bounds up to %u", id, _max_num_tasks);
@@ -310,124 +317,175 @@ public:
 
 
 
-// /** 
-//  * 	[XX] At this time, we are not using this structure now.
-//  * 			 We define the code and run the G1SemeruSTWCompactTask->work() directly.
-//  * 			
-//  * 
-//  *  The real code to be executed for the STW compact.
-//  *  
-//  *  Task isn't a Thread. Task is the computation to be executed by ONE thread.
-//  *  Contents of the G1SemeruCMTask:
-//  *    1) The attadched concurrent thread, recorded by _worker_id, G1SemeruConcurrentMark->_concurrent_workers[_worker_id]
-//  *    2) Evacualte the scanned Region, pointed by _curr_region.
-//  * 
-//  * [?] Why do we need such a task ?
-//  * 		 How about implementing all the things in G1SemeruSTWCompact ?
-//  * 
-//  */
-// class G1SemeruSTWTask : public TerminatorTerminator {
-// private:
+/** 
+ * 	[XX] At this time, we are not using this structure now.
+ * 			 We define the code and run the G1SemeruSTWCompactGangTask->work() directly.
+ * 			
+ * 
+ *  The real code to be executed for the STW compact.
+ *  
+ *  Task isn't a Thread. Task is the computation to be executed by ONE thread.
+ *  Contents of the G1SemeruCMTask:
+ *    1) The attadched concurrent thread, recorded by _worker_id, G1SemeruConcurrentMark->_concurrent_workers[_worker_id]
+ *    2) Evacualte the scanned Region, pointed by _curr_region.
+ * 
+ * [?] Why do we need such a task ?
+ * 		 How about implementing all the things in G1SemeruSTWCompact ?
+ * 
+ */
+class G1SemeruSTWCompactTerminatorTask : public TerminatorTerminator {
+  //phase#1 preparation
+  friend class G1SemeruCalculatePointersClosure;
+  friend class G1SemeruPrepareCompactLiveClosure;
 
-//   uint                              _worker_id;     // [?] Only one concurrent Thread can cliam this Region.
-//                                                     // Let other available concurrent threads to steal work from here ?
-// 	G1SemeruCollectedHeap*						_semeru_h;
-//   G1SemeruSTWCompact*           		_semeru_sc;			// point the STW compact handler.
-//   G1CMBitMap*                       _alive_bitmap;  // points to the evacutating Region's alive_bitmap.
+  // Phase#2 Pointer adjustment
+  friend class G1SemeruAdjustClosure;  // How to let this class's function to access fields of class G1SemeruSTWCompactGangTask ?
+  friend class G1SemeruAdjustLiveClosure;
+
+  // phase#3 Compaction
+  friend class G1SemeruCompactRegionClosure;
+
+//private:
+
+public:
+
+  uint                              _worker_id;     // [?] Only one concurrent Thread can cliam this Region.
+                                                    // Let other available concurrent threads to steal work from here ?
+
+	G1SemeruCollectedHeap*						_semeru_h;
+  G1SemeruSTWCompact*           		_semeru_sc;			// point the STW compact handler.
+  G1CMBitMap*                       _alive_bitmap;  // points to the evacutating Region's alive_bitmap.
  
-//   // Region this task is scanning, NULL if we're not scanning any
-//   SemeruHeapRegion*                 _curr_compacting_region;
+  // Region this task is scanning, NULL if we're not scanning any
+  SemeruHeapRegion*                 _curr_compacting_region;
 
 
 
-//   // If true, then the task has aborted for some reason
-//   bool                        _has_aborted;
-//   // Set when the task aborts because it has met its time quota
-//   bool                        _has_timed_out;
+  // If true, then the task has aborted for some reason
+  bool                        _has_aborted;
+  // Set when the task aborts because it has met its time quota
+  bool                        _has_timed_out;
 
+  G1SemeruCompactionPoint* _cp;         // Compaction Point for this task.
+  
 
+  // The statistics data in each Closure are stateless, 
+  // Pass these statistic data to them.
+  uint _humongous_regions_removed;
 
-// 	//
-// 	// Functions declaration.
-// 	//
+  // At least as length as target object queue.
+  // Need to be initialized.  
+  SemeruCompactTaskQueue*  _inter_region_ref_queue;  // Points to one item of G1SemeruSTWCompact->_compact_task_queues
+
+	//
+	// Functions declaration.
+	//
 
 
   
-// public:
+public:
 
-//   // Constructor
-//   G1SemeruSTWTask(uint worker_id,	G1SemeruSTWCompact* sc);
-// 	~G1SemeruSTWTask() { }
+  // Constructor
+  G1SemeruSTWCompactTerminatorTask(uint worker_id,	G1SemeruSTWCompact* sc, SemeruCompactTaskQueue* inter_region_ref_q, uint max_regions );
 
-
-//   G1CMBitMap*    alive_bitmap()  { return _alive_bitmap; }
-
-//   // // Mark an object alive in current scanning region, pointed by _curr_region.
-//   // inline bool mark_in_alive_bitmap(uint const worker_id, oop const obj);
-
-
-//   // Returns the worker ID associated with this task.
-//   uint worker_id() { return _worker_id; }
-
-//   // From TerminatorTerminator. It determines whether this task should
-//   // exit the termination protocol after it's entered it.
-//   virtual bool should_exit_termination();
-
-//   // // Resets the local region fields after a task has finished scanning a
-//   // // region; or when they have become stale as a result of the region
-//   // // being evacuated.
-//   // void giveup_current_region();
-
-
-//   /**
-//    * [x] What's the difference between _has_aborted and _should_terminated
-//    *    G1SemeruCMTask->_has_aborted, abort a CMTask, which is executed by a worker.
-//    *        => abort the G1SemeruCMTask::do_semeru_marking_step()
-//    *    G1SemeruConcurrentMark->_has_aborted, abort the current mark's all tasks ?
-//    *      
-//    *    ConcurrentMarkThread->_should_terminated, abort the thread handler.
-//    *        => terminate the G1SemeruConcurrentMarkThread::run_service().
-//    */
-//   bool has_aborted()            { return _has_aborted; }
-//   void set_has_aborted()        { _has_aborted = true; }
-//   void clear_has_aborted()      { _has_aborted = false; }
-
-//   //void set_cm_oop_closure(G1SemeruCMOopClosure* cm_oop_closure);
+	~G1SemeruSTWCompactTerminatorTask() { }
 
 
 
 
-// 	//
-// 	// Statistics fields
-// 	//
+  //
+  // Worker synchronization and control fucntions.
+  //
 
-// 	// Number sequence of past step times
-//   NumberSeq                   _step_times_ms;
-//   // Elapsed time of this task
-//   double                      _elapsed_time_ms;
-//   // Termination time of this task
-//   double                      _termination_time_ms;
-//   // When this task got into the termination protocol
-//   double                      _termination_start_time_ms;
-//   // Number of calls to this task
-//   uint                        _calls;
-//   // When the virtual timer reaches this time, the marking step should exit
-//   double                      _time_target_ms;
-//   // Start time of the current marking step
-//   double                      _start_time_ms;
+  // Returns the worker ID associated with this task.
+  uint worker_id() { return _worker_id; }
 
-// 	// These two calls start and stop the timer
-//   void record_start_time() {
-//     _elapsed_time_ms = os::elapsedTime() * 1000.0;
-//   }
 
-//   void record_end_time() {
-//     _elapsed_time_ms = os::elapsedTime() * 1000.0 - _elapsed_time_ms;
-//   }
+  // From TerminatorTerminator. It determines whether this task should
+  // exit the termination protocol after it's entered it.
+  virtual bool should_exit_termination();
 
-//   void print_stats();
+  // // Resets the local region fields after a task has finished scanning a
+  // // region; or when they have become stale as a result of the region
+  // // being evacuated.
+  // void giveup_current_region();
 
-// };
+
+  /**
+   * [x] What's the difference between _has_aborted and _should_terminated
+   *    G1SemeruCMTask->_has_aborted, abort a CMTask, which is executed by a worker.
+   *        => abort the G1SemeruCMTask::do_semeru_marking_step()
+   *    G1SemeruConcurrentMark->_has_aborted, abort the current mark's all tasks ?
+   *      
+   *    ConcurrentMarkThread->_should_terminated, abort the thread handler.
+   *        => terminate the G1SemeruConcurrentMarkThread::run_service().
+   */
+  bool has_aborted()            { return _has_aborted; }
+  void set_has_aborted()        { _has_aborted = true; }
+  void clear_has_aborted()      { _has_aborted = false; }
+
+
+
+
+  //void set_cm_oop_closure(G1SemeruCMOopClosure* cm_oop_closure);
+
+
+
+
+  //
+	// The phases of this task's work.
+  //
+
+  // The main entry of Memory Server compaction
+  void do_memory_server_compaction();
+
+
+  // Phase 1, 
+  // 1) calculate the destination address for alive objects
+  //    Put forwarding pointer in the markOop
+  void phase1_prepare_for_compact(SemeruHeapRegion* hr);
+
+  // Phase 2,
+  // adjust the pointer
+  // [?] The pointer can be inter-Region and intra-Region.
+  //     How to handle the inter-Region ?
+  //     Need to record these objects with inter-Region, scan and update their fields at the end of the phase 4?
+  //     We can reuse the alive_bitmap for the compacted Region to record the objects having inter-Region references to be updated.
+  void phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr);
+
+  // 
+  // Record the <old_addr, new_addr> for the objects stored in Target_obj_queue.
+  void record_new_addr_for_target_obj(SemeruHeapRegion* hr);
+  
+  // Phase 3,
+	void phase3_compact_region(SemeruHeapRegion* hr);  // Compact a single SemeruHeapRegion.
+
+  // Phase 4,
+  // Need to share data between CPU server and other Memory servers.
+	void phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr);	// Inter-Region fields update ? Intra-Region reference is done during compaction.
+
+  // Drain && process the G1SemeruSTWCompactGangTask->_inter_region_ref_queue
+  void update_cross_region_ref_taskqueue();
+
+
+  SemeruCompactTaskQueue* inter_region_ref_taskqueue()  { return _inter_region_ref_queue;  }
+
+
+
+
+	//
+	// Statistics fields
+	//
+
+
+  //
+  // Debug functions.
+  //
+  void check_overflow_taskqueue( const char* message);
+  void check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message);
+
+
+};
 
 
 
@@ -456,109 +514,45 @@ public:
  * 
  * 
  */
-class G1SemeruSTWCompactTask : public AbstractGangTask {
+class G1SemeruSTWCompactGangTask : public AbstractGangTask {
 
-  //phase#1 preparation
-  friend class G1SemeruCalculatePointersClosure;
-  friend class G1SemeruPrepareCompactLiveClosure;
-
-  // Phase#2 Pointer adjustment
-  friend class G1SemeruAdjustClosure;  // How to let this class's function to access fields of class G1SemeruSTWCompactTask ?
-  friend class G1SemeruAdjustLiveClosure;
-
-  // phase#3 Compaction
-  friend class G1SemeruCompactRegionClosure;
 
 
   G1SemeruSTWCompact*		_semeru_sc;			// [x] Reuse the STW Compact use the same structure and Thread handler.
   
   // initialized in function, work()
   uint _worker_id;
-  G1SemeruCompactionPoint* _cp;         // Compaction Point for this task.
-  
 
-  // The statistics data in each Closure are stateless, 
-  // Pass these statistic data to them.
-  uint _humongous_regions_removed;
-
-  // At least as length as target object queue.
-  // Need to be initialized.  
-  SemeruCompactTaskQueue  _inter_region_ref_queue;
 
 public:
 
 	// Constructor 
-	G1SemeruSTWCompactTask(G1SemeruSTWCompact* semeru_sc) :
-			AbstractGangTask("Semeru MS STW Compact Worker"), 
+	G1SemeruSTWCompactGangTask(G1SemeruSTWCompact* semeru_sc, uint active_workers ) :
+			AbstractGangTask("Semeru MS STW Compact Worker"), // name
       _semeru_sc(semeru_sc),
-      _worker_id(0),
-      _cp(NULL),
-      _humongous_regions_removed(0) 
+      _worker_id(0)  // The worker will be assigned by task scheduler. Initialize it after runing.
   {
 
-    // do some initialization
-
-    // Allocate sapce for its real content, GenericTaskQueue->_elems
-    _inter_region_ref_queue.initialize();
-
+    // initialzie parallel tasks terminator and work stealing.
+    _semeru_sc->terminator()->reset_for_reuse(active_workers);
   }
 
 
 
 	// Deconstructor
-	~G1SemeruSTWCompactTask() { }
+	~G1SemeruSTWCompactGangTask() { }
 
 
   // [x] The entry point of current Worker.
   //     This is executed by G1SemeruSTWCompact::semeru_stw_compact in a synchronized way.
 	void work(uint worker_id);				// Virutal function, The actual work for this 
-
-	// The phases of this task's work.
-
-  // Phase 1, 
-  // 1) calculate the destination address for alive objects
-  //    Put forwarding pointer in the markOop
-  void phase1_prepare_for_compact(SemeruHeapRegion* hr);
-
-  // Phase 2,
-  // adjust the pointer
-  // [?] The pointer can be inter-Region and intra-Region.
-  //     How to handle the inter-Region ?
-  //     Need to record these objects with inter-Region, scan and update their fields at the end of the phase 4?
-  //     We can reuse the alive_bitmap for the compacted Region to record the objects having inter-Region references to be updated.
-  void phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr);
-
-  // 
-  // Record the <old_addr, new_addr> for the objects stored in Target_obj_queue.
-  void record_new_addr_for_target_obj(SemeruHeapRegion* hr);
-  
-  // Phase 3,
-	void phase3_compact_region(SemeruHeapRegion* hr);  // Compact a single SemeruHeapRegion.
-
-  // Phase 4,
-  // Need to share data between CPU server and other Memory servers.
-	void phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr);	// Inter-Region fields update ? Intra-Region reference is done during compaction.
-
-  // Drain && process the G1SemeruSTWCompactTask->_inter_region_ref_queue
-  void update_cross_region_ref_taskqueue();
-
-
-  SemeruCompactTaskQueue* inter_region_ref_taskqueue()  { return &_inter_region_ref_queue;  }
-
   uint worker_id()  { return _worker_id; }
-
-  //
-  // Debug functions.
-  //
-  void check_overflow_taskqueue( const char* message);
-  void check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message);
-
 
 };
 
 
   //
-  // Closures for G1SemeruSTWCompactTask.
+  // Closures for G1SemeruSTWCompactGangTask.
   //
 
 
@@ -566,7 +560,7 @@ public:
 
   // Preparation Phase #1, calculate the destination Region for each source Region.
   // [X] This closure is only for a single Region. 
-  //     All its stateless structures should get from the G1SemeruSTWCompactTask.
+  //     All its stateless structures should get from the G1SemeruSTWCompactGangTask.
   //
 class G1SemeruCalculatePointersClosure : public SemeruHeapRegionClosure {
 protected:
@@ -574,7 +568,7 @@ protected:
     G1SemeruSTWCompact* _semeru_sc;
     G1CMBitMap* _bitmap;
     G1SemeruCompactionPoint* _cp;       // The destination Region, for Semeru MS, each Region compact to itself.
-    uint* _humongous_regions_removed;   // stateless,  pointed to G1SemeruSTWCompactTask->_humongous_regions_removed
+    uint* _humongous_regions_removed;   // stateless,  pointed to G1SemeruSTWCompactGangTask->_humongous_regions_removed
 
     virtual void prepare_for_compaction(SemeruHeapRegion* hr);
     void prepare_for_compaction_work(G1SemeruCompactionPoint* cp, SemeruHeapRegion* hr);
@@ -631,7 +625,7 @@ public:
  */
 class G1SemeruAdjustClosure : public BasicOopIterateClosure {
   SemeruHeapRegion* _curr_region;   // Current compacting Region.
-  SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to the G1SemeruSTWCompactTask->_inter_region_ref_queue
+  SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to the G1SemeruSTWCompactGangTask->_inter_region_ref_queue
 
   template <class T> static inline void adjust_intra_region_pointer(T* p, SemeruHeapRegion* hr);
 
@@ -688,7 +682,7 @@ public:
   //
   // Preparation Phase #3, Copy the alive objects to destination.
   // [X] This closure is only for a single Region. 
-  //     All its stateless structures should get from the G1SemeruSTWCompactTask.
+  //     All its stateless structures should get from the G1SemeruSTWCompactGangTask.
   //
 
 

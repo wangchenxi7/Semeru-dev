@@ -504,9 +504,9 @@ G1ConcurrentMark::G1ConcurrentMark(G1CollectedHeap* g1h,
 	for (uint i = 0; i < _max_num_tasks; ++i) {
 		G1CMTaskQueue* task_queue = new G1CMTaskQueue();
 		task_queue->initialize();
-		_task_queues->register_queue(i, task_queue);
+		_task_queues->register_queue(i, task_queue); // register to queue set.
 
-		_tasks[i] = new G1CMTask(i, this, task_queue, _region_mark_stats, _g1h->max_regions());
+		_tasks[i] = new G1CMTask(i, this, task_queue, _region_mark_stats, _g1h->max_regions()); // assign task_queue to task.
 
 		_accum_task_vtime[i] = 0.0;
 	}
@@ -842,7 +842,7 @@ public:
 		double start_vtime = os::elapsedVTime();
 
 		{
-			SuspendibleThreadSetJoiner sts_join;
+			SuspendibleThreadSetJoiner sts_join;  // Invoke this function within the AbstractGangTask::work() ??
 
 			assert(worker_id < _cm->active_tasks(), "invariant");
 
@@ -1460,7 +1460,7 @@ public:
 
 	virtual void do_oop(narrowOop* p) { do_oop_work(p); }
 	virtual void do_oop(      oop* p) { do_oop_work(p); }
-	
+
 	virtual void semeru_ms_do_oop(oop obj, narrowOop* p) { do_oop_work(p); }
 	virtual void semeru_ms_do_oop(oop obj,      oop* p) { do_oop_work(p); }
 
@@ -2894,7 +2894,7 @@ void G1CMTask::do_marking_step(double time_target_ms,
 		} else {
 			// Apparently there's more work to do. Let's abort this task. It
 			// will restart it and we can hopefully find more things to do.
-			set_has_aborted();
+			set_has_aborted();  // e.g. work stealing ? but we alreayd passed the work-stealing check.
 		}
 	}
 

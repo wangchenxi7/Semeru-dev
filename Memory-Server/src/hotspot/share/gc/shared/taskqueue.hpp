@@ -501,7 +501,7 @@ template<class T, MEMFLAGS F>
 bool GenericTaskQueueSet<T, F>::peek() {
   // Try all the queues.
   for (uint j = 0; j < _n; j++) {
-    if (_queues[j]->peek())
+    if (_queues[j]->peek())  // if any queue peek() true, the queueSet peek() true.
       return true;
   }
   return false;
@@ -527,11 +527,18 @@ public:
 
 #undef TRACESPINNING
 
+
+
+/**
+ * The work stealing is also related with this terminator  ??
+ * 
+ * 
+ */
 class ParallelTaskTerminator: public CHeapObj<mtGC> {
 protected:
-  uint _n_threads;
-  TaskQueueSetSuper* _queue_set;
-  volatile uint _offered_termination;
+  uint _n_threads;    // number of threads managed by this terminator
+  TaskQueueSetSuper* _queue_set;    //[?] What's this used for ?  this is the queue set processed by the ParallelTask ??
+  volatile uint _offered_termination; // number of threads trying to terminate 
 
 #ifdef TRACESPINNING
   static uint _total_yields;
@@ -541,8 +548,8 @@ protected:
 
   bool peek_in_queue_set();
 protected:
-  virtual void yield();
-  void sleep(uint millis);
+  virtual void yield();     // works like low the scheduling priority. If other threads need, they can occupy the cpu.
+  void sleep(uint millis);  // sleep release the core immediately.
 
   // Called when exiting termination is requested.
   // When the request is made, terminator may have already terminated
@@ -569,6 +576,12 @@ public:
   // method of the terminator parameter returns true. If terminator is
   // NULL, then it is ignored.
   virtual bool offer_termination(TerminatorTerminator* terminator);
+
+  // Semeru
+  virtual bool offer_semeru_compact_termination(TerminatorTerminator* terminator){
+    ShouldNotReachHere();
+    return false;
+  }
 
   // Reset the terminator, so that it may be reused again.
   // The caller is responsible for ensuring that this is done
@@ -710,6 +723,7 @@ typedef GenericTaskQueueSet<RegionTaskQueue, mtGC>  RegionTaskQueueSet;
 
 
 typedef OverflowTaskQueue<StarTask, mtGC, TARGET_OBJ_QUEUE_SIZE>  SemeruCompactTaskQueue;
+typedef GenericTaskQueueSet<SemeruCompactTaskQueue, mtGC>  SemeruCompactTaskQueueSet;
 
 
 #endif // SHARE_VM_GC_SHARED_TASKQUEUE_HPP

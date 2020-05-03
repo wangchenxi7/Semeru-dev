@@ -137,8 +137,14 @@ void ParallelTaskTerminator::sleep(uint millis) {
   os::sleep(Thread::current(), millis, false);
 }
 
-bool
-ParallelTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
+
+/**
+ * [?] Used to synchronize the termination of multiple user workers ?
+ * 
+ * When _offered_termination == _n_threads, exit the work.
+ * 
+ */ 
+bool ParallelTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
   assert(_n_threads > 0, "Initialization is incorrect");
   assert(_offered_termination < _n_threads, "Invariant");
   Atomic::inc(&_offered_termination);  // Offer 1 termination.
@@ -165,6 +171,8 @@ ParallelTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
   // more work.
   while (true) {
     assert(_offered_termination <= _n_threads, "Invariant");
+
+    // exit the parallel task condition:
     // Are all threads offering termination?
     if (_offered_termination == _n_threads) {
       assert(!peek_in_queue_set(), "Precondition");
@@ -220,7 +228,7 @@ ParallelTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
         return complete_or_exit_termination();
       }
     }
-  }
+  } // end of while(true)
 }
 
 #ifdef TRACESPINNING
@@ -233,6 +241,12 @@ void ParallelTaskTerminator::print_termination_counts() {
 }
 #endif
 
+/**
+ * [?] Meaning of this function ?
+ *  exit task even _offered_termination < num of threads ?
+ * 
+ * 
+ */
 bool ParallelTaskTerminator::complete_or_exit_termination() {
   // If termination is ever reached, terminator should stay in such state,
   // so that all threads see the same state
@@ -266,7 +280,7 @@ bool ObjArrayTask::is_valid() const {
 #endif // ASSERT
 
 void ParallelTaskTerminator::reset_for_reuse(uint n_threads) {
-  reset_for_reuse();
+  reset_for_reuse();  // reset _offered_termination to 0.
   _n_threads = n_threads;
 }
 

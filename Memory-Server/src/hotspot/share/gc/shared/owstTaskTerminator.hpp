@@ -62,6 +62,10 @@ public:
 
   bool offer_termination(TerminatorTerminator* terminator);
 
+  // Semeru MS
+  bool offer_semeru_compact_termination(TerminatorTerminator* terminator);
+
+  
 protected:
   // If should exit current termination protocol
   virtual bool exit_termination(size_t tasks, TerminatorTerminator* terminator);

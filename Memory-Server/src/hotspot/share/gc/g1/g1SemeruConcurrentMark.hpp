@@ -494,7 +494,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   G1SemeruCMTaskQueueSet*       _task_queues;   // [?]Task queue set, each G1SemeruCMTask->_task_queue points  here ?
 
   // [?] What's the working mechanism for this terminator ?
-  //
+  //  for example, synchronize multiple user workers ? do they share the variables in the TaskTerminator ?
   TaskTerminator                _terminator;    // For termination
 
   // Two sync barriers that are used to synchronize tasks when an
@@ -829,7 +829,7 @@ private:
 /** 
  * A class representing a marking task.
  *  
- *  Task isn't a Thread. Task is the computation to be executed by ONE thread.
+ *  Task isn't a Thread. Task is the computation, inherit from TerminatorTerminator, to be executed by ONE woker, inhrit from AbstractGangTask.
  *  Contents of the G1SemeruCMTask:
  *    1) The attadched concurrent thread, recorded by _worker_id, G1SemeruConcurrentMark->_concurrent_workers[_worker_id]
  *    2) Trace the cliamed Region, pointed by _curr_region.

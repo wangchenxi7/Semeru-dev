@@ -25,6 +25,8 @@ G1SemeruSTWCompact::G1SemeruSTWCompact(G1SemeruCollectedHeap* 	g1h,
 	_max_num_tasks(semeru_cm->_max_num_tasks),				// shared with CM
 	_num_active_tasks(semeru_cm->_num_active_tasks),	// shared with CM
 	//_tasks(NULL),							// code task
+	_compact_task_queues(new SemeruCompactTaskQueueSet((int) _max_num_tasks)),
+	_terminator((int) _max_num_tasks, _compact_task_queues),  // will be reset in set_concurrency()
 	_concurrent(false),
 	_has_aborted(false),
 	_compaction_points(NULL),
@@ -51,24 +53,16 @@ G1SemeruSTWCompact::G1SemeruSTWCompact(G1SemeruCollectedHeap* 	g1h,
 	// The Semeru Memory Server Scanned CSet is shared with G1SemeruConcurrentMark->_mem_server_cset
 
 
-	// 2) Build the G1SemeruSTWCompactTask code .
+	// 2) Build the G1SemeruSTWCompactGangTask code .
 
 	// Build the tasks executed by each worker.
-	// Does the _tasks[] also include the ParallelThread ?
-	// Seems no. This _tasks is only for SemeruConcurrentGC worker.
-	// _tasks = NEW_C_HEAP_ARRAY(G1SemeruSTWTask*, _max_num_tasks, mtGC);			
+	_compact_tasks = NEW_C_HEAP_ARRAY(G1SemeruSTWCompactTerminatorTask*, _max_num_tasks, mtGC);			
 	_accum_task_vtime = NEW_C_HEAP_ARRAY(double, _max_num_tasks, mtGC);
 
 	// so that the assertion in MarkingTaskQueue::task_queue doesn't fail
+	// set_concurrency() function will rewrite this value to active_tasks
 	_num_active_tasks = _max_num_tasks;
 
-	// G1SemeruSTWTask doesn't need the StarTask queue
-	for (uint i = 0; i < _max_num_tasks; ++i) {
-
-		// worker_id, G1SemeruSTWCompact
-		// _tasks[i] = new G1SemeruSTWTask(i, this);
-		_accum_task_vtime[i] = 0.0;
-	}
 
 
 
@@ -81,6 +75,28 @@ G1SemeruSTWCompact::G1SemeruSTWCompact(G1SemeruCollectedHeap* 	g1h,
   for (uint i = 0; i < _max_num_tasks; i++) {
     _compaction_points[i] = new G1SemeruCompactionPoint();
   }
+
+
+
+
+	
+	// We don't register the G1SemeruCompactTask here
+	// But We allocate and register the compatc task queue here.
+	//
+	for (uint i = 0; i < _max_num_tasks; ++i) {
+		// The Star Task queu for G1SemeruCompactTask Cross_region_ref update
+		SemeruCompactTaskQueue* cross_region_ref_update_queue = new SemeruCompactTaskQueue();  
+		cross_region_ref_update_queue->initialize();
+		_compact_task_queues->register_queue(i, cross_region_ref_update_queue);
+
+		_compact_tasks[i] = new G1SemeruSTWCompactTerminatorTask(i, this, cross_region_ref_update_queue, _semeru_h->max_regions());
+
+
+		_accum_task_vtime[i] = 0.0;
+	}
+
+
+
 
 
 
@@ -172,9 +188,12 @@ void G1SemeruSTWCompact::semeru_stw_compact() {
 	// Parallel task terminator is set in "set_concurrency_and_phase()"
 	set_concurrency_and_phase(active_workers, true /* concurrent */);  // actually here is executed in STW.
 
-	G1SemeruSTWCompactTask compacting_task(this);  		// Invoke the G1SemeruSTWCompactTask WorkGang to run.
+	// Build the G1SemeruSTWCompactGangTask here.
+	// How about move them into G1SemeruSTWCompact, and get one to run here.
+	G1SemeruSTWCompactGangTask compacting_task(this, active_workers);  		// Invoke the G1SemeruSTWCompactGangTask WorkGang to run.
 	_concurrent_workers->run_task(&compacting_task);		// STWCompact share ConcurrentMark's concurrent workers.
 	print_stats();
+	
 }
 
 
@@ -203,10 +222,12 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 	_num_active_tasks = active_tasks;
 
-	// // Need to update the three data structures below according to the
-	// // number of active threads for this phase.
-	// // [?] What's the connection between active_task and _task_queus ?
-	// _terminator = TaskTerminator((int) active_tasks, _task_queues); 
+	// Need to update the three data structures below according to the
+	// number of active threads for this phase.
+	// The paralell task terminator is used to synchronize the paralel STW compact tasks.
+	// The _task_queues is the StarTask queue set, used by the thread. 
+	// [?] is the queue_set used for work stealing ?
+	_terminator = TaskTerminator((int) active_tasks, _compact_task_queues); 
 	
 	// _first_overflow_barrier_sync.set_n_workers((int) active_tasks);
 	// _second_overflow_barrier_sync.set_n_workers((int) active_tasks);
@@ -227,85 +248,54 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 // G1SemeruSTWtask
 //
 
+G1SemeruSTWCompactTerminatorTask::G1SemeruSTWCompactTerminatorTask(uint worker_id,	
+																												G1SemeruSTWCompact* sc, 
+																												SemeruCompactTaskQueue* inter_region_ref_q, 
+																												uint max_regions ):
+	_worker_id(worker_id),
+	_semeru_h(G1SemeruCollectedHeap::heap()),
+	_semeru_sc(sc),
+	_alive_bitmap(NULL), // get from processed Region
+	_curr_compacting_region(NULL),
+	_has_aborted(false),
+	_has_timed_out(false),
+	_cp(NULL),
+	_humongous_regions_removed(0),
+	_inter_region_ref_queue(inter_region_ref_q)
+{
+
+	// #1 Get resource from the global list at G1SemeruSTWCompact
+	_cp = _semeru_sc->compaction_point(_worker_id); 
 
 
-// G1SemeruSTWTask::G1SemeruSTWTask(uint worker_id,
-// 									 G1SemeruSTWCompact* sc) :
-// 	_worker_id(worker_id),
-// 	_semeru_h(sc->_semeru_h),
-// 	_semeru_sc(sc),
-// 	_alive_bitmap(NULL),
-// 	_curr_compacting_region(NULL),
-// 	_has_aborted(false),
-// 	_has_timed_out(false),
-// 	_step_times_ms(),
-// 	_elapsed_time_ms(0.0),
-// 	_termination_time_ms(0.0),
-// 	_termination_start_time_ms(0.0),
-// 	_calls(0),
-// 	_time_target_ms(0.0),
-// 	_start_time_ms(0.0)
-// {
+}
 
 
-// 	#ifdef ASSERT
-// 	log_debug(semeru, thread)("%s, build the G1SemeruSTWtask[%x]. \n", __func__, worker_id );
-// 	#endif
-// }
+/**
+ * [?] exit termination ? 
+ * What does this mean ? 
+ *  
+ */
+bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 
 
-
-
-// void G1SemeruSTWTask::print_stats() {
-// 	log_debug(gc, stats)("Marking Stats, task = %u, calls = %u", _worker_id, _calls);
-// 	log_debug(gc, stats)("  Elapsed time = %1.2lfms, Termination time = %1.2lfms",
-// 											 _elapsed_time_ms, _termination_time_ms);
-// 	log_debug(gc, stats)("  Step Times (cum): num = %d, avg = %1.2lfms, sd = %1.2lfms max = %1.2lfms, total = %1.2lfms",
-// 											 _step_times_ms.num(),
-// 											 _step_times_ms.avg(),
-// 											 _step_times_ms.sd(),
-// 											 _step_times_ms.maximum(),
-// 											 _step_times_ms.sum());
-// 	// size_t const hits = _mark_stats_cache.hits();
-// 	// size_t const misses = _mark_stats_cache.misses();
-// 	// log_debug(gc, stats)("  Mark Stats Cache: hits " SIZE_FORMAT " misses " SIZE_FORMAT " ratio %.3f",
-// 	// 										 hits, misses, percent_of(hits, hits + misses));
-// }
+	// This is called when we are in the termination protocol. We should
+	// quit if, for some reason, this task wants to abort or the global
+	// stack is not empty (this means that we can get work from it).
+	return !inter_region_ref_taskqueue()->is_empty() || has_aborted();
+}
 
 
 
 
-
-
-// bool G1SemeruSTWTask::should_exit_termination() {
-// 	// if (!regular_clock_call()) {
-// 	// 	return true;
-// 	// }
-
-// 	// This is called when we are in the termination protocol. We should
-// 	// quit if, for some reason, this task wants to abort or the global
-// 	// stack is not empty (this means that we can get work from it).
-// 	return _semeru_sc->out_of_scanned_cset() || has_aborted();
-// }
-
-
-
-
-
-//
-// G1SemeruSTWCompactTask 
-//
-
-
-
-
-	/**
-	 * Semeru MS - WorkGang, apply compaction closure to the scanned Regions.
-	 * 
-	 * 	1) this worker is scheduled form GangWorker::run_task(WorkData data)
-	 *  
-	 */
-	void  G1SemeruSTWCompactTask::work(uint worker_id) {
+/**
+ * The main entry of Memory Server compaction.
+ * Execute the 4 compction phase and some sub-phases.
+ *  
+ *  
+ * 
+ */
+	void  G1SemeruSTWCompactTerminatorTask::do_memory_server_compaction() {
 		assert(Thread::current()->is_ConcurrentGC_thread(), "Not a concurrent GC thread");
 		ResourceMark rm;			// [?] What's this resource used for ?
 		double start_vtime = os::elapsedVTime();
@@ -313,11 +303,17 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 		flags_of_cpu_server_state* cpu_server_flags  = _semeru_sc->_semeru_h->cpu_server_flags();
 		flags_of_mem_server_state* mem_server_flags	 = _semeru_sc->_semeru_h->mem_server_flags();
 
-		_worker_id = worker_id;
-		_cp = _semeru_sc->compaction_point(_worker_id); // [X] Remember to reset the compaction_point at the end of this work.
+		//_worker_id = worker_id; // get the assigned woker_id by task dispatchr.
+		//_inter_region_ref_queue = _semeru_sc->_compact_task_queues->queue(worker_id);
+		assert(_inter_region_ref_queue!=NULL, "Get Cross_region_ref_update queue failed.");
+
+		// [X] Remember to reset the compaction_point at the end of this work.
+		// [??] Each compact task has a separate compaction_point ??
+		//_cp = _semeru_sc->compaction_point(_worker_id); 
+
 		SemeruHeapRegion* region_to_evacuate = NULL;
 
-		log_debug(semeru, mem_compact)("%s, Enter SemeruSWTCompact worker[%x] \n", __func__, worker_id);
+		log_debug(semeru, mem_compact)("%s, Enter SemeruSWTCompact worker[0x%x] \n", __func__, worker_id());
 
 
 
@@ -331,7 +327,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 				// Start: When the compacting for a Region is started,
 				// do not interrupt it until the end of compacting.
 
-				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id, region_to_evacuate);
+				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id(), region_to_evacuate);
 				if(region_to_evacuate != NULL){
 					log_debug(semeru,mem_compact)("%s, Claimed Region[0x%lx] to be evacuted.", __func__, (size_t)region_to_evacuate->hrm_index() );
 
@@ -364,8 +360,6 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					phase3_compact_region(region_to_evacuate);
 
 
-
-
 					// Debug Drain the CompactTask _cross_region_ref_update_queue
 					//check_overflow_taskqueue("phase4 prepare.");
 
@@ -381,10 +375,15 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 
 
+
+		// Only the last thread can set the flags value.
+		// The Inter_region_ref queue can be non-empty when we get a termination offer.
+		bool all_task_finished =	_semeru_sc->terminator()->offer_semeru_compact_termination(this);
+		if(all_task_finished){
 		//
 		// Do the Phase#4, update inter-Region reference here.
 		//
-
+			log_debug(semeru,mem_compact)("%s, worker[0x%x] enter the final task block.", __func__, worker_id());
 					// Phase#4 Inter-Region reference fields update.
 					// Should adjust the inter-region reference before do the compaction.
 					// 1) The target Region is in Memory Server CSet
@@ -408,10 +407,12 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 					if(cpu_server_flags->_is_cpu_server_in_stw == false ||
 						  region_to_evacuate == NULL ){
 
-						log_debug(semeru,mem_compact)("%s, STW Window is closed ? %d . or Memoery Server Compacting is Finished ? %d.\n", 
+						log_debug(semeru,mem_compact)("%s, in STW Window ? %d . or Memoery Server Compacting is Finished ? %d.\n", 
 																				__func__, cpu_server_flags->_is_cpu_server_in_stw, region_to_evacuate == NULL ? true : false  );
 
 						// wait on cross_region_reference exchange
+						// This flag means all the claimed Region are compacted.
+						// CPU server has to re-read the Compacted_region information now.
 						mem_server_flags->_mem_server_wait_on_data_exchange = true; // cpu server can send its data.
 						
 						// If the memory server finished the compaction earlier than CPU server's evacuation, busy wit on the lock.
@@ -433,17 +434,39 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 						//debug
 						// Can't update cross-region reference before the end of STW window.
-						log_debug(semeru,mem_compact)("%s, Start updating inter-region reference.\n", __func__);
+						log_debug(semeru,mem_compact)("%s, Start updating inter-region reference. worker[0x%x] \n", __func__, worker_id() );
 						phase4_adjust_inter_region_pointer(region_to_evacuate);
 					
-						mem_server_flags->_is_mem_server_in_compact = false; // compaction is totally done.
+						// Move out to task scheduler,
+						// Only when both
+						//mem_server_flags->_is_mem_server_in_compact = false; // compaction is totally done.
 					
-						log_debug(semeru,mem_compact)("%s, Memoery Server Compacting is totally Finished.\n", __func__);
+						//log_debug(semeru,mem_compact)("%s, Memoery Server Compacting is totally Finished.\n", __func__);
 					}// STW window is going to close.
 
 
+		}// end of all task finished.
+		else{
+			// Also can process the Inter_region_ref update queue , if the cpu server flags satisfy the condition.
+			if(cpu_server_flags->_is_cpu_server_in_stw == false ||
+						  region_to_evacuate == NULL ){
 
+				// Busy wait on the data exchange finished.
+				log_debug(semeru,mem_compact)("%s, Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__);
+				while(cpu_server_flags->_exchange_done == false){
+					// memory server busy wait on the RDMA flag.
+					// 1) CPU server(and other server) needs to send their data here.
+					// 2) CPU server needs to read data from current this.
+					//
+					// CPU server and other server needs to use different pages!!
+				}
 
+				log_debug(semeru,mem_compact)("%s, Start updating inter-region reference. worker[0x%x] \n", __func__, worker_id() );
+				phase4_adjust_inter_region_pointer(region_to_evacuate);
+
+			} // cpu STW windown closed, or evacuated all the scanned Regions.
+
+		}
 
 
 		//
@@ -461,7 +484,7 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
 
 		// statistics 
 		double end_vtime = os::elapsedVTime();
-		_semeru_sc->update_accum_task_vtime(worker_id, end_vtime - start_vtime);
+		_semeru_sc->update_accum_task_vtime(worker_id(), end_vtime - start_vtime);
 	}
 
 
@@ -470,13 +493,13 @@ void G1SemeruSTWCompact::set_concurrency(uint active_tasks) {
  * 1) calculate the destination address for alive objects
  *    Put forwarding pointer at alive objects' markOop
  * 
- * 2) The Region is claimed in G1SemeruSTWCompactTask::work()
+ * 2) The Region is claimed in G1SemeruSTWCompactGangTask::work()
  * 
  * Warning : this is a per Region processing. Pass the necessary stateless structures in.
  * 					e.g. the alive_bitmap and 
  * 
  */
-void G1SemeruSTWCompactTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
+void G1SemeruSTWCompactTerminatorTask::phase1_prepare_for_compact(SemeruHeapRegion* hr){
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#1, preparation, worker [0x%x] ", __func__, this->_worker_id);
 
@@ -514,7 +537,7 @@ class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
   G1SemeruSTWCompact* _semeru_sc;
   G1CMBitMap* _bitmap;
   uint _worker_id;	// for debug
-	SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to G1SemeruSTWCompactTask->_inter_region_ref_queue
+	SemeruCompactTaskQueue* _inter_region_ref_queue;  // points to G1SemeruSTWCompactGangTask->_inter_region_ref_queue
 
  public:
   G1SemeruAdjustRegionClosure(G1SemeruSTWCompact* semeru_sc, G1CMBitMap* bitmap, uint worker_id, SemeruCompactTaskQueue* inter_region_ref_queue) :
@@ -548,11 +571,11 @@ class G1SemeruAdjustRegionClosure : public SemeruHeapRegionClosure {
 
 
 
-void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr){
+void G1SemeruSTWCompactTerminatorTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion* hr){
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#2, pointer adjustment, worker [0x%x] ", __func__, this->_worker_id);
 
-	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap(), _worker_id, &_inter_region_ref_queue );
+	G1SemeruAdjustRegionClosure adjust_region( _semeru_sc, hr->alive_bitmap(), _worker_id, _inter_region_ref_queue );
 	adjust_region.do_heap_region(hr);
 }
 
@@ -570,7 +593,7 @@ void G1SemeruSTWCompactTask::phase2_adjust_intra_region_pointer(SemeruHeapRegion
  * 			e.g. in function 
  * 
  */
-void G1SemeruSTWCompactTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr){
+void G1SemeruSTWCompactTerminatorTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr){
 
 	log_debug(semeru, mem_compact)("%s, Store new address for the objects in Target_obj_queue of Region[0x%lx] , worker [0x%x] ", 
 																																								__func__, (size_t)hr->hrm_index(), this->_worker_id);
@@ -611,7 +634,7 @@ void G1SemeruSTWCompactTask::record_new_addr_for_target_obj(SemeruHeapRegion* hr
  * 		=> in phase#2, we set humongous Region's forwarding pointer to itself, which will not move any objects in them.
  * 
  */
-void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
+void G1SemeruSTWCompactTerminatorTask::phase3_compact_region(SemeruHeapRegion* hr) {
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#3, object compactation, worker [0x%x] ", __func__, this->_worker_id);
 
@@ -651,7 +674,7 @@ void G1SemeruSTWCompactTask::phase3_compact_region(SemeruHeapRegion* hr) {
  * 
  * 
  */
-void G1SemeruSTWCompactTask::update_cross_region_ref_taskqueue(){
+void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
   StarTask ref;
 	oop new_target_oop_addr;
 	oop old_target_oop_addr;
@@ -761,7 +784,7 @@ void G1SemeruSTWCompactTask::update_cross_region_ref_taskqueue(){
  * But the field addr stored in SemeruHeapRegion->_inter_region_ref_queue is the new address.
  * 
  */
-void G1SemeruSTWCompactTask::phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr){
+void G1SemeruSTWCompactTerminatorTask::phase4_adjust_inter_region_pointer(SemeruHeapRegion* hr){
 
 	log_debug(semeru, mem_compact)("%s, Enter Semeru MS Compact Phase#4, Inter-Region reference adjustment, worker [0x%x] ", __func__, this->_worker_id);
 
@@ -776,7 +799,7 @@ void G1SemeruSTWCompactTask::phase4_adjust_inter_region_pointer(SemeruHeapRegion
 
 
 //
-// Closures for G1SemeruSTWCompactTask -> Phase #1, preparation.
+// Closures for G1SemeruSTWCompactGangTask -> Phase #1, preparation.
 //
 
 
@@ -955,7 +978,7 @@ size_t G1SemeruPrepareCompactLiveClosure::apply(oop object) {
 
 
 //
-// Closures for G1SemeruSTWCompactTask -> Phase #2, adjust pointer
+// Closures for G1SemeruSTWCompactGangTask -> Phase #2, adjust pointer
 //
 
 
@@ -1020,6 +1043,61 @@ size_t G1SemeruCompactRegionClosure::apply(oop obj) {
 
 
 
+
+//
+// G1SemeruSTWCompactGangTask 
+//
+
+
+
+/**
+ * Semeru MS - WorkGang, apply compaction closure to the scanned Regions.
+ * 
+ * 	1) this worker is scheduled form GangWorker::run_task(WorkData data)
+ *  
+ * About the TaskQueue and Terminator
+ *  1) The Inter-Region-Ref update queue is got from G1SemeruSTWCompact dynamically.
+ * 	2) We only drain the task queue after receiving the STW Window Closed signal.
+ *  => Based on 1) and 2), we may get a non-empty task queue for current Task..
+ * 
+ */
+void  G1SemeruSTWCompactGangTask::work(uint worker_id){
+
+		{
+			// Can this sts_join sync all the running GangWorkers ??
+			SuspendibleThreadSetJoiner sts_join;	
+
+
+			G1SemeruSTWCompactTerminatorTask* compact_task = _semeru_sc->task(worker_id);		// get the compct task
+			//compact_task->record_start_time();					// [?] profiling ??
+			if (!_semeru_sc->has_aborted()) {		// [?] aborted ? suspendible control ?
+				do {
+
+					// Execute the Memory Server Compaction code.
+					compact_task->do_memory_server_compaction();
+
+					// debug
+					//_semeru_sc->do_yield_check();		// yield for what ? Must pair with SuspendibleThreadSetJoiner
+
+					// [XX] if task has_aborted(), then re-do the marking until finished.
+					// Usually, 
+				} while (!_semeru_sc->has_aborted() && compact_task->has_aborted());  
+		
+			}
+
+		} // end of thread join
+
+}
+
+
+
+
+
+
+
+
+
+
 //
 // Debug functions
 //
@@ -1043,7 +1121,7 @@ void G1SemeruSTWCompact::print_stats() {
 /**
  * Just print, not pop any items. 
  */
-void G1SemeruSTWCompactTask::check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message){
+void G1SemeruSTWCompactTerminatorTask::check_cross_region_reg_queue( SemeruHeapRegion* hr,  const char* message){
 	size_t length = hr->cross_region_ref_update_queue()->length();
 	size_t i;
 	HashQueue* cross_region_reg_queue = hr->cross_region_ref_update_queue();
@@ -1073,7 +1151,7 @@ void G1SemeruSTWCompactTask::check_cross_region_reg_queue( SemeruHeapRegion* hr,
 }
 
 // Drain the both overflow queue and taskqueue
-void G1SemeruSTWCompactTask::check_overflow_taskqueue( const char* message){
+void G1SemeruSTWCompactTerminatorTask::check_overflow_taskqueue( const char* message){
   StarTask ref;
   size_t count;
   SemeruCompactTaskQueue* inter_region_ref_queue = this->inter_region_ref_taskqueue();

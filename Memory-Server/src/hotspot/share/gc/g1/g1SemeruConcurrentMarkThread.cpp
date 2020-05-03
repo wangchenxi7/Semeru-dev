@@ -412,7 +412,8 @@ void G1SemeruConcurrentMarkThread::run_service() {
 
   G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
   G1Policy* g1_policy = semeru_heap->g1_policy();
-
+  flags_of_cpu_server_state* cpu_server_flags = semeru_heap->cpu_server_flags();
+  flags_of_mem_server_state* mem_server_flags = semeru_heap->mem_server_flags();
 
   //
   // Semeru phase manager
@@ -531,16 +532,32 @@ void G1SemeruConcurrentMarkThread::run_service() {
           // Abort the compact phase, continue the  concurrent tracing.
           log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact is aborted OR there is no scanned Region in CSet . \n",__func__);
           break;
-        } else if( !_semeru_sc->_mem_server_cset->is_compact_finished()) {
-          // Do the Compact action.
-					log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
-
-          // Debug for now.
-          _semeru_sc->semeru_stw_compact();
-        }else{
-           log_debug(semeru, mem_compact)("%s, G1SemeruSTWCompact has no scanned Region in CSet . \n",__func__);
         }
 
+        // CPU server goes into STW window, 
+        // no matter we do compact or not, we need to set all the memory server flags normally.
+        //
+        if(cpu_server_flags->_is_cpu_server_in_stw ) {
+
+          if(_semeru_sc->_mem_server_cset->is_compact_finished() == false){
+
+            
+            // Do the Compact action.
+					  log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
+
+            mem_server_flags->set_all_flags_to_start_mode();
+            // Debug for now.
+            _semeru_sc->semeru_stw_compact();
+          }
+
+          // Exit the  STW window. 
+          mem_server_flags->set_all_flags_to_end_mode();
+
+        }
+        
+        
+        log_debug(semeru, mem_compact)("%s, No need start compact if either true: not in STW windown ? %d, scanned_region emtpry ? %d . \n",
+                                __func__, !cpu_server_flags->_is_cpu_server_in_stw, _semeru_sc->_mem_server_cset->is_compact_finished() );
       } // End of STW Compact code block
   
 

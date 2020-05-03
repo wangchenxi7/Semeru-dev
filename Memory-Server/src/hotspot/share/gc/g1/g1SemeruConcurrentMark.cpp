@@ -2406,7 +2406,7 @@ class G1SemeruCMRemarkTask : public AbstractGangTask {
 	G1SemeruConcurrentMark* _semeru_cm;
 public:
 	void work(uint worker_id) {
-		G1SemeruCMTask* task = _semeru_cm->task(worker_id);
+		G1SemeruCMTask* task = _semeru_cm->task(worker_id);  // Get the real G1SemeruCMTask after assinged worker_id by the task scheduler.
 		task->record_start_time();
 		{
 			ResourceMark rm;
@@ -3576,12 +3576,6 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 		// 2) Claim a NEW Region from Semeru memory server's CSet to scan.
 		//
 		do{
-
-			// Check the status of CPU server.
-			// If the CPU server is in STW mode, claim and trace one Region at least. 
-			// And then stop concurrent tracing and try to compact the CM-scanned Regions.	
-			// [?] If the CM-scanned Region is empty, try to trace && compact a Region there until the end of CPU STW mode.
-			
 
 			// We are going to try to claim a new region. We should have
 			// given up on the previous one.

@@ -281,7 +281,7 @@ static GangTaskDispatcher* create_dispatcher() {
  * [x] The WorkGang threads are waiting on the _dispatcher.
  * 		 create_dispatcher() will build a SemaphoreGangTaskDispatcher 
  * 		 and this contructor assigns it to the WorkGang->_dispathcer.
- * 		 e.g. The G1SemeruSTWCompactTask are waiting on SemaphoreGangTaskDispatcher->_start_semaphore.
+ * 		 e.g. The G1SemeruSTWCompactGangTask are waiting on SemaphoreGangTaskDispatcher->_start_semaphore.
  * 
  */
 WorkGang::WorkGang(const char* name,
@@ -377,7 +377,7 @@ void GangWorker::signal_task_done() {
  * 
  * i.e.
  * a. Concurrent Root Region Scan task sets.
- * b. G1SemeruSTWCompactTask->work() is also scheduled from here.
+ * b. G1SemeruSTWCompactGangTask->work() is also scheduled from here.
  * 
  */
 void GangWorker::run_task(WorkData data) {

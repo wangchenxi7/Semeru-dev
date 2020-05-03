@@ -38,7 +38,7 @@ bool OWSTTaskTerminator::offer_termination(TerminatorTerminator* terminator) {
   // Single worker, done
   if (_n_threads == 1) {
     _offered_termination = 1;
-    assert(!peek_in_queue_set(), "Precondition");
+    assert(!peek_in_queue_set(), "Precondition");  // [?] What's the purpose of checking the queue set ?
     return true;
   }
 
@@ -200,3 +200,77 @@ bool OWSTTaskTerminator::do_spin_master_work(TerminatorTerminator* terminator) {
     }
   }  // end of while(true)
 }
+
+
+
+//
+// Semeru Support
+//
+
+/**
+ * For a Semeru Memory Server Compact task, we allow it to get terminaton offer with non-empty queueSet.
+ *  
+ */
+bool OWSTTaskTerminator::offer_semeru_compact_termination(TerminatorTerminator* terminator) {
+  assert(_n_threads > 0, "Initialization is incorrect");
+  assert(_offered_termination < _n_threads, "Invariant");
+  assert(_blocker != NULL, "Invariant");
+
+  // Single worker, done
+  if (_n_threads == 1) {
+    _offered_termination = 1;
+    //assert(!peek_in_queue_set(), "Precondition");  // [?] What's the purpose of checking the queue set ?
+    return true;
+  }
+
+  _blocker->lock_without_safepoint_check();
+  _offered_termination++;
+  // All arrived, done
+  if (_offered_termination == _n_threads) {
+    _blocker->notify_all();
+    _blocker->unlock();
+    //assert(!peek_in_queue_set(), "Precondition");
+    return true;
+  }
+
+  Thread* the_thread = Thread::current();
+  while (true) {
+    if (_spin_master == NULL) {
+      _spin_master = the_thread;
+
+      _blocker->unlock();
+
+      if (do_spin_master_work(terminator)) {
+        assert(_offered_termination == _n_threads, "termination condition");
+        //assert(!peek_in_queue_set(), "Precondition");
+        return true;
+      } else {
+        _blocker->lock_without_safepoint_check();
+        // There is possibility that termination is reached between dropping the lock
+        // before returning from do_spin_master_work() and acquiring lock above.
+        if (_offered_termination == _n_threads) {
+          _blocker->unlock();
+          //assert(!peek_in_queue_set(), "Precondition");
+          return true;
+        }
+      }
+    } else {
+      _blocker->wait(true, WorkStealingSleepMillis);
+
+      if (_offered_termination == _n_threads) {
+        _blocker->unlock();
+        //assert(!peek_in_queue_set(), "Precondition");
+        return true;
+      }
+    }
+
+    size_t tasks = tasks_in_queue_set();
+    if (exit_termination(tasks, terminator)) {
+      assert_lock_strong(_blocker);
+      _offered_termination--;
+      _blocker->unlock();
+      return false;
+    }
+  }
+}
+
