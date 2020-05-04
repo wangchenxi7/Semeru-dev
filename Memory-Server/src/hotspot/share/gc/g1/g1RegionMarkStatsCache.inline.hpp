@@ -51,4 +51,6 @@ inline void G1RegionMarkStatsCache::evict(uint idx) {
   cur->clear();
 }
 
+
+
 #endif // SHARE_VM_GC_G1_G1REGIONMARKSTATSCACHE_INLINE_HPP

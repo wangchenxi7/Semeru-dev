@@ -363,63 +363,6 @@ inline void G1SemeruCMTask::abort_marking_if_regular_check_fail() {
   }
 }
 
-/**
- * Tag : Mark the target object alive in CM->_next_bitmap.
- *  Only mark the object alive if it's below the finger. 
- *  Which means that we already scanned it but may bot mark it alive.
- * 
- *  This funtion is invoked in Remark Phase.
- *  1) Root scavenge, Java/VM thread variables.
- *  2) Java Thread's SATB queue.
- * 
- *  [?] Is there any objects is above the global_finger in Remark phase?
- *    => newly allocated objects ?
- * 
- */
-// inline bool G1SemeruCMTask::make_reference_grey(oop obj) {
-//   if (!_cm->mark_in_next_bitmap(_worker_id, obj)) {
-//     return false;
-//   }
-
-//   // No OrderAccess:store_load() is needed. It is implicit in the
-//   // CAS done in G1CMBitMap::parMark() call in the routine above.
-//   HeapWord* global_finger = _cm->finger();
-
-//   // We only need to push a newly grey object on the mark
-//   // stack if it is in a section of memory the mark bitmap
-//   // scan has already examined.  Mark bitmap scanning
-//   // maintains progress "fingers" for determining that.
-//   //
-//   // Notice that the global finger might be moving forward
-//   // concurrently. This is not a problem. In the worst case, we
-//   // mark the object while it is above the global finger and, by
-//   // the time we read the global finger, it has moved forward
-//   // past this object. In this case, the object will probably
-//   // be visited when a task is scanning the region and will also
-//   // be pushed on the stack. So, some duplicate work, but no
-//   // correctness problems.
-//   if (is_below_finger(obj, global_finger)) {
-//     G1SemeruTaskQueueEntry entry = G1SemeruTaskQueueEntry::from_oop(obj);
-//     if (obj->is_typeArray()) {
-//       // Immediately process arrays of primitive types, rather
-//       // than pushing on the mark stack.  This keeps us from
-//       // adding humongous objects to the mark stack that might
-//       // be reclaimed before the entry is processed - see
-//       // selection of candidates for eager reclaim of humongous
-//       // objects.  The cost of the additional type test is
-//       // mitigated by avoiding a trip through the mark stack,
-//       // by only doing a bookkeeping update and avoiding the
-//       // actual scan of the object - a typeArray contains no
-//       // references, and the metadata is built-in.
-//       process_grey_task_entry<false>(entry);
-//     } else {
-//       push(entry);
-//     }
-//   }
-//   return true;
-// }
-
-
 
 
 /**

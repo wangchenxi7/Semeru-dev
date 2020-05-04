@@ -52,6 +52,28 @@ Pair<size_t, size_t> G1RegionMarkStatsCache::evict_all() {
   return Pair<size_t,size_t>(_cache_hits, _cache_misses);
 }
 
+/**
+ * Semeru MS : Evic a specific Region to Global 
+ * return the alive HeapWords for the entry.
+ */
+size_t G1RegionMarkStatsCache::evict_region(uint region_index) {
+  G1RegionMarkStatsCacheEntry* cur;
+  
+  cur = find_for_add(region_index);  // Should find it, It's the last added region_index for current G1SemeruCMTask.
+  if(cur->_region_idx == region_index &&  cur->_stats._live_words != 0 ){
+    // Add into global
+    Atomic::add(cur->_stats._live_words, &_target[cur->_region_idx]._live_words); // evict to global
+
+    cur->clear(); // reset current local cache entry
+  } 
+
+  // calculate the alive ratio based on the stored value in global 
+  return _target[region_index]._live_words;
+}
+
+
+
+
 // Reset all cache entries to their default values.
 void G1RegionMarkStatsCache::reset() {
   _cache_hits = 0;

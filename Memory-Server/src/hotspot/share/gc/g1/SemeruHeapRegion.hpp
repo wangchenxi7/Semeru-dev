@@ -219,13 +219,19 @@ public:
   //      Because the CPU server doesn't need this field for all the Regions.
   //
   G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
-  size_t        _marked_alive_bytes;   // Marked alive objects
-
+  size_t        _marked_alive_bytes;  // Marked alive objects. [ Abandoned ? ]
+  double        _alive_ratio;         // Used to decide GC or not.
 
   //
   // functions
   //
-  MemoryToCPUAtGC(uint hrm_index) {}
+  MemoryToCPUAtGC(uint hrm_index):
+    _cm_scanned(false),
+    _marked_alive_bytes(0),
+    _alive_ratio(0.0)
+  {
+
+  }
 
 
 
@@ -1121,7 +1127,11 @@ public:
   void reset_region_cm_scanned()  { _mem_to_cpu_gc->_cm_scanned = false;  }
   bool is_region_cm_scanned()     { return _mem_to_cpu_gc->_cm_scanned; }
 
-
+  void    set_alive_words(size_t words)  { _mem_to_cpu_gc->_marked_alive_bytes = words;  }
+  size_t  alive_words()                  { return _mem_to_cpu_gc->_marked_alive_bytes; }  // abandoned ?
+  
+  void    set_alive_ratio(double ratio)  {  _mem_to_cpu_gc->_alive_ratio = ratio;  }
+  double  alive_ratio()                  { return _mem_to_cpu_gc->_alive_ratio;  }  
 
 
   // Verify that the entries on the strong code root list for this

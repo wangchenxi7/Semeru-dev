@@ -62,7 +62,7 @@ struct G1RegionMarkStats {
 class G1RegionMarkStatsCache {
 private:
   // The array of statistics entries to evict to; the global array.
-  G1RegionMarkStats* _target;     // [？] What's this used for ?
+  G1RegionMarkStats* _target;     // [x] The global structure, points to G1SemeruCompact->_region_mark_stats
   // Number of entries in the eviction target.
   uint _num_stats;
 
@@ -116,6 +116,11 @@ public:
       _cache[cache_idx].clear();
     }
   }
+
+  // Evict a spefici Region's statistics
+  // Return the alive HeapWords stored in the global structure.
+  size_t evict_region(uint region_index);
+
 
   // Evict all remaining statistics, returning cache hits and misses.
   Pair<size_t, size_t> evict_all();

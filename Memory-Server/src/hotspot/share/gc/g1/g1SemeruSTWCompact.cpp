@@ -328,7 +328,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 				// do not interrupt it until the end of compacting.
 
 				region_to_evacuate = _semeru_sc->claim_region_for_comapct(worker_id(), region_to_evacuate);
-				if(region_to_evacuate != NULL){
+				if(region_to_evacuate != NULL && region_to_evacuate->alive_ratio() < COMPACT_THRESHOLD  ){
 					log_debug(semeru,mem_compact)("%s, worker[0x%x] Claimed Region[0x%lx] to be evacuted.", __func__, worker_id(), (size_t)region_to_evacuate->hrm_index() );
 
 					if(region_to_evacuate->hrm_index() == 0x7)

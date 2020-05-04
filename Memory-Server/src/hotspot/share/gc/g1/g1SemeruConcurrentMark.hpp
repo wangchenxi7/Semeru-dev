@@ -859,7 +859,10 @@ private:
   // the task(entry) queue of this task
   G1SemeruCMTaskQueue*              _semeru_task_queue;      // The StarTask queue for CM
 
-  G1RegionMarkStatsCache      _mark_stats_cache;    // [?] Store the CM scanning information. e.g. scanned alive objects.
+  // This is a Task local cache.
+  // It points to a global strucure : G1SemeruCompact->_region_mark_stats
+  G1RegionMarkStatsCache      _mark_stats_cache;    // [x] Store the CM scanning information. e.g. scanned alive objects.
+ 
   // Number of calls to this task
   uint                        _calls;
 
@@ -1120,6 +1123,9 @@ public:
   Pair<size_t, size_t> flush_mark_stats_cache();
   // Prints statistics associated with this task
   void print_stats();
+
+  // Restore the marked statistics to the Region.
+  void restore_region_mark_stats();
 
   //
   // Target object queue related

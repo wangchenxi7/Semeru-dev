@@ -3198,6 +3198,33 @@ void G1SemeruCMTask::clear_mark_stats_cache(uint region_idx) {
 	_mark_stats_cache.reset(region_idx);
 }
 
+/**
+ * Semeru MS : Transfer one Region's statistics to the Region
+ * 1) Evict to global  
+ * 2) Get the value from global
+ * 3) Store the object marking alive ratio to Region.
+ */
+void G1SemeruCMTask::restore_region_mark_stats() {
+	if(_curr_region == NULL)	return;
+
+	uint region_index = _curr_region->hrm_index();
+	size_t alive_words;
+	double alive_ratio;
+
+	alive_words = _mark_stats_cache.evict_region(region_index);	// Add more alive words to current Region's stat. MT safe.
+
+	// After adding more alive words, update the alive ratio.
+	// Maybe updated by MT threads.
+	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
+	if(alive_ratio >_curr_region->alive_ratio() ){ 
+		_curr_region->set_alive_ratio(alive_ratio);
+		
+		log_debug(semeru,mem_trace)("%s, update Region[0x%x] alive_ratio to %f", __func__, region_index, alive_ratio);
+	}
+
+
+}
+
 Pair<size_t, size_t> G1SemeruCMTask::flush_mark_stats_cache() {
 	return _mark_stats_cache.evict_all();
 }
@@ -3511,6 +3538,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			drain_local_queue(false);
 			drain_global_stack(false);
 
+			// Transfer the marking statistics to Region.
+			restore_region_mark_stats();
 
 			_curr_region->set_region_cm_scanned(); // if setted by Remark, it's ok.
 			_semeru_cm->mem_server_cset()->add_cm_scanned_regions(_curr_region);	// Add the scanned Region into scanned_region list.
@@ -3607,14 +3636,14 @@ out_tracing:
 		
 	}
 
-	// [x] Double Check, all the local and gobal task_queue are empty now.
-	//		 Actually, all of  them should already be processed.
-	// Since we've done everything else, we can now totally drain the
-	// local queue and global stack.
-	log_debug(semeru,mem_trace)("%s, worker[0x%x] 2nd, times Drain reference queue for current scanning.",__func__, worker_id() );
-	drain_local_queue(false);
-	drain_global_stack(false);
+	// [?] Why do we need to Drain the queue a second time ?? 
+	// log_debug(semeru,mem_trace)("%s, worker[0x%x] 2nd, times Drain reference queue for current scanning.",__func__, worker_id() );
+	// drain_local_queue(false);
+	// drain_global_stack(false);
 
+
+	// // Transfer some statistics to Region.
+	// restore_region_mark_stats();
 
 
 	// [?] Because the Semeru Region is quit big, how about scan reach Region parallelly.
@@ -3657,14 +3686,21 @@ out_tracing:
 				// local queue and global stack.
 				drain_local_queue(false);
 				drain_global_stack(false);
+
+				// Also need to update the marked statistics
+				// It's an adding procedure, will not cause MT problem.
+				restore_region_mark_stats();
 			} else {
 				break;
 			}
-		} // not aborted, keep stealing work from other thread.
+		} // End of while. not aborted, keep stealing work from other thread.
 
 		// Reset current worker's  fields agian
 		clear_region_fields();
 	}
+
+
+
 
 
 	//
@@ -3762,7 +3798,11 @@ out_tracing:
 			}
 
 			clear_region_fields();
-			flush_mark_stats_cache();
+
+			// Flush the marking statistics to global struct
+			// Even we aborted current scanning, the bits marked in alive_bitmap still count.
+			// We will continue the marking in the round.
+			flush_mark_stats_cache();  
 
 			if (!is_serial) {
 				// If we're executing the concurrent phase of marking, reset the marking
@@ -3820,7 +3860,7 @@ G1SemeruCMTask::G1SemeruCMTask(uint worker_id,
 	_semeru_cm(cm),
 	_next_mark_bitmap(NULL),
 	_semeru_task_queue(task_queue),
-	_mark_stats_cache(mark_stats, max_regions, RegionMarkStatsCacheSize),
+	_mark_stats_cache(mark_stats, max_regions, RegionMarkStatsCacheSize),  /* Marking statistics, e.g. the alive workds per Region. */
 	_calls(0),
 	_time_target_ms(0.0),
 	_start_time_ms(0.0),
