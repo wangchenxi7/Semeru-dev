@@ -3219,7 +3219,7 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	if(alive_ratio >_curr_region->alive_ratio() ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
 		
-		log_debug(semeru,mem_trace)("%s, update Region[0x%x] alive_ratio to %f", __func__, region_index, alive_ratio);
+		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio to %f", __func__, worker_id(), region_index, alive_ratio);
 	}
 
 
@@ -3636,14 +3636,6 @@ out_tracing:
 		
 	}
 
-	// [?] Why do we need to Drain the queue a second time ?? 
-	// log_debug(semeru,mem_trace)("%s, worker[0x%x] 2nd, times Drain reference queue for current scanning.",__func__, worker_id() );
-	// drain_local_queue(false);
-	// drain_global_stack(false);
-
-
-	// // Transfer some statistics to Region.
-	// restore_region_mark_stats();
 
 
 	// [?] Because the Semeru Region is quit big, how about scan reach Region parallelly.
@@ -3661,7 +3653,7 @@ out_tracing:
 	if (do_stealing && !has_aborted() ) {
 		// We have not aborted. This means that we have finished all that
 		// we could. Let's try to do some stealing...
-		log_debug(semeru,mem_trace)("%s, worker[0x%x] start stealing work.. ", __func__, worker_id());
+		log_debug(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
 
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
@@ -3687,13 +3679,16 @@ out_tracing:
 				drain_local_queue(false);
 				drain_global_stack(false);
 
-				// Also need to update the marked statistics
-				// It's an adding procedure, will not cause MT problem.
-				restore_region_mark_stats();
 			} else {
 				break;
 			}
+
 		} // End of while. not aborted, keep stealing work from other thread.
+
+		// If we stole work from other threads, we also need to update the marked statistics
+		// It's an adding procedure, will not cause MT problem.
+		// If we didn' steal any work,  the _curr_region should be NULL. We will skip the restore procedure.
+		restore_region_mark_stats();
 
 		// Reset current worker's  fields agian
 		clear_region_fields();

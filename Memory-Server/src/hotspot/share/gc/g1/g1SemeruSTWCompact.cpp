@@ -331,12 +331,9 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 				if(region_to_evacuate != NULL && region_to_evacuate->alive_ratio() < COMPACT_THRESHOLD  ){
 					log_debug(semeru,mem_compact)("%s, worker[0x%x] Claimed Region[0x%lx] to be evacuted.", __func__, worker_id(), (size_t)region_to_evacuate->hrm_index() );
 
-					if(region_to_evacuate->hrm_index() == 0x7)
-						check_cross_region_reg_queue(region_to_evacuate, "Before phase1, Region[0x7]");	
+					//	if(region_to_evacuate->hrm_index() == 0x7)
+					//		check_cross_region_reg_queue(region_to_evacuate, "Before phase1, Region[0x7]");	
 
-					// If Claimed, must finish the compacting.
-					//
-					mem_server_flags->add_claimed_region(region_to_evacuate->hrm_index());
 
 					// Phase#1 Sumarize alive objects' destinazion
 					// 1) put forwarding pointer in alive object's markOop
@@ -357,6 +354,12 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 					record_new_addr_for_target_obj(region_to_evacuate);
 
 	
+					//
+					// 1) It's safe to add the Region into Memory Server Flags now
+					// 		CPU server can read the data now.
+					// 2) If Claimed, must finish the compacting.
+					//
+					mem_server_flags->add_claimed_region(region_to_evacuate->hrm_index());
 
 					// Phase#3 Do the compaction
 					// Multiple worker threads do this parallelly
@@ -426,7 +429,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 						// start exchange ==>> 
 		
 						log_debug(semeru,mem_compact)("%s, worker[0x%x] Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__, worker_id());
-						while(cpu_server_flags->_exchange_done == false){
+						while(cpu_server_flags->_cpu_server_data_sent == false){
 						// memory server busy wait on the RDMA flag.
 						// 1) CPU server(and other server) needs to send their data here.
 						// 2) CPU server needs to read data from current this.
@@ -459,7 +462,7 @@ bool G1SemeruSTWCompactTerminatorTask::should_exit_termination(){
 
 				// Busy wait on the data exchange finished.
 				log_debug(semeru,mem_compact)("%s, worker[0x%x] Wait on CPU server to send all the evacuated Cross_region_ref queue.\n", __func__, worker_id() );
-				while(cpu_server_flags->_exchange_done == false){
+				while(cpu_server_flags->_cpu_server_data_sent == false){
 					// memory server busy wait on the RDMA flag.
 					// 1) CPU server(and other server) needs to send their data here.
 					// 2) CPU server needs to read data from current this.

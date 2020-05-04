@@ -909,7 +909,7 @@ class flags_of_cpu_server_state : public CHeapRDMAObj<flags_of_cpu_server_state>
     // CPU server states
     //
     volatile bool _is_cpu_server_in_stw;
-    volatile bool _exchange_done;
+    volatile bool _cpu_server_data_sent;
 
 
 	public :
@@ -943,6 +943,7 @@ class flags_of_mem_server_state : public CHeapRDMAObj<flags_of_mem_server_state>
     volatile bool _is_mem_server_in_compact;
 
     // Thread same structure
+    // Add a Region into the queue ONLY when its compaction is finished.
     uint _compacted_regions[128];  // assume max regions num is 128.  512 Bytes.
     volatile size_t _compacted_region_length;
 

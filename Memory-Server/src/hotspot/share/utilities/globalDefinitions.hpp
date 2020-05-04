@@ -169,7 +169,7 @@
 // [Warning] : need to compact the RDMA meta data usage to save space.
 //
 
-#define COMPACT_THRESHOLD 0.9  // Do compaction only when alive ratio below COMPACT_THRESHOLD
+#define COMPACT_THRESHOLD 0.85  // Do compaction only when alive ratio below COMPACT_THRESHOLD
 
 
 #define SEMERU_START_ADDR   ((size_t)0x400000000000)

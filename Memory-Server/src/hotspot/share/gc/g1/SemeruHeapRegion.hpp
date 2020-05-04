@@ -219,8 +219,8 @@ public:
   //      Because the CPU server doesn't need this field for all the Regions.
   //
   G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
-  size_t        _marked_alive_bytes;  // Marked alive objects. [ Abandoned ? ]
-  double        _alive_ratio;         // Used to decide GC or not.
+  volatile size_t        _marked_alive_bytes;  // Marked alive objects. [ Abandoned ? ]
+  volatile double        _alive_ratio;         // Used to decide GC or not.
 
   //
   // functions

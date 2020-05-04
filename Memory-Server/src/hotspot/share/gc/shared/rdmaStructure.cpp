@@ -95,7 +95,7 @@ _num_regions(0)
 
 flags_of_cpu_server_state::flags_of_cpu_server_state():
 _is_cpu_server_in_stw(false),
-_exchange_done(false)
+_cpu_server_data_sent(false)
 {
 	
 	// debug
