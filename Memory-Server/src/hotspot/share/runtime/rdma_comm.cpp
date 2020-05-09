@@ -39,7 +39,7 @@ void* Build_rdma_to_cpu_server(void* _args ){
 	char* heap_start	= NULL;
 	size_t heap_size	=	0;
   const char* port_str  = "9400";
-  const char* ip_str    = "10.0.0.2";
+  const char* ip_str    = "10.0.10.6";
 
 	// Parse the paramters
 	struct rdma_main_thread_args *args = (struct rdma_main_thread_args *) _args;
@@ -55,7 +55,7 @@ void* Build_rdma_to_cpu_server(void* _args ){
 
   memset(&addr, 0, sizeof(addr));  // not struct sockaddr_in6
   addr.sin6_family = AF_INET6;                    //[?] Ipv6 is cpmpatible with Ipv4.
-  inet_pton(AF_INET6, ip_str, &addr.sin6_addr);		// Remote memory pool is waiting on 10.0.0.2:9400.
+  inet_pton(AF_INET6, ip_str, &addr.sin6_addr);		// Remote memory pool is waiting on 10.0.10.6:9400.
   addr.sin6_port = htons(atoi(port_str));
 
   assert((ec = rdma_create_event_channel()) != NULL, "rdma_create_event_channel failed.");
