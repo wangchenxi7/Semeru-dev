@@ -370,8 +370,9 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 		return NULL;
 	}
 
+	// _claimed_cm_scanned_regions increases linearly.
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_cm_scanned_regions) - 1;
-	if (claimed_index != _num_cm_scanned_regions) {
+	if (claimed_index < _num_cm_scanned_regions) {
 		return _cm_scanned_regions[claimed_index];
 	}
 	return NULL;
@@ -391,7 +392,7 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 	}
 
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
-	if (claimed_index != _num_freshly_evicted_regions) {
+	if (claimed_index < _num_freshly_evicted_regions) {
 		return _freshly_evicted_regions[claimed_index];
 	}
 	return NULL;
