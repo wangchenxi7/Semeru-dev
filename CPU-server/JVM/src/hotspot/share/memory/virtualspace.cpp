@@ -82,6 +82,22 @@ ReservedSpace::ReservedSpace(char* base, size_t size, size_t alignment,
   _executable = executable;
 }
 
+
+// Semeru 
+// Allocate ReservedSpace at fixed address.
+ReservedSpace::ReservedSpace(size_t size, size_t alignment,
+                             bool large,
+                             char* requested_address, bool map_fixed) : _fd_for_heap(-1) {
+  if(map_fixed){
+    // 1) Add MAP_FIXED to mmap flags.
+    initialize_semeru(size, alignment, large, requested_address, false/* executable, for code*/ , false /*heap_init*/);
+  }else{
+    // 2) requested_address is just a hint
+    initialize(size, alignment, large, requested_address, false);
+  }
+}
+
+
 // Helper method
 static void unmap_or_release_memory(char* base, size_t size, bool is_file_mapped) {
   if (is_file_mapped) {
@@ -229,6 +245,176 @@ void ReservedSpace::initialize(size_t size, size_t alignment, bool large,
     _special = true;
   }
 }
+
+
+
+
+//
+// Semeru CPU
+// Added by Chenxi.
+
+
+
+
+/**
+ * Semeru - Commit a space at requested address.
+ * 
+ * Get virtual memory from OS for the Semeru Memory pool.
+ * 1) Start at fixed address, requested_address.
+ * 2) Region size alignment, alignment. 
+ * 3) Initialize the fields of Reserved Heap space.
+ * 
+ * 
+ * More Explanation
+ *  The parameter, heap_init, is only used in Semery Memory server.   
+ * 
+ */ 
+void ReservedSpace::initialize_semeru(size_t size, size_t alignment, bool large,
+                               char* requested_address,
+                               bool executable, bool heap_init) {
+  const size_t granularity = os::vm_allocation_granularity();    // 4KB ?
+  assert((size & (granularity - 1)) == 0,
+         "size not aligned to os::vm_allocation_granularity()");
+  assert((alignment & (granularity - 1)) == 0,
+         "alignment not aligned to os::vm_allocation_granularity()");
+  assert(alignment == 0 || is_power_of_2((intptr_t)alignment),
+         "not a power of 2");
+
+  alignment = MAX2(alignment, (size_t)os::vm_page_size());
+
+  _base = NULL;
+  _size = 0;
+  _special = false;             // Huge page, file backed heap 
+  _executable = executable;     // What's the meaning ?
+  _alignment = 0;
+  _noaccess_prefix = 0;
+
+  // Reserve at lease 1 Region for Semeru memory pool
+  assert(size >= alignment, "%s, Semeru memory pool size, 0x%llx is smaller than single Region, 0x%llx.", __func__,
+                                                           (unsigned long long)size, (unsigned long long)alignment);
+
+  // If OS doesn't support demand paging for large page memory, we need
+  // to use reserve_memory_special() to reserve and pin the entire region.
+  // If there is a backing file directory for this space then whether
+  // large pages are allocated is up to the filesystem of the backing file.
+  // So we ignore the UseLargePages flag in this case.
+  bool special = large && !os::can_commit_large_page_memory();   // huge page support
+  if (special && _fd_for_heap != -1) {
+    special = false;
+    if (UseLargePages && (!FLAG_IS_DEFAULT(UseLargePages) ||
+      !FLAG_IS_DEFAULT(LargePageSizeInBytes))) {
+      log_debug(gc, heap)("Ignoring UseLargePages since large page support is up to the file system of the backing file for Java heap");
+    }
+  }
+
+  char* base = NULL;
+
+  // 1. Use huge page 
+  if (special) {
+
+    //debug
+    assert(false, "%s - special path ,Can't reach here.", __func__);
+
+    base = os::reserve_memory_special(size, alignment, requested_address, executable);
+
+    if (base != NULL) {
+      if (failed_to_reserve_as_requested(base, requested_address, size, true)) {
+        // OS ignored requested address. Try different address.
+        return;
+      }
+      // Check alignment constraints.
+      assert((uintptr_t) base % alignment == 0,
+             "Large pages returned a non-aligned address, base: "
+             PTR_FORMAT " alignment: " SIZE_FORMAT_HEX,
+             p2i(base), alignment);
+      _special = true;
+    } else {
+      // failed; try to reserve regular memory below
+      if (UseLargePages && (!FLAG_IS_DEFAULT(UseLargePages) ||
+                            !FLAG_IS_DEFAULT(LargePageSizeInBytes))) {
+        log_debug(gc, heap, coops)("Reserve regular memory without large pages");
+      }
+    }
+  }
+
+  // 2. Use 4KB default page
+  if (base == NULL) {
+    // Optimistically assume that the OSes returns an aligned base pointer.
+    // When reserving a large address range, most OSes seem to align to at
+    // least 64K.
+
+    // If the memory was requested at a particular address, use
+    // os::attempt_reserve_memory_at() to avoid over mapping something
+    // important.  If available space is not detected, return NULL.
+
+      // 2.1 Request fixed start address for this ReservedSpace
+    if (requested_address != NULL) {
+      base = os::semeru_attempt_reserve_memory_at(size, requested_address, alignment, _fd_for_heap );
+      if (failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
+        // OS ignored requested address. Try different address.
+        base = NULL;
+      }
+    } else {
+      // 2.2 Request any available annoymous memory from OS.
+
+      // The heap must be allocated at requested_address.
+      guarantee(false, "%s - requested_address == NULL ,Can't reach here.", __func__);
+      base = os::reserve_memory(size, NULL, alignment, _fd_for_heap);
+    }
+
+    //
+    // Request memory from OS failed. 
+    //
+    if (base == NULL) return;
+
+    // Check alignment constraints
+    if ((((size_t)base) & (alignment - 1)) != 0) {
+      // Base not aligned, retry
+      unmap_or_release_memory(base, size, _fd_for_heap != -1 /*is_file_mapped*/);
+
+      // Make sure that size is aligned
+      size = align_up(size, alignment);
+      base = os::reserve_memory_aligned(size, alignment, _fd_for_heap);
+
+      if (requested_address != 0 &&
+          failed_to_reserve_as_requested(base, requested_address, size, false, _fd_for_heap != -1)) {
+        // As a result of the alignment constraints, the allocated base differs
+        // from the requested address. Return back to the caller who can
+        // take remedial action (like try again without a requested address).
+        assert(_base == NULL, "should be");
+        return;
+      }
+    }
+  }  // base == NULL
+
+  // Done
+  // Initialize the fields of ReservedSpace
+  //
+  _base = base;
+  _size = size;
+  _alignment = alignment;
+  // If heap is reserved with a backing file, the entire space has been committed. So set the _special flag to true
+  if (_fd_for_heap != -1) {
+    _special = true;
+  }
+
+
+}
+
+
+
+
+
+//
+// end of Semeru implementation for ResercedSpace
+//
+
+
+
+
+
+
+
 
 ReservedSpace ReservedSpace::first_part(size_t partition_size, size_t alignment,
                                         bool split, bool realloc) {

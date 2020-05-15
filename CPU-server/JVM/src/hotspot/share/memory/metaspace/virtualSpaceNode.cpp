@@ -41,6 +41,12 @@
 
 namespace metaspace {
 
+// static variables
+// Semeru CPU
+// [?] Change the index to a addr value !!
+// Because the size for each VirtualSpaceNode is not fixed.
+char* VirtualSpaceNode::VirtualSpaceNode_alloc_ptr = (char*)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET); // index for VirtualSpaceNode allocation.
+
 // Decide if large pages should be committed when the memory is reserved.
 static bool should_commit_large_pages_when_reserving(size_t bytes) {
   if (UseLargePages && UseLargePagesInMetaspace && !os::can_commit_large_page_memory()) {
@@ -60,7 +66,24 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes) :
     _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
   assert_is_aligned(bytes, Metaspace::reserve_alignment());
   bool large_pages = should_commit_large_pages_when_reserving(bytes);
-  _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);
+  
+  // Semeru CPU server. Fix the metaspace for CPU server.
+  if(SemeruEnableMemPool == false){
+    // 1) Default path
+    _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages);    // Allocate new ReservedSpace for the VirtualSpaceNode.
+  }else {
+    // 2) Semeru Path
+
+    // Allocate VirtualSpaceNode at fixed address
+    // MT safe
+    char* requested_addr =  Atomic::add((size_t)bytes, &VirtualSpaceNode_alloc_ptr) - bytes; // Bump the alloc_ptr successflly
+    assert( (size_t)VirtualSpaceNode_alloc_ptr <= (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT), "exceed meta space limit." );
+    log_debug(semeru, alloc)("%s, Reserve 0x%lx bytes spece at 0x%lx for VirtulSpaceNode. Curr VirtualSpaceNode_alloc_ptr 0x%lx \n",__func__,
+                                                   bytes, (size_t)requested_addr,  (size_t)VirtualSpaceNode_alloc_ptr);
+
+    _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages , requested_addr, true /*map_fixed*/);  // MAP_FIXED 
+  }
+
 
   if (_rs.is_reserved()) {
     assert(_rs.base() != NULL, "Catch if we get a NULL address");

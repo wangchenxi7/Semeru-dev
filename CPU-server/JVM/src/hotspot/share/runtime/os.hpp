@@ -124,6 +124,11 @@ class os: AllStatic {
   static char*  pd_attempt_reserve_memory_at(size_t bytes, char* addr, int file_desc);
   static void   pd_split_reserved_memory(char *base, size_t size,
                                       size_t split, bool realloc);
+
+  // Semeru
+  static char* semeru_pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr, size_t alignment);
+
+
   static bool   pd_commit_memory(char* addr, size_t bytes, bool executable);
   static bool   pd_commit_memory(char* addr, size_t size, size_t alignment_hint,
                                  bool executable);
@@ -341,6 +346,11 @@ class os: AllStatic {
   static char*  attempt_reserve_memory_at(size_t bytes, char* addr, int file_desc = -1);
   static void   split_reserved_memory(char *base, size_t size,
                                       size_t split, bool realloc);
+
+  // Semeru 
+  static char* semeru_attempt_reserve_memory_at(size_t bytes, char* addr, size_t alignment, int file_desc );
+  
+
   static bool   commit_memory(char* addr, size_t bytes, bool executable);
   static bool   commit_memory(char* addr, size_t size, size_t alignment_hint,
                               bool executable);

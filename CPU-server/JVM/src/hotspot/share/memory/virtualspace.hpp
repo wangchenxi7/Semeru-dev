@@ -49,6 +49,11 @@ class ReservedSpace {
                   char* requested_address,
                   bool executable);
 
+  // Semeru
+  void initialize_semeru(size_t size, size_t alignment, bool large,
+                               char* requested_address,
+                               bool executable, bool heap_init);
+
  public:
   // Constructor
   ReservedSpace();
@@ -60,6 +65,11 @@ class ReservedSpace {
   ReservedSpace(size_t size, size_t alignment, bool large,
                 char* requested_address = NULL);
   ReservedSpace(size_t size, size_t alignment, bool large, bool executable);
+
+  // Semeru
+  // The requested_address is in force mode.
+  ReservedSpace(size_t size, size_t alignment,
+                bool large,  char* requested_address, bool map_fixed);
 
   // Accessors
   char*  base()            const { return _base;      }

@@ -712,6 +712,34 @@
           "to move")                                                        \
                                                                             \
   /* gc parameters */                                                       \
+                                                                            \
+  /* Semeru start */                                                        \
+                                                                            \
+   product(bool, SemeruEnableMemPool, false,                                \
+          "Build the Semeru Memory Heap or not. (default false) ")          \
+                                                                            \
+  /* The initialize equal to max size at this time.     */                  \
+  product(size_t, SemeruMemPoolInitialSize, ScaleForWordSize(96*M),         \
+          "Initial Semeru collected heap (Memory Pool) size (in bytes)")    \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(size_t, SemeruMemPoolMaxSize, ScaleForWordSize(96*M),             \
+          "Maximum Semeru collected heap (Memory Pool) size (in bytes)")    \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(size_t, SemeruMemPoolAlignment, 0,                                \
+          "Semeru collected heap's Region/Alignment size (in bytes)")       \
+          range(0, max_uintx)                                               \
+                                                                            \
+  product(uint, SemeruConcGCThreads, 0,                                     \
+          "Number of threads Semeru concurrent gc will use")                \
+          range(0, 128)                                                     \
+          /*constraint(SemeruConcGCThreadsConstraintFunc,AfterErgo) */      \
+                                                                            \
+                                                                            \
+  /* Semeru End */                                                          \
+                                                                            \
+                                                                            \
   product(size_t, InitialHeapSize, 0,                                       \
           "Initial heap size (in bytes); zero means use ergonomics")        \
           constraint(InitialHeapSizeConstraintFunc,AfterErgo)               \

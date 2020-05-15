@@ -31,6 +31,204 @@
 
 #include COMPILER_HEADER(utilities/globalDefinitions)
 
+
+
+
+
+
+
+//
+// Semeru Macros
+//
+
+
+//
+// Debug options
+
+#define ASSERT 1
+
+
+
+#define ONE_MB    ((size_t)1048576)    // 1024 x 2014 bytes
+#define ONE_GB    ((size_t)1073741824)   // 1024 x 1024 x 1024 bytes
+
+#define MAX_SIZE_T   (size_t)-1
+
+//
+// RDMA Related
+//
+#ifndef PAGE_SIZE
+  #define PAGE_SIZE		      ((size_t)4096)	// bytes
+#endif
+
+#define REGION_SIZE_GB    ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
+#define RDMA_DATA_REGION_NUM     8
+
+
+#define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
+
+
+
+// Synchronization mask
+#define  VERSION_TAG_OFFSET      0
+#define  DIRTY_TAG_OFFSET        16
+
+#define	DIRTY_TAG_MASK 	 (uint32_t)( ((1<<16) - 1) << 16)		// high 16 bits of the uint32_t
+#define VERSION_MASK	 	 (uint32_t)( (1<<16) - 1 )						// low 16 bits of the uint32_t
+
+// The high 16 bits can only be 1 or 0.
+#define DIRTY_TAG_SEND_START	 (uint32_t)(1<<16)				// 1,0000,0000,0000,0000, OR this value to set the high 16 bits as 1.
+#define DIRTY_TAG_SEND_END		 (uint32_t)( (1<<16) - 1)	// 0,1111,1111,1111,1111, AND this vlaue to set high 16 bits as 0.
+
+
+
+
+
+
+
+
+
+
+
+//
+// JVM Related.
+//
+// [Warning] : need to compact the RDMA meta data usage to save space.
+//
+
+#define COMPACT_THRESHOLD 0.85  // Do compaction only when alive ratio below COMPACT_THRESHOLD
+
+
+#define SEMERU_START_ADDR   ((size_t)0x400000000000)
+
+#define RDMA_ALIGNMENT_BYTES    64  // cache line.
+
+// RDMA structure space
+// [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
+#define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
+
+// 1) First part is for the Target Object queue, 128M
+
+// [0, 1GB), small meta data space
+
+// 1.1 Target object queue , 128MB
+#define TARGET_OBJ_OFFSET     (size_t)0            // 0x400,000,000,000
+#define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
+#define TARGET_OBJ_QUEUE_SIZE	(size_t)(1<<20)		// length per queue. //mhr: modify
+
+// 1.2 Small meta data
+
+// 1.2.1 Memory server CSet
+#define MEMORY_SERVER_CSET_OFFSET     (size_t)(TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE)   // +128MB , 0x400,008,000,000
+#define MEMORY_SERVER_CSET_SIZE       (size_t)PAGE_SIZE      // 4KB 
+
+// 1.2.2 flags 
+// Used as CPU <--> Memory server state exchange
+#define FLAGS_OF_CPU_SERVER_STATE_OFFSET    (size_t)(MEMORY_SERVER_CSET_OFFSET + MEMORY_SERVER_CSET_SIZE)  // +4KB, 0x400,008,001,000
+#define FLAGS_OF_CPU_SERVER_STATE_SIZE      (size_t)PAGE_SIZE      // 4KB 
+
+
+// 1.2.3 memory server flags 
+#define FLAGS_OF_MEM_SERVER_STATE_OFFSET    (size_t)(FLAGS_OF_CPU_SERVER_STATE_OFFSET + FLAGS_OF_CPU_SERVER_STATE_SIZE)  // +4KB, 0x400,008,002,000
+#define FLAGS_OF_MEM_SERVER_STATE_SIZE      (size_t)0x1000      // 4KB 
+
+// 1.2.4 one-sided RDMA write check flags
+// 4 bytes per HeapRegion |-- 16 bits for dirty --|-- 16 bits for version --|
+// Assume the number of Region is 1024, 
+// Reserve 4KB for the write check flags.
+#define FLAGS_OF_CPU_WRITE_CHECK_OFFSET       (size_t)(FLAGS_OF_MEM_SERVER_STATE_OFFSET + FLAGS_OF_MEM_SERVER_STATE_SIZE)  // +4KB, 0x400,008,003,000
+#define FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT   (size_t)0x1000      // 4KB 
+
+// 1.3 CPU Server To Memory server, Initialization
+#define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT) // +4KB, 0x400,008,004,000
+#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 16*ONE_MB    //
+
+// 1.4 CPU Server To Memory server, GC
+#define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +16MB, 0x400,009,004,000
+#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+// 1.5 Memory server To CPU server 
+#define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +16MB, 0x400,00A,004,000
+#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+// 1.6 Synchonize between CPU server and memory server
+#define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +16MB, 0x400,00B,004,000
+#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 16*ONE_MB    //
+
+
+
+// The space upper should be all committed contiguously.
+// and then can register them as RDMA buffer.
+
+
+
+// 1.x Padding for debug
+//     Make it easier to register RDMA buffer.
+//     Commit a contiguous space for RDMA Meta Space.
+//     Points to the last item.
+#define RDMA_PADDING_OFFSET     (size_t)(SYNC_MEMORY_AND_CPU_OFFSET + SYNC_MEMORY_AND_CPU_SIZE_LIMIT) 
+#define RDMA_PADDING_SIZE_LIMIT       (size_t)(ONE_GB - RDMA_PADDING_OFFSET )  // Must be less than 1GB.
+
+
+//2.  [1GB, 3GB), alive/dest bitmap.  bitmap : heap = 1:64
+#define ALIVE_BITMAP_OFFSET      (size_t)0x40000000     // +1GB,  0x400,040,000,000
+#define ALIVE_BITMAP_SIZE        (size_t)ONE_GB
+
+
+
+// 3. Klass instance information
+
+#define KLASS_INSTANCE_OFFSET               (size_t)(ALIVE_BITMAP_OFFSET + ALIVE_BITMAP_SIZE)    // +2GB, 0x400,080,000,000
+#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)ONE_GB
+
+// 4. Block Offset Table 
+#define BLOCK_OFFSET_TABLE_OFFSET             (size_t)(KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)    // +3GB,  0x400,0C0,000,000
+#define BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT  (size_t)256*ONE_MB    // 1 : 512, can cover 128B heap.
+
+#define BOT_GLOBAL_STRUCT_OFFSET            (size_t)(BLOCK_OFFSET_TABLE_OFFSET + BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT)  // +3GB 256MB,  0x400,0D0,000,000
+#define BOT_GLOBAL_STRUCT_SIZE_LIMIT        (size_t)(PAGE_SIZE) 
+
+// 5. Cross-Region reference update queue
+// Record the <old_addr, new_addr > for the target object queue.
+#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)   // 0x400,0D0,001,000
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(128*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 19)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
+#define HASH_MUL                              (size_t)1000000007
+
+
+//
+// x. End of RDMA structure commit size
+//
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT)
+
+
+// properties for the whole Semeru heap.
+// [ RDMA meta data sapce] [RDMA data space]
+
+#define MAX_FREE_MEM_GB   ((size_t) REGION_SIZE_GB * RDMA_DATA_REGION_NUM + RDMA_STRUCTURE_SPACE_SIZE/ONE_GB)    //for local memory management
+#define MAX_REGION_NUM    ((size_t) MAX_FREE_MEM_GB/REGION_SIZE_GB)     //for msg passing, ?
+#define MAX_SWAP_MEM_GB   (u64)(REGION_SIZE_GB * RDMA_DATA_REGION_NUM)		// Space managed by SWAP
+
+
+
+//
+// Debug options
+
+
+
+
+
+
+
+
+
+
+
+
+
 // Defaults for macros that might be defined per compiler.
 #ifndef NOINLINE
 #define NOINLINE

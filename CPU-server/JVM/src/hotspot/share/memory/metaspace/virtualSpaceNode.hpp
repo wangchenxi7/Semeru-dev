@@ -77,6 +77,10 @@ class VirtualSpaceNode : public CHeapObj<mtClass> {
 
  public:
 
+  // Semeru CPU
+  // Count the allocation index
+  static char* VirtualSpaceNode_alloc_ptr;
+
   VirtualSpaceNode(bool is_class, size_t byte_size);
   VirtualSpaceNode(bool is_class, ReservedSpace rs) :
     _next(NULL), _is_class(is_class), _rs(rs), _top(NULL), _container_count(0), _occupancy_map(NULL) {}

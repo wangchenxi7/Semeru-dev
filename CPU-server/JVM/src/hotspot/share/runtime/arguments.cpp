@@ -2574,6 +2574,13 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
       if (FLAG_SET_CMDLINE(size_t, MaxHeapSize, (size_t)long_max_heap_size) != JVMFlag::SUCCESS) {
         return JNI_EINVAL;
       }
+      // Semeru - Enable or not
+    }else if(match_option(option, "-XX:SemeruEnableMemPool")){
+
+        if (FLAG_SET_CMDLINE(bool, SemeruEnableMemPool, true) != JVMFlag::SUCCESS) {
+          return JNI_EINVAL;
+        }
+
     // Xmaxf
     } else if (match_option(option, "-Xmaxf", &tail)) {
       char* err;
