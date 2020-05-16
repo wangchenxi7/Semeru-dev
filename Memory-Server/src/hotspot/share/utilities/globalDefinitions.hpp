@@ -266,7 +266,7 @@
 // 5. Cross-Region reference update queue
 // Record the <old_addr, new_addr > for the target object queue.
 #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)   // 0x400,0D0,001,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(128*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(256*ONE_MB)
 #define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 19)    // 256k per Region.
 #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
 #define HASH_MUL                              (size_t)1000000007

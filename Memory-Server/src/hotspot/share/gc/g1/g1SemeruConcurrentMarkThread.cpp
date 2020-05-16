@@ -546,8 +546,11 @@ void G1SemeruConcurrentMarkThread::run_service() {
 					  log_debug(semeru,mem_compact)("%s, Memory Server compact starts .", __func__);
 
             mem_server_flags->set_all_flags_to_start_mode();
-            // Debug for now.
-            _semeru_sc->semeru_stw_compact();
+            
+            //
+            // Skip the Compact for now..
+            //
+            // _semeru_sc->semeru_stw_compact();
           }
 
           // Exit the  STW window. 

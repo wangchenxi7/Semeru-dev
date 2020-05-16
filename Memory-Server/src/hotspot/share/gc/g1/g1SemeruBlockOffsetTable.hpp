@@ -123,7 +123,7 @@ class G1SemeruBlockOffsetTablePart {
 private:
   // allocation boundary at which offset array must be updated
   HeapWord* _next_offset_threshold;
-  size_t    _next_offset_index;      // index corresponding to that boundary
+  size_t    _next_offset_index;      // index corresponding to that boundary ? _next_offset_index - 1 is the max_index ?
 
   // Indicates if an object can span into this G1SemeruBlockOffsetTablePart.
   debug_only(bool _object_can_span;)

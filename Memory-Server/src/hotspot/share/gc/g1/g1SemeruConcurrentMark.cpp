@@ -3665,11 +3665,12 @@ out_tracing:
 			G1SemeruTaskQueueEntry entry;
 			if (_semeru_cm->try_stealing(_worker_id, entry)) {
 
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] steal work, entry 0x%lx , from other threads ", __func__, worker_id(), (size_t)entry.holder_addr() );
 				// switch processing Region.
 				// Don't care entry is oop or array slice, only want its address.
 				// _curr_region should be NULL.
-				if(_curr_region == NULL || !_curr_region->is_in_reserved(entry.obj()) ){
-					_curr_region = _semeru_h->hrm()->addr_to_region((HeapWord*)entry.obj());
+				if(_curr_region == NULL || !_curr_region->is_in_reserved(entry.holder_addr()) ){
+					_curr_region = _semeru_h->hrm()->addr_to_region((HeapWord*)entry.holder_addr());
 					setup_for_region(_curr_region); // switch other fields to this Region.
 				}
 
