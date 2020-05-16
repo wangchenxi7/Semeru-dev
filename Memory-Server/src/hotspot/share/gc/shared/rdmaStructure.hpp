@@ -1042,7 +1042,7 @@ public :
 
 
   // return a uint32_t for a Region.
-	inline uint32_t* region_write_check_flag(size_t index)	{	return (uint32_t*)(one_sided_rdma_write_check_flags_base + index) ;	}
+	inline volatile uint32_t* region_write_check_flag(size_t index)	{	return ( volatile uint32_t*)(one_sided_rdma_write_check_flags_base + index) ;	}
 
 };
 

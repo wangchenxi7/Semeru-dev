@@ -215,7 +215,11 @@ public :
   flags_of_cpu_server_state* _cpu_server_flags;
   flags_of_mem_server_state* _mem_server_flags;
 
-  flags_of_rdma_write_check* _rdma_write_check_flags;
+  // 32 bits for each Region
+  // high 16 bits for dirty tag, low 16 bits for the version tag.
+  // Reserved 4KB for ~ 1024 Regions.
+  // The instance of flags_of_rdma_write_check needs to cost several bytes.
+  flags_of_rdma_write_check* _rdma_write_check_flags; 
 
   received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
 

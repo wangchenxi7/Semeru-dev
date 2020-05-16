@@ -378,8 +378,15 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 	return NULL;
 }
 
-
+/**
+ * Claim a freshly evicted region to concurrent tracing in Memory Server.
+ * 1) All the data of the Region has been evicted to memory server once.
+ * 2) The region is not under writting. dirty_tag should be 0.
+ */
 SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
+
+	SemeruHeapRegion* claimed_region;
+
 	if (_should_abort_scan) {
 		// If someone has set the should_abort flag, we return NULL to
 		// force the caller to bail out of their loop.
@@ -393,7 +400,19 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
 	if (claimed_index < _num_freshly_evicted_regions) {
-		return _freshly_evicted_regions[claimed_index];
+		claimed_region = _freshly_evicted_regions[claimed_index];
+		if(claimed_region->write_check_tag_dirty()){
+			// Path#1 dirty_tag = 1, skip this region.
+			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring, skip it(add it back to CSet.).", __func__, claimed_region->hrm_index());
+			add_freshly_evicted_regions(claimed_region);	// add this region back.
+			// return null directly.
+			// Let the caller to decide what to do.
+		}else{
+			// Path#2, claimed a Region successfully
+			claimed_region->store_write_verion_tag(); // store current version_tag
+			return claimed_region;
+		}
+
 	}
 	return NULL;
 }
@@ -3215,7 +3234,8 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	alive_words = _mark_stats_cache.evict_region(region_index);	// Add more alive words to current Region's stat. MT safe.
 
 	// After adding more alive words, update the alive ratio.
-	// Maybe updated by MT threads.
+	// 1) Maybe updated by MT threads. [Fix ME]
+	// 2) Need to add the objects above _top_at_mark_start
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
 	if(alive_ratio >_curr_region->alive_ratio() ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
@@ -3542,6 +3562,20 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// Transfer the marking statistics to Region.
 			restore_region_mark_stats();
 
+			// End Check #1, Cehck if the Region is written during the concurrent marking.
+			// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
+			// 1) for the Range[_bottom, _top_at_mark_start)The write is only about field references changing.
+			// 2) We don't care about the changing for range [_start_at_mark_top ,_current_top)
+			if(_curr_region->is_override_during_tracing() ){
+				// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
+				// But the keep the garbage ratio.
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
+																																																worker_id(), _curr_region->hrm_index() );
+				_semeru_cm->mem_server_cset()->add_freshly_evicted_regions(_curr_region);
+				goto claim_region;	// Try to claim another region to scan.
+			}
+
+
 			_curr_region->set_region_cm_scanned(); // if setted by Remark, it's ok.
 			_semeru_cm->mem_server_cset()->add_cm_scanned_regions(_curr_region);	// Add the scanned Region into scanned_region list.
 			giveup_current_region();			// finished scanning of current Region.
@@ -3562,7 +3596,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 		}  // end of scanning the Target_object_queue of the Region referenced by G1SemeruCMTask->_curr_region.
 
 
-
+	claim_region:
 		// 2) Claim a NEW Region from Semeru memory server's CSet to scan.
 		//
 		do{
@@ -3580,18 +3614,6 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				setup_for_region(claimed_region);
 				assert(_curr_region == claimed_region, "invariant");
 				log_debug(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
-
-
-				//debug Check the target obj queue content.
-				// Drain the target Obj Queue here
-				// if(claimed_region->hrm_index() == 0x6){
-				// 	tty->print("\n Warning in %s, Drain the Region[0x6] for debug. \n\n", __func__);
-				// 	claimed_region->check_target_obj_queue("Check TQ");
-				// }
-
-				// Check the Cross_region_ref queue 
-				// if(claimed_region->hrm_index() == 0x7)
-				//	claimed_region->check_cross_region_reg_queue("Check after cliaming.");
 
 				break; // break out of while loop.
 			}
@@ -3691,6 +3713,20 @@ out_tracing:
 		// It's an adding procedure, will not cause MT problem.
 		// If we didn' steal any work,  the _curr_region should be NULL. We will skip the restore procedure.
 		restore_region_mark_stats();
+					
+		// End Check #1, Cehck if the Region is written during the concurrent marking.
+		// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
+		// 1) for the Range[_bottom, _top_at_mark_start)The write is only about field references changing.
+		// 2) We don't care about the changing for range [_start_at_mark_top ,_current_top)
+		if(_curr_region != NULL && _curr_region->is_override_during_tracing() ){
+			// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
+			// But the keep the garbage ratio.
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
+																																																worker_id(), _curr_region->hrm_index() );
+			_curr_region->reset_region_cm_scanned(); // Clear the scanned bit.
+			_semeru_cm->mem_server_cset()->add_freshly_evicted_regions(_curr_region);
+			// Try to exit the Concurrent tracing phase.
+		}
 
 		// Reset current worker's  fields agian
 		clear_region_fields();
