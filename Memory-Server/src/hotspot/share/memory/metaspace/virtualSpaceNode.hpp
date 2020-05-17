@@ -85,7 +85,7 @@ class VirtualSpaceNode : public CHeapObj<mtClass> {
  public:
 
   // Semeru 
-  static size_t VirtualSpaceNode_index;  // We want to know its global index.
+  static char* VirtualSpaceNode_alloc_ptr;  // We want to know its global index.
 
   //
   // Functions

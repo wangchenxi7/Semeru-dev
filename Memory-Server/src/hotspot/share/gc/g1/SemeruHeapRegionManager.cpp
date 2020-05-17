@@ -225,6 +225,8 @@ void SemeruHeapRegionManager::make_regions_available(uint start, uint num_region
 	for (uint i = start; i < start + num_regions; i++) {
 		if (_regions.get_by_index(i) == NULL) {
 			SemeruHeapRegion* new_hr = new_heap_region(i);			// 1) Invoke constructor. And then already invokes the SemeruHeapRegion::initialization ?
+			log_debug(semeru,alloc)("%s, SemeruHeapRegion[0x%x] structur is allocated at 0x%lx \n", __func__, i, (size_t)new_hr );
+
 			OrderAccess::storestore();
 			_regions.set_by_index(i, new_hr);   //  G1HeapRegionTable _regions; <region_index, SemeruHeapRegion*>
 			_allocated_heapregions_length = MAX2(_allocated_heapregions_length, i + 1);

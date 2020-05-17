@@ -452,21 +452,34 @@ public:
 
   // Other fields
   // 1-sied RDMA write check flags
+  // Points to FLAGS_OF_CPU_WRITE_CHECK_OFFSET, 4KB
+  // 32 bytes for each tag High| -- DIRTY_TAG --|-- VERSION_TAG --|Low
+  // Points to g1h->_rdma_write_check_flags[]
   volatile uint32_t* _write_check_flag;
 
-  #define WRITE_CHECK_VERSION_OFFSET 0
-  #define WRITE_CHECK_DIRTY_OFFSET  16
+  uint32_t  _version_tag; // store the version value, low 16 bits.
 
-  #define WRITE_CHECK_VERSION_MASK  ((uint32_t)1<<WRITE_CHECK_DIRTY_OFFSET) -1   // low 16 bits
 
   //
   // Functions
 
   // get the low 16 bits
-  inline uint32_t write_check_flag_version_val() {  return *_write_check_flag & WRITE_CHECK_VERSION_MASK;  }
-
+  inline uint32_t write_check_tag_version_val() { return *_write_check_flag & VERSION_MASK;  }
   // check the high 16 bits
-  inline bool write_check_flag_dirty()           { return  (*_write_check_flag >>  WRITE_CHECK_DIRTY_OFFSET) == (uint32_t)1;  }
+  inline bool     write_check_tag_dirty()       { return  (*_write_check_flag >>  DIRTY_TAG_OFFSET);  }
+
+  // Tracing start check
+  inline void     store_write_verion_tag()      { _version_tag = *_write_check_flag & VERSION_MASK; }
+
+  // Tracing end check
+  inline bool   is_override_during_tracing()    { 
+    if(write_check_tag_dirty())   // Condition#1, dirty_tag has to be 0.
+      return true;
+    if(write_check_tag_version_val() != _version_tag) // Condition#2, the _version_tag has to stay the same.
+      return true;
+
+    return false;
+  }
 
  protected: 
   //
@@ -702,6 +715,10 @@ public:
   virtual void clear(bool mangle_space);
 
   // reset some fields after RDMA transfer.
+  // Even CPU server and Memory server has same Region Index,
+  // The address and structure of SemeruHeapRegion is different.
+  // This is also true for some other structures.
+  // We need to switch these structures after each transfer between CPU server and Memory server.
   void reset_fields_after_transfer(){
     // reset block offet table information.
     this->_sync_mem_cpu->_bot_part.reset_fields_after_transfer(this);

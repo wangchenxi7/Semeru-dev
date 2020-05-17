@@ -123,17 +123,17 @@ class G1SemeruBlockOffsetTablePart {
 private:
   // allocation boundary at which offset array must be updated
   HeapWord* _next_offset_threshold;
-  size_t    _next_offset_index;      // index corresponding to that boundary
+  size_t    _next_offset_index;      // index corresponding to that boundary ? _next_offset_index - 1 is the max_index ?
 
   // Indicates if an object can span into this G1SemeruBlockOffsetTablePart.
   debug_only(bool _object_can_span;)
 
-  // This is the global BlockOffsetTable.
+  // This is the global BlockOffsetTable. Fixed Address.
   // points to the G1SemeruCollectedHeap->_bot, which covers the whole Java heap.
   // So, there is only one global _bot->_offset_array shared by all the Regions.
   G1SemeruBlockOffsetTable* _bot;
 
-  // The space that owns this subregion.
+  // The Region/space that owns this subregion.
   // Usually, this is a Region. A contiguous space.
   // [x]This value must be reset after each transfer.
   // Because CPU server and Memory server have different values for it.

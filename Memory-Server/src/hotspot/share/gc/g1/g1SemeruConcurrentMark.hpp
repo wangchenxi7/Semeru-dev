@@ -105,6 +105,12 @@ public:
     return (HeapWord*)((uintptr_t)_holder & ~ArraySliceBit);
   }
 
+  // semeru
+  // Warning: if the _holder points to a object array slice, the last bit is setted to 1.
+  char* holder_addr() const {
+    return (char*)_holder;
+  }
+
   bool is_oop() const { return !is_array_slice(); }
   bool is_array_slice() const { return ((uintptr_t)_holder & ArraySliceBit) != 0; }
   bool is_null() const { return _holder == NULL; }
@@ -360,6 +366,9 @@ public:
 
   // Reset the data structure to allow addition of new root regions.
   void reset();
+
+  bool already_enqueued_scanned(size_t enqueue_region_index);
+  bool already_enqueued_freshly_evicted(size_t enqueue_region_index);
 
   void add_cm_scanned_regions(SemeruHeapRegion* hr);
   void add_freshly_evicted_regions(SemeruHeapRegion* hr);

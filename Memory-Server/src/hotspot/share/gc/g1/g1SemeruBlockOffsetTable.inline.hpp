@@ -32,7 +32,7 @@
 
 inline HeapWord* G1SemeruBlockOffsetTablePart::block_start(const void* addr) {
   if (addr >= _space->bottom() && addr < _space->end()) {
-    HeapWord* q = block_at_or_preceding(addr, true, _next_offset_index-1);
+    HeapWord* q = block_at_or_preceding(addr, true, _next_offset_index-1);   // [?] q is the start addr of the first oop of the card containing addr.
     return forward_to_block_containing_addr(q, addr);
   } else {
     return NULL;
@@ -75,7 +75,7 @@ void G1SemeruBlockOffsetTable::set_offset_array(size_t left, size_t right, u_cha
 }
 
 // Variant of index_for that does not check the index for validity.
-// BOTConstants::LogN == 9, card size 512 bytes?
+// BOTConstants::LogN == 9, card size 512 bytes
 //
 inline size_t G1SemeruBlockOffsetTable::index_for_raw(const void* p) const {
   return pointer_delta((char*)p, _reserved.start(), sizeof(char)) >> BOTConstants::LogN;
@@ -105,7 +105,7 @@ inline HeapWord* G1SemeruBlockOffsetTable::address_for_index(size_t index) const
 }
 
 inline size_t G1SemeruBlockOffsetTablePart::block_size(const HeapWord* p) const {
-  return _space->block_size(p);
+  return _space->block_size(p);  // [?] What's the purpose of this block size ? not 512 bytes ??
 }
 
 inline HeapWord* G1SemeruBlockOffsetTablePart::block_at_or_preceding(const void* addr,
@@ -132,7 +132,7 @@ inline HeapWord* G1SemeruBlockOffsetTablePart::block_at_or_preceding(const void*
     offset = _bot->offset_array(index);
   }
   assert(offset < BOTConstants::N_words, "offset too large");
-  q -= offset;
+  q -= offset;  //[x] let p points to the first object in this card.
   return q;
 }
 

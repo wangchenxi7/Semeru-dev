@@ -43,7 +43,7 @@ namespace metaspace {
 
 // Semeru
 // Initialize static variables
-size_t VirtualSpaceNode::VirtualSpaceNode_index = 0;
+char* VirtualSpaceNode::VirtualSpaceNode_alloc_ptr = (char*)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET); // index for VirtualSpaceNode allocation.
 
 
 // Decide if large pages should be committed when the memory is reserved.
@@ -85,8 +85,13 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed) 
     _next(NULL), _is_class(is_class), _rs(), _top(NULL), _container_count(0), _occupancy_map(NULL) {
   assert_is_aligned(bytes, Metaspace::reserve_alignment());
   bool large_pages = should_commit_large_pages_when_reserving(bytes);
-  char* requested_addr = (char*)(SEMERU_START_ADDR +  KLASS_INSTANCE_OFFSET + (VirtualSpaceNode_index++)*bytes ); // Reserve all the space 
-  assert(bytes == KLASS_INSTANCE_OFFSET_SIZE_LIMIT, "Reserve the whole klass space now.");
+  
+  // Allocate VirtualSpaceNode at fixed address
+  // MT safe
+  char* requested_addr =  Atomic::add((size_t)bytes, &VirtualSpaceNode_alloc_ptr) - bytes; // Bump the alloc_ptr successflly
+  assert( (size_t)VirtualSpaceNode_alloc_ptr <= (size_t)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT), "exceed meta space limit." );
+  log_debug(semeru, alloc)("%s, Reserve 0x%lx bytes spece at 0x%lx for VirtulSpaceNode. Curr VirtualSpaceNode_alloc_ptr 0x%lx \n",__func__,
+                                                   bytes, (size_t)requested_addr,  (size_t)VirtualSpaceNode_alloc_ptr);
 
   _rs = ReservedSpace(bytes, Metaspace::reserve_alignment(), large_pages, requested_addr, map_fixed);    // Allocate new ReservedSpace for the VirtualSpaceNode.
 
@@ -96,13 +101,9 @@ VirtualSpaceNode::VirtualSpaceNode(bool is_class, size_t bytes, bool map_fixed) 
     assert_is_aligned(_rs.base(), Metaspace::reserve_alignment());
     assert_is_aligned(_rs.size(), Metaspace::reserve_alignment());
 
-    log_debug(semeru, alloc)("%s, Allocate Metaspace::VirtualSpaceNode[0x%lx] : [0x%llx, 0x%llx], size: 0x%llx bytes ", __func__,
-                                                              VirtualSpaceNode_index-1, (unsigned long long)_rs.base(),
-                                                              (unsigned long long)_rs.base()+_rs.size(),(unsigned long long)_rs.size());
-
-    //Debug
-    tty->print("%s, Commit the Klass metaspace[0x%lx, 0x%lx] for RDMA buffer registeration.\n",__func__,
+    log_debug(semeru, alloc)("%s, Mark as Precommit for the Klass metaspace[0x%lx, 0x%lx] for RDMA buffer registeration.\n",__func__,
                                (size_t)requested_addr, (size_t)(requested_addr + bytes) );
+    
     // Set this ReservedSpace as special to do pre-commit.
     // The commit operation will be done in  VirtualSpaceNode::initialize()
     _rs._pre_commit = true;    

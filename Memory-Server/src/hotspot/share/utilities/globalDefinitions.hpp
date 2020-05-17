@@ -263,10 +263,14 @@
 #define BOT_GLOBAL_STRUCT_OFFSET            (size_t)(BLOCK_OFFSET_TABLE_OFFSET + BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT)  // +3GB 256MB,  0x400,0D0,000,000
 #define BOT_GLOBAL_STRUCT_SIZE_LIMIT        (size_t)(PAGE_SIZE) 
 
-// 5. Cross-Region reference update queue
+// 5. SemeruHeapRegion Manager
+#define HEAP_REGION_MANAGER_OFFSET           (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)  // +3GB 256MB + 4KB,  0x400,0D0,001,000
+#define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(4*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
+
+// 6. Cross-Region reference update queue
 // Record the <old_addr, new_addr > for the target object queue.
-#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(BOT_GLOBAL_STRUCT_OFFSET + BOT_GLOBAL_STRUCT_SIZE_LIMIT)   // 0x400,0D0,001,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(128*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(HEAP_REGION_MANAGER_OFFSET + HEAP_REGION_MANAGER_SIZE_LIMIT)   // 0x400,0D0,401,000
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(256*ONE_MB)
 #define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 19)    // 256k per Region.
 #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
 #define HASH_MUL                              (size_t)1000000007
@@ -1142,8 +1146,8 @@ const int      badCodeHeapFreeVal = 0xDD;                   // value used to zap
 #define       badOop            (cast_to_oop(::badOopVal))
 #define       badHeapWord       (::badHeapWordVal)
 
-// Default TaskQueue size is 16K (32-bit) or 128K (64-bit)
-#define TASKQUEUE_SIZE (NOT_LP64(1<<14) LP64_ONLY(1<<17))
+// Default TaskQueue size is 16K (32-bit) or 512K (64-bit)
+#define TASKQUEUE_SIZE (NOT_LP64(1<<14) LP64_ONLY(1<<19))
 
 //----------------------------------------------------------------------------------------------------
 // Utility functions for bitfield manipulations
