@@ -3656,7 +3656,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 			log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
 			drain_local_queue(false);		// Current G1SemeruCMTask->_semeru_task_queue
-			drain_global_stack(false);  // Get a Chunk from global/overflow _global_mark_stack, this may cause scanning Region switch.
+			drain_global_stack(false);  // Get a Chunk from global/overflow _global_mark_stack, ONLY process objects pushed by this G1SemeruCMTask.
 
 			// Transfer the marking statistics to Region.
 			restore_region_mark_stats();
@@ -3971,11 +3971,12 @@ out_tracing:
 
 	//unsigned int microseconds = 10000000; //10s.
 	//usleep(microseconds);
-	log_debug(semeru,mem_trace)("%s, Running thread(worker 0x%x), %s, gc_id %d, 0x%lx finished work. \n", __func__,
+	log_debug(semeru,mem_trace)("%s, Running thread(worker 0x%x), %s, gc_id %d, 0x%lx finished. has_aborted ? %d \n", __func__,
 																													worker_id(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
-																													(size_t)Thread::current());
+																													(size_t)Thread::current(),
+																													has_aborted());
 
 } // end of do_marking_step.
 
