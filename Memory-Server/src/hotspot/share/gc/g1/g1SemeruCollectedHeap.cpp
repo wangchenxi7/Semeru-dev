@@ -171,7 +171,7 @@ void G1SemeruRegionMappingChangedListener::on_commit(uint start_idx, size_t num_
 
 SemeruHeapRegion* G1SemeruCollectedHeap::new_heap_region(uint hrs_index,
 																						 MemRegion mr) {
-	return new SemeruHeapRegion(hrs_index, bot(), mr);
+	return new (hrs_index)SemeruHeapRegion(hrs_index, bot(), mr);  // Allocate SemeruHeapRegion at fixed address.
 }
 
 // //  Private methods.

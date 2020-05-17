@@ -36,6 +36,9 @@
 #include "utilities/align.hpp"
 #include "utilities/macros.hpp"
 
+// Semeru
+#include "gc/shared/rdmaAllocation.hpp"
+
 // A space is an abstraction for the "storage units" backing
 // up the generation abstraction. It includes specific
 // implementations for keeping track of free and used space,
@@ -60,7 +63,11 @@ class DirtyCardToOopClosure;
 // bottom() <= top() <= end()
 // top() is inclusive and end() is exclusive.
 
-class Space: public CHeapObj<mtGC> {
+//class Space: public CHeapObj<mtGC> {
+
+// For Both CPU server and Memory server, the SemeruHeapRegion must be allocated at same virtual address.
+// But for other Space, it's can invoke the ordinary new class() to allocate at any address.
+class Space : public CHeapRDMAObj<Space, HEAP_REGION_MANAGER_ALLOCTYPE> {
   friend class VMStructs;
  protected:
   HeapWord* _bottom;    // When manage space, JVM uses HeapWords as default.

@@ -32,7 +32,7 @@
 
 inline HeapWord* G1SemeruBlockOffsetTablePart::block_start(const void* addr) {
   if (addr >= _space->bottom() && addr < _space->end()) {
-    HeapWord* q = block_at_or_preceding(addr, true, _next_offset_index-1);   // [?] What's the meaning of the q ?
+    HeapWord* q = block_at_or_preceding(addr, true, _next_offset_index-1);   // [?] q is the start addr of the first oop of the card containing addr.
     return forward_to_block_containing_addr(q, addr);
   } else {
     return NULL;

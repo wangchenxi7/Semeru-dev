@@ -11,45 +11,12 @@
 
 
 
+#include "gc/shared/taskqueue.inline.hpp"
 
+// Semeru headers
 #include "gc/shared/rdmaStructure.hpp"
+#include "gc/shared/rdmaAllocation.inline.hpp"
 
-
-
-//
-// Structure - CHeapRDMAObj
-//
-
-
-// Commit the space at already reserved space directly.
-template <class E, CHeapAllocType Alloc_type>
-E* CHeapRDMAObj<E, Alloc_type>::commit_at(size_t commit_size, MEMFLAGS flags, char* requested_addr) {
-  // commit_size is already calculated well.
-	//size_t size = size_for(length);
-
-  // why here is !ExecMem ?
-  os::commit_memory_or_exit(requested_addr, commit_size, !ExecMem, "Allocator (commit)");  // Commit the space.
-
-  return (E*)requested_addr;
-}
-
-
-
-/**
- * Byte size for the whole OverflowTargetObjQueue - Used for Operator new.
- * 		1) instance size
- * 		2) class E* _elems size. 
- * 		
- * 	4KB alginment.
- * 
- * 
- */
-template <class E, CHeapAllocType Alloc_type>
-size_t CHeapRDMAObj<E, Alloc_type>::commit_size_for_queue(size_t instance_size, size_t elem_length) {
-  size_t size = elem_length * sizeof(E) + instance_size;
-  int alignment = os::vm_allocation_granularity();  // 4KB alignment.
-  return align_up(size, alignment);
-}
 
 
 

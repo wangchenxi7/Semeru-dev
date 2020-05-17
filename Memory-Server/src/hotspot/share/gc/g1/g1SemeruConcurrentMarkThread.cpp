@@ -691,10 +691,10 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
   while(received_region_ind != -1){
 
 		// Debug
-		log_debug(semeru,mem_trace)("%s, Get a Evicted Region[%d] \n", __func__,received_region_ind);
+		log_debug(semeru,mem_trace)("%s, Receive an Evicted Region[%d] \n", __func__,received_region_ind);
 
     region_received = semeru_heap->hrm()->at(received_region_ind);
-    region_received->reset_fields_after_transfer();  // reset some fields, whose value are differenct between CPU and Memory server.
+    //region_received->reset_fields_after_transfer();  // reset some fields, whose value are differenct between CPU and Memory server.
     assert(region_received != NULL, "%s, received Region is invalid.", __func__);   // [?] how to confirm if this region is available ?
 
     if(region_received->is_region_cm_scanned()){
@@ -710,6 +710,7 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
       semeru_cm()->mem_server_cset()->add_freshly_evicted_regions(region_received);
     }
 
+    // process next region_id
 		received_region_ind = recv_mem_server_cset->pop();
 
   }// Received CSet isn't emtpy.

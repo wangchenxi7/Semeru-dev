@@ -367,6 +367,9 @@ public:
   // Reset the data structure to allow addition of new root regions.
   void reset();
 
+  bool already_enqueued_scanned(size_t enqueue_region_index);
+  bool already_enqueued_freshly_evicted(size_t enqueue_region_index);
+
   void add_cm_scanned_regions(SemeruHeapRegion* hr);
   void add_freshly_evicted_regions(SemeruHeapRegion* hr);
 
