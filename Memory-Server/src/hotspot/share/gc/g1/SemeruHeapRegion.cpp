@@ -1291,7 +1291,7 @@ void SemeruHeapRegion::check_cross_region_reg_queue(  const char* message){
 			if(this->is_in_reserved(q_iter->from) == false ){
 				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)this->hrm_index() );
 			}else{
-				tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+				//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
 			}
 		}// non-null
 

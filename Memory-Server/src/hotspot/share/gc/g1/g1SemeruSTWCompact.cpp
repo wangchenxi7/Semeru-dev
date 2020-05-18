@@ -634,7 +634,7 @@ void G1SemeruSTWCompactTerminatorTask::record_new_addr_for_target_obj(SemeruHeap
 		}
 
 		new_addr = elem_ptr->from->forwardee(); // If the object is not moved, to can also be null.
-		elem_ptr->to = new_addr;
+		//elem_ptr->to = new_addr;
 		
 		//debug
 		log_trace(semeru,mem_compact)("%s, worker[0x%x] store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, 
@@ -1159,7 +1159,7 @@ void G1SemeruSTWCompactTerminatorTask::check_cross_region_reg_queue( SemeruHeapR
 			if(hr->is_in_reserved(q_iter->from) == false ){
 				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)hr->hrm_index() );
 			}else{
-				tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+				//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
 			}
 
 		}

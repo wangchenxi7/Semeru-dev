@@ -586,6 +586,169 @@ public :
 
 
 
+// /**
+//  * Record the new address for the objects in Target Object Queue.
+//  *  <key : old addr, value : new addr >
+//  * 
+//  *  a. Can't distinguish where is the source for the Target Object Queue
+//  *     So, have to broadcast the HashQueue to all the other servers. 
+//  * 
+//  * b. The object array type, is struct ElemPair.
+//  * 
+//  * [?] Can we merge this queue with Target Object Queue to save some space ??
+//  * 
+//  */
+//   struct ElemPair{
+//     oop from;     // 8 bytes
+//     oop to;       // 8 bytes
+//     uint nex;
+//   };
+
+
+// class HashQueue : public CHeapRDMAObj<struct ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE> {
+
+// public:
+
+//   static int compare_elempair(const ElemPair a, const ElemPair b) {
+//     if ((unsigned long long)a.from > (unsigned long long)b.from) {
+//       return 1;
+//     } else if ((unsigned long long)a.from == (unsigned long long)b.from) {
+//       return 0;
+//     } else {
+//       return -1;
+//     }
+//   }
+
+// //private:
+
+//   size_t _key_tot;
+//   size_t _tot;
+//   size_t _num;
+//   volatile size_t _length;
+//   size_t _region_index;
+
+//   Mutex _m;
+
+//   ElemPair* _queue; // Flexible array, must be the last field. length limitation : CROSS_REGION_REF_UPDATE_Q_LEN.
+
+// public:
+//   HashQueue():_m(Mutex::leaf, FormatBuffer<128>("HashQueue"), true, Monitor::_safepoint_check_never){
+
+//   }
+
+//   ~HashQueue(){clear();}
+
+//   void reset() {
+//     memset(_queue, 0, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
+//     _length = _key_tot + 1;
+//     _num = 0;
+//   }
+
+//   // invoke the initialization function explicitly 
+//   void initialize(size_t region_index) {
+//     _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
+//     _key_tot = CROSS_REGION_REF_UPDATE_Q_LEN_SQRT;
+//     _length = _key_tot + 1; // bump pointer
+//     _num = 0;
+//     _region_index = region_index;
+//     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
+
+//     log_debug(semeru,alloc)("%s, Cross region refernce update queue, 0x%lx,  _queue 0x%lx , length 0x%lx", __func__, (size_t)this, (size_t)_queue, (size_t)_tot);
+//   }
+
+//   void clear() {
+//     if(_queue != NULL){
+//       ArrayAllocator<ElemPair>::free(_queue, _tot);
+//       _queue = NULL;
+//       _tot = _length = _key_tot = 0;
+//       _num = 0;
+//     }
+//   }
+
+//   void insert(uint index, oop x, oop y) {
+//     MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+//     if(_queue[index].from == NULL) {
+//       _queue[index].from = x;
+//       _queue[index].to = y;
+//       _queue[index].nex = 0;
+//       _num ++;
+//       return;
+//     }
+//     while(_queue[index].nex != 0 && (size_t)_queue[index].from != (size_t)x) {
+//       index = _queue[index].nex;
+//     }
+//     if((size_t)_queue[index].from == (size_t)x) {
+//       _queue[index].to = y;
+//     }
+//     else{
+//       _queue[index].nex = _length;
+//       _queue[_length].from = x;
+//       _queue[_length].to = y;
+//       _queue[_length].nex = 0;
+//       _length++;
+//       _num++;
+//     }
+//   }
+
+//   void push(oop x, oop y) {
+
+//     //printf("Push oop: 0x%lx, klass 0x%lx, ", (size_t)x, (size_t)x->klass());
+//     if((size_t)x->klass()<0x400000000000) {
+//       printf("Wrong!");
+//     }
+//     //printf("size %d", x->size());
+
+
+//     size_t k = (size_t)x;
+//     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+//     insert(hash_k, x, y);
+    
+
+//     //mhr: debug
+//     if(_length%0x1000==0) {
+//       printf("move_to_current_len: 0x%lx ", _length);
+//     }
+
+//     if(_length >= _tot) {
+//       assert(false, "Not OK!");
+//     }
+
+//   }
+
+//   /**
+//    * Get the item by key.
+//    *  
+//    */
+//   oop get(oop x){
+//     size_t k = (size_t)x;
+//     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+//     while(_queue[hash_k].nex != 0 && k != (size_t)_queue[hash_k].from) {
+//       hash_k = _queue[hash_k].nex;
+//     }
+//     if(k == (size_t)_queue[hash_k].from) {
+//       return _queue[hash_k].to;
+//     }
+//     else{
+//       log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
+//       return (oop)MAX_SIZE_T;  // No this key, return unsigned long max.
+//     }
+//   }
+
+//   bool is_empty() {
+//     return (_num == 0);
+//   }
+
+//   inline size_t    length(){  return _length;  }
+//   inline ElemPair* retrieve_item(size_t index) { 
+//     assert(index < _length, "Exceed the stored length.");
+//     return &_queue[index]; 
+//   }
+  
+// };
+
+
+
+
 /**
  * Record the new address for the objects in Target Object Queue.
  *  <key : old addr, value : new addr >
@@ -600,7 +763,6 @@ public :
  */
   struct ElemPair{
     oop from;     // 8 bytes
-    oop to;       // 8 bytes
     uint nex;
   };
 
@@ -639,9 +801,17 @@ public:
   ~HashQueue(){clear();}
 
   void reset() {
+    //print_info();
+
     memset(_queue, 0, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
     _length = _key_tot + 1;
     _num = 0;
+  }
+
+  void print_info() {
+      tty->print("Region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
+
+    tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
   }
 
   // invoke the initialization function explicitly 
@@ -652,6 +822,10 @@ public:
     _num = 0;
     _region_index = region_index;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
+
+    tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
+
+    tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
 
     log_debug(semeru,alloc)("%s, Cross region refernce update queue, 0x%lx,  _queue 0x%lx , length 0x%lx", __func__, (size_t)this, (size_t)_queue, (size_t)_tot);
   }
@@ -669,7 +843,7 @@ public:
     MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
     if(_queue[index].from == NULL) {
       _queue[index].from = x;
-      _queue[index].to = y;
+      //_queue[index].to = y;
       _queue[index].nex = 0;
       _num ++;
       return;
@@ -678,12 +852,11 @@ public:
       index = _queue[index].nex;
     }
     if((size_t)_queue[index].from == (size_t)x) {
-      _queue[index].to = y;
+      //_queue[index].to = y;
     }
     else{
       _queue[index].nex = _length;
       _queue[_length].from = x;
-      _queue[_length].to = y;
       _queue[_length].nex = 0;
       _length++;
       _num++;
@@ -691,7 +864,6 @@ public:
   }
 
   void push(oop x, oop y) {
-
     //printf("Push oop: 0x%lx, klass 0x%lx, ", (size_t)x, (size_t)x->klass());
     if((size_t)x->klass()<0x400000000000) {
       printf("Wrong!");
@@ -726,7 +898,9 @@ public:
       hash_k = _queue[hash_k].nex;
     }
     if(k == (size_t)_queue[hash_k].from) {
-      return _queue[hash_k].to;
+      //return _queue[hash_k].to;
+
+      return _queue[hash_k].from;
     }
     else{
       log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
@@ -745,6 +919,7 @@ public:
   }
   
 };
+
 
 
 

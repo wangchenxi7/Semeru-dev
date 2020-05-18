@@ -187,7 +187,7 @@
 // 1.1 Target object queue , 128MB
 #define TARGET_OBJ_OFFSET     (size_t)0            // 0x400,000,000,000
 #define TARGET_OBJ_SIZE_BYTE  (size_t)128*ONE_MB   // 128M bytes
-#define TARGET_OBJ_QUEUE_SIZE	(size_t)(1<<20)		// length per queue. //mhr: modify
+#define TARGET_OBJ_QUEUE_SIZE	(size_t)(1<<2)		// length per queue. //mhr: modify
 
 // 1.2 Small meta data
 
@@ -270,8 +270,8 @@
 // 6. Cross-Region reference update queue
 // Record the <old_addr, new_addr > for the target object queue.
 #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(HEAP_REGION_MANAGER_OFFSET + HEAP_REGION_MANAGER_SIZE_LIMIT)   // 0x400,0D0,401,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(256*ONE_MB)
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 19)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(768*ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 20)    // 256k per Region.
 #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
 #define HASH_MUL                              (size_t)1000000007
 
