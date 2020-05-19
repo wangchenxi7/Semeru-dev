@@ -357,18 +357,15 @@ bool G1SemeruConcurrentMarkThread::request_concurrent_phase(const char* phase_na
 void G1SemeruConcurrentMarkThread::wait_for_universe_init() {
   MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
   
-  #ifdef ASSERT
-    log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, waiting for is_init_completed, %d and  _should_terminate, %d.",
+  log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, waiting for is_init_completed, %d and  _should_terminate, %d.",
                                                               __func__, (size_t)this, (int)is_init_completed(),(int)_should_terminate);
-  #endif
 
   while (!is_init_completed() && !_should_terminate) {
     SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag, 1);
   }
 
-  #ifdef ASSERT
-    log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, is prepared well to run. \n",__func__, (size_t)this);
-  #endif
+  log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread, 0x%lx, is prepared well to run. \n",__func__, (size_t)this);
+  
 }
 
 
@@ -421,20 +418,18 @@ void G1SemeruConcurrentMarkThread::run_service() {
   G1SemeruConcPhaseManager cpmanager(G1SemeruConcurrentPhase::IDLE, this);   // [?]rewrite the phase manager for semeru
 
     
-  #ifdef ASSERT
-    log_debug(semeru,thread)("%s, entering G1SemeruConcurrentMarkThread(0x%lx)->run_service(), and wait on SemeruGC_lock. \n", 
+  log_debug(semeru,thread)("%s, entering G1SemeruConcurrentMarkThread(0x%lx)->run_service(), and wait on SemeruGC_lock. \n", 
                                                                   __func__, (size_t)Thread::current());
-  #endif
+ 
   
   //  Let the Semeru Concurrent threads, current thread, wait on SemeruCGC_lock.
   //  Before invoke sleep_before_next_cycle(), MUST set G1SemeruConcurrentMarkThread->_state to Idle or Started. 
   sleep_before_next_cycle();    // [XX]Concurrent thread is waiting to be waken up.
     
-  #ifdef ASSERT
-    log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread(0x%lx)->run_service() is waken up. \n", 
+  
+  log_debug(semeru,thread)("%s, G1SemeruConcurrentMarkThread(0x%lx)->run_service() is waken up. \n", 
                                                                   __func__, (size_t)Thread::current());
-  #endif
-
+  
 
   // Start a new iteration ?
   // it's proper to put this start here ??
@@ -622,10 +617,11 @@ void G1SemeruConcurrentMarkThread::run_service() {
     // Debug - Terminate the ConcurrentThread
     //
 
-    // Infinite loop. 
-    // Sleep and wake up to check CSet.
-    os::sleep(this, 5000, false); // sleep a while.
-    
+    //#ifdef ASSERT
+      // Infinite loop. 
+      // Sleep and wake up to check CSet.
+      os::sleep(this, 3000, false); // sleep a while.
+    //#endif
     //set_semeru_ms_gc_terminated();
     //this->_should_terminate = true;
 
@@ -761,7 +757,10 @@ void G1SemeruConcurrentMarkThread::sleep_before_next_cycle() {
 	{
   	MutexLockerEx x(SemeruCGC_lock, Mutex::_no_safepoint_check_flag);
   	while (!started() && !should_terminate()) {    // [?] A loop :means after waking up, the conditions 1) and 2) should also be satisfied. 
-    	SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag);    // If the threads already wait here, no need to use a while loop?
+    	
+      tty->print("%s, started: %d, should_terminate %d \n", __func__, started(), should_terminate() );
+      
+      SemeruCGC_lock->wait(Mutex::_no_safepoint_check_flag);    // If the threads already wait here, no need to use a while loop?
   	}
 	}
 

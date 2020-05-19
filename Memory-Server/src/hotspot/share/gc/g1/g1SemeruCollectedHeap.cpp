@@ -3816,9 +3816,7 @@ void G1SemeruCollectedHeap::wake_up_semeru_mem_server_concurrent_gc(){
 		do_concurrent_mark();
 	}
 
-	#ifdef ASSERT
-		log_debug(gc,thread)("%s, Wake up G1SemeruConcurrentMarkThread->run_srvice() done. \n", __func__);
-	#endif
+	log_debug(gc,thread)("%s, Wake up G1SemeruConcurrentMarkThread->run_srvice() done. \n", __func__);
 }
 
 

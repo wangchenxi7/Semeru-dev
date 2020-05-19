@@ -4036,13 +4036,13 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
 
 
 	// Debug
-	#ifdef ASSERT
+	//#ifdef ASSERT
 	if(SemeruEnableMemPool){
 		log_debug(semeru,thread)("%s, Goto wake up the Semeru Memory Server Conc GC.",__func__);
 		((G1SemeruCollectedHeap*)Universe::semeru_heap())->wake_up_semeru_mem_server_concurrent_gc();
 	}
 	log_debug(semeru,thread)("Exit %s.",__func__);
-	#endif
+	//#endif
 
 
 	return JNI_OK;

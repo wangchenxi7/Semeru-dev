@@ -192,8 +192,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_INIT_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
@@ -238,8 +238,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_GC_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for CPU_TO_MEM_AT_GC_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
@@ -283,8 +283,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for MEM_TO_CPU_AT_GC_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for MEM_TO_CPU_AT_GC_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
@@ -329,8 +329,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
@@ -375,8 +375,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for METADATA_SPACE_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for METADATA_SPACE_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
@@ -423,8 +423,8 @@ public:
         ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, HEAP_REGION_MANAGER_ALLOCTYPE>::_alloc_ptr), requested_addr);
         assert(ret == requested_addr, "%s, Not MT Safe. \n", __func__);
 
-        log_debug(semeru, alloc)("Bump _alloc_ptr to 0x%lx for HEAP_REGION_MANAGER_ALLOCTYPE.", 
-                                                                (size_t)CHeapRDMAObj<E, HEAP_REGION_MANAGER_ALLOCTYPE>::_alloc_ptr);
+        log_debug(semeru, alloc)("Allocate [0x%lx, 0x%lx). Bump _alloc_ptr to 0x%lx for HEAP_REGION_MANAGER_ALLOCTYPE.", 
+                                            (size_t)requested_addr, (size_t)commit_size, (size_t)CHeapRDMAObj<E, HEAP_REGION_MANAGER_ALLOCTYPE>::_alloc_ptr);
 
         break;
 
