@@ -133,10 +133,10 @@ void TimePartitions::clear() {
  *  
  */
 void TimePartitions::report_gc_phase_start(const char* name, const Ticks& time, GCPhase::PhaseType type) {
-  //assert(_phases->length() <= 1000, "Too many recored phases?");
-  if(_phases->length()%1000 == 0){
-    log_debug(semeru,mem_trace)("%s, Executed %d times. Too many recored phases? ", __func__, _phases->length());
-  }
+  assert(_phases->length() <= 0x1000000, "Too many recored phases?");
+  // if(_phases->length() + 1%1000 == 0){
+  //   log_debug(semeru,mem_trace)("%s, Executed %d times. Too many recored phases? ", __func__, _phases->length());
+  // }
   
   int level = _active_phases.count();
 

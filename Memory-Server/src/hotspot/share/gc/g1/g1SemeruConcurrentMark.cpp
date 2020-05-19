@@ -2896,51 +2896,8 @@ void G1SemeruCMTask::update_region_limit() {
 	_region_limit = limit;
 }
 
-/**
- * Semeru Memory Server
- *  	Update the region limit for current MARKING region.
- */
-// void G1SemeruCMTask::update_marking_region_limit() {
-// 	SemeruHeapRegion* hr            = _curr_region;   // both CM marking and STW compaction use the same pointer?
-// 	HeapWord* bottom          = hr->bottom();
-// 	HeapWord* limit           = hr->next_top_at_mark_start(); // All the newly allocated objects after the CM start will be handled seperately.
-
-// 	// [?] seems Semeru memory server doesn't need to maintain the G1SemeruCMTask->_finger .
-
-// 	// if (limit == bottom) {
-// 	// 	// The region was collected underneath our feet.
-// 	// 	// We set the finger to bottom to ensure that the bitmap
-// 	// 	// iteration that will follow this will not do anything.
-// 	// 	// (this is not a condition that holds when we set the region up,
-// 	// 	// as the region is not supposed to be empty in the first place)
-// 	// 	_finger = bottom;
-// 	// } else if (limit >= _region_limit) {
-// 	// 	assert(limit >= _finger, "peace of mind");
-// 	// } else {
-// 	// 	assert(limit < _region_limit, "only way to get here");
-// 	// 	// This can happen under some pretty unusual circumstances.  An
-// 	// 	// evacuation pause empties the region underneath our feet (NTAMS
-// 	// 	// at bottom). We then do some allocation in the region (NTAMS
-// 	// 	// stays at bottom), followed by the region being used as a GC
-// 	// 	// alloc region (NTAMS will move to top() and the objects
-// 	// 	// originally below it will be grayed). All objects now marked in
-// 	// 	// the region are explicitly grayed, if below the global finger,
-// 	// 	// and we do not need in fact to scan anything else. So, we simply
-// 	// 	// set _finger to be limit to ensure that the bitmap iteration
-// 	// 	// doesn't do anything.
-// 	// 	_finger = limit;
-// 	// }
-
-// 	_marking_region_limit = limit;
-// }
 
 
-
-/**
- * Semeru Memory Server
- *  	Compaction doesn't need such a pointer, need to evacuate all the alive objects in current Region.
- * 		Which is SemeruHeapRegion->top
- */
 
 
 
@@ -3066,6 +3023,78 @@ bool G1SemeruCMTask::regular_clock_call() {
 	}
 	return true;
 }
+
+
+/**
+ * Semeru MS - Aborted checking for Semeru MS concurrent threads.
+ * 
+ */
+bool G1SemeruCMTask::semeru_ms_regular_clock_call() {
+	if (has_aborted()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : G1SemeruCMTask->has_aborted()", __func__, worker_id());
+		return false;
+	}
+
+	// First, we need to recalculate the words scanned and refs reached
+	// limits for the next clock call.
+	recalculate_limits();
+
+	// During the regular clock call we do the following
+
+	// (1) If an overflow has been flagged, then we abort.
+	if (_semeru_cm->has_overflown()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : _semeru_cm->has_overflown()", __func__, worker_id());
+		return false;
+	}
+
+	// If we are not concurrent (i.e. we're doing remark) we don't need
+	// to check anything else. The other steps are only needed during
+	// the concurrent marking phase.
+	if (!_semeru_cm->concurrent()) {
+		return true;
+	}
+
+	// (2) If marking has been aborted for Full GC, then we also abort.
+	if (_semeru_cm->has_aborted()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : _semeru_cm->has_aborted()", __func__, worker_id());
+		return false;
+	}
+
+	double curr_time_ms = os::elapsedVTime() * 1000.0;
+
+	// (4) We check whether we should yield. If we have to, then we abort.
+	//   If the _suspend_all is setted, let this worker to finish. Not abort it.
+	//   For Semeru MS, only the semeru ms threads are running, no need to yield at all.
+	//
+	// if (SuspendibleThreadSet::should_yield()) {
+	// 	// We should yield. To do this we abort the task. The caller is
+	// 	// responsible for yielding.
+	// 	log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : SuspendibleThreadSet::should_yield()", __func__, worker_id());
+	// 	return false;
+	// }
+
+	// (5) We check whether we've reached our time quota. If we have,
+	// then we abort.
+	// For Semeru Memory Server, it's doing tracing contiguously. We abandon this check.
+	//
+	// double elapsed_time_ms = curr_time_ms - _start_time_ms;
+	// if (elapsed_time_ms > _time_target_ms) {
+	// 	_has_timed_out = true;
+	// 	return false;
+	// }
+
+	// (6) Finally, we check whether there are enough completed STAB
+	// buffers available for processing. If there are, we abort.
+	SATBMarkQueueSet& satb_mq_set = G1BarrierSet::satb_mark_queue_set();
+	if (!_draining_satb_buffers && satb_mq_set.process_completed_buffers()) {
+		// we do need to process SATB buffers, we'll abort and restart
+		// the marking task to do so
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check: !_draining_satb_buffers && satb_mq_set.process_completed_buffers()", __func__, worker_id());
+		return false;
+	}
+	return true;
+}
+
 
 void G1SemeruCMTask::recalculate_limits() {
 	_real_words_scanned_limit = _words_scanned + words_scanned_period;
@@ -3214,6 +3243,61 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 
 
 /**
+ * Semeru : Get overflowed entries from global stack.
+ * 				  If the pushed entries are not pushed by us, switch  the scanning region.
+ *  
+ */
+bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
+	// Local array where we'll store the entries that will be popped
+	// from the global stack.
+	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
+
+	if (!_semeru_cm->mark_stack_pop(buffer)) {
+		return false;
+	}
+
+	// 1) Only process the Chunk belong to current scanning Region. Do not switch the scanning region here.
+	//    The entries will be on claimed by the G1SemeruCMTask who cause the overflow.
+	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
+	if(buffer[0].is_null() == false){
+		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
+		if(_curr_region == NULL || target_region != _curr_region){
+
+			log_debug(semeru,mem_trace)("%s, Current global_mark_stack chunk doesn't pushed by worker[0x%x], who is processing region[0x%x]. switch to region[0x%x].", 
+																				__func__, worker_id(), _curr_region->hrm_index(),target_region->hrm_index()  );
+
+			setup_for_region(target_region);
+		}
+	}
+
+	// We did actually pop at least one entry.
+	for (size_t i = 0; i < G1SemeruCMMarkStack::EntriesPerChunk; ++i) {
+		G1SemeruTaskQueueEntry task_entry = buffer[i];
+		if (task_entry.is_null()) {
+			break;
+		}
+		assert(task_entry.is_array_slice() || oopDesc::semeru_is_oop(task_entry.obj()), "Element " PTR_FORMAT " must be an array slice or oop", p2i(task_entry.obj()));
+
+		bool success = _semeru_task_queue->push(task_entry);
+		// We only call this when the local queue is empty or under a
+		// given target limit. So, we do not expect this push to fail.
+		assert(success, "invariant");
+	}
+
+	// This operation was quite expensive, so decrease the limits
+	decrease_limits();
+	return true;
+}
+
+
+
+
+
+
+
+
+
+/**
  * Tag : Drain the CM->_semeru_task_queue, StarTask queue.
  *  
  */
@@ -3247,9 +3331,13 @@ void G1SemeruCMTask::drain_local_queue(bool partially) {
 }
 
 /**
+ * Semeru : Drain the overflow entries pushed by current thread.
+ * 
  * Go process the entries stored in the global/overflow task queue.
  * The entries can come from different regions, so we have to switch the _curr_region for the G1SemeruCMTask.
  *  
+ * 
+ * 
  */
 void G1SemeruCMTask::drain_global_stack(bool partially) {
 	if (has_aborted()) {
@@ -3281,6 +3369,51 @@ void G1SemeruCMTask::drain_global_stack(bool partially) {
 		}
 	}
 }
+
+
+
+
+
+/**
+ * Semeru : Drain the global stack to empty. 
+ * 				  If find any chunks not pushed by current thread, switch the scanning region.
+ *  
+ */
+void G1SemeruCMTask::drain_global_stack_may_switch_region(bool partially) {
+	if (has_aborted()) {
+		return;
+	}
+
+	// We have a policy to drain the local queue before we attempt to
+	// drain the global stack.
+	assert(partially || _semeru_task_queue->size() == 0, "invariant");
+
+	// Decide what the target size is, depending whether we're going to
+	// drain it partially (so that other tasks can steal if they run out
+	// of things to do) or totally (at the very end).
+	// Notice that when draining the global mark stack partially, due to the racyness
+	// of the mark stack size update we might in fact drop below the target. But,
+	// this is not a problem.
+	// In case of total draining, we simply process until the global mark stack is
+	// totally empty, disregarding the size counter.
+	if (partially) {
+		size_t const target_size = _semeru_cm->partial_mark_stack_size_target();
+		while (!has_aborted() && _semeru_cm->mark_stack_size() > target_size) {
+			if (get_entries_from_global_stack_may_switch_region()) {
+				drain_local_queue(partially);
+			}
+		}
+	} else {
+		while (!has_aborted() && get_entries_from_global_stack_may_switch_region()) {
+			drain_local_queue(partially);
+		}
+	}
+}
+
+
+
+
+
 
 // SATB Queue has several assumptions on whether to call the par or
 // non-par versions of the methods. this is why some of the code is
@@ -3697,10 +3830,12 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			}
 
 			// CPU server is in STW mode now, try to use this time window to do evacuation.
+			#ifdef SEMERU_COMPACT
 			if(cpu_srever_flags->_is_cpu_server_in_stw == true){
 				log_debug(semeru,mem_trace)("%s, worker[0x%x] is_cpu_server_in_stw is true. switch to Memory Server Compact.", __func__, worker_id());
 				goto out_tracing;
 			}
+			#endif
 
 		}  // end of scanning the Target_object_queue of the Region referenced by G1SemeruCMTask->_curr_region.
 
@@ -3810,18 +3945,22 @@ out_tracing:
 				// And since we're towards the end, let's totally drain the
 				// local queue and global stack.
 				drain_local_queue(false);
-				drain_global_stack(false);
+				//drain_global_stack(false);
 
 			} else {
 				break;
 			}
 
+			// If current thread is not aborted,
+			// try to drain the global stack, even this may cause scanning region switch.
+			drain_global_stack_may_switch_region(false);
 		} // End of while. not aborted, keep stealing work from other thread.
 
 		// If we stole work from other threads, we also need to update the marked statistics
 		// It's an adding procedure, will not cause MT problem.
 		// If we didn' steal any work,  the _curr_region should be NULL. We will skip the restore procedure.
 		restore_region_mark_stats();
+		log_debug(semeru,mem_trace)("%s, Restored tracing information for work_strealing..",__func__);
 					
 		// End Check #1, Cehck if the Region is written during the concurrent marking.
 		// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
@@ -3882,7 +4021,7 @@ out_tracing:
 			// that, if a condition is false, we can immediately find out
 			// which one.
 			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
-			//guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
+			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");
 			guarantee(!has_aborted(), "should never happen if termination has completed");

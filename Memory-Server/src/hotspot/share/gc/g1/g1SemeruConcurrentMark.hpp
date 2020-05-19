@@ -173,7 +173,7 @@ public:
 class G1SemeruCMMarkStack {
 public:
   // Number of TaskQueueEntries that can fit in a single chunk.
-  static const size_t EntriesPerChunk = 1024 - 1 /* One reference for the next pointer */;
+  static const size_t EntriesPerChunk = 8192 - 1 /* One reference for the next pointer */;
 private:
   struct TaskQueueEntryChunk {
     TaskQueueEntryChunk* next;
@@ -981,8 +981,12 @@ private:
   // Return true if the marking step should continue. Otherwise, return false to abort
   bool regular_clock_call();
 
+  bool semeru_ms_regular_clock_call();
+
   // Set abort flag if regular_clock_call() check fails
   inline void abort_marking_if_regular_check_fail();
+
+  inline void semeru_ms_abort_marking_if_regular_check_fail();
 
   // Test whether obj might have already been passed over by the
   // mark bitmap scan, and so needs to be pushed onto the mark stack.
@@ -1098,6 +1102,9 @@ public:
   // Move entries from the global stack, return true if we were successful to do so.
   bool get_entries_from_global_stack();
 
+  // semeru
+  bool get_entries_from_global_stack_may_switch_region();
+
   // Pops and scans objects from the local queue. If partially is
   // true, then it stops when the queue size is of a given limit. If
   // partially is false, then it stops when the queue is empty.
@@ -1107,6 +1114,10 @@ public:
   // both the global stack and the local queue reach a given size. If
   // partially if false, it tries to empty them totally.
   void drain_global_stack(bool partially);
+
+  // semeru
+  void drain_global_stack_may_switch_region(bool partially);
+
   // Keeps picking SATB buffers and processing them until no SATB
   // buffers are available.
   void drain_satb_buffers();

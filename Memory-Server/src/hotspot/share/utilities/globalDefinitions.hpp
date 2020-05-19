@@ -169,7 +169,16 @@
 // [Warning] : need to compact the RDMA meta data usage to save space.
 //
 
+//
+//################################## Control Options ##################################
+
 #define COMPACT_THRESHOLD 0.85  // Do compaction only when alive ratio below COMPACT_THRESHOLD
+
+//#define SEMERU_COMPACT
+
+
+//
+//################################## Address information ##################################
 
 
 #define SEMERU_START_ADDR   ((size_t)0x400000000000)
@@ -1146,7 +1155,7 @@ const int      badCodeHeapFreeVal = 0xDD;                   // value used to zap
 #define       badOop            (cast_to_oop(::badOopVal))
 #define       badHeapWord       (::badHeapWordVal)
 
-// Default TaskQueue size is 16K (32-bit) or 512K (64-bit)
+// Default TaskQueue size is 16K (32-bit) or 2M (64-bit), the Region size can reach up to 1GB.
 #define TASKQUEUE_SIZE (NOT_LP64(1<<14) LP64_ONLY(1<<21))
 
 //----------------------------------------------------------------------------------------------------

@@ -365,6 +365,16 @@ inline void G1SemeruCMTask::abort_marking_if_regular_check_fail() {
 }
 
 
+/**
+ * Worker aborted check for Semeru MS concurrent threads. 
+ */
+inline void G1SemeruCMTask::semeru_ms_abort_marking_if_regular_check_fail() {
+  if (!semeru_ms_regular_clock_call()) {
+    log_debug(semeru,mem_trace)("%s, set worker[0x%x] aborted.",__func__, worker_id());
+    set_has_aborted();
+  }
+}
+
 
 /**
  * Semeru Memory Server - Mark the objet alive in alive_bitmap && push it into scan task_queue.

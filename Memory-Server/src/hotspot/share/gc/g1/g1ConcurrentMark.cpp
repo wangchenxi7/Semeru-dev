@@ -2345,6 +2345,7 @@ bool G1CMTask::regular_clock_call() {
 	return true;
 }
 
+
 void G1CMTask::recalculate_limits() {
 	_real_words_scanned_limit = _words_scanned + words_scanned_period;
 	_words_scanned_limit      = _real_words_scanned_limit;
