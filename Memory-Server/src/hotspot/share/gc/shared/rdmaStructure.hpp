@@ -762,7 +762,7 @@ public :
  * 
  */
   struct ElemPair{
-    oop from;     // 8 bytes
+    uint from;     // 8 bytes
     uint nex;
   };
 
@@ -788,6 +788,7 @@ public:
   size_t _num;
   volatile size_t _length;
   size_t _region_index;
+  HeapWord* _base;
 
   Mutex _m;
 
@@ -803,7 +804,7 @@ public:
   void reset() {
     //print_info();
 
-    memset(_queue, 0, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
+    memset(_queue, 0xff, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
     _length = _key_tot + 1;
     _num = 0;
   }
@@ -815,13 +816,16 @@ public:
   }
 
   // invoke the initialization function explicitly 
-  void initialize(size_t region_index) {
+  void initialize(size_t region_index, HeapWord* bottom) {
     _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
     _key_tot = CROSS_REGION_REF_UPDATE_Q_LEN_SQRT;
     _length = _key_tot + 1; // bump pointer
     _num = 0;
     _region_index = region_index;
+    _base = bottom;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
+
+
 
     tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
 
@@ -839,19 +843,19 @@ public:
     }
   }
 
-  void insert(uint index, oop x, oop y) {
+  void insert(uint index, uint x) {
     MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
-    if(_queue[index].from == NULL) {
+    if(_queue[index].from == 0xffffffff) {
       _queue[index].from = x;
       //_queue[index].to = y;
       _queue[index].nex = 0;
       _num ++;
       return;
     }
-    while(_queue[index].nex != 0 && (size_t)_queue[index].from != (size_t)x) {
+    while(_queue[index].nex != 0 && _queue[index].from != x) {
       index = _queue[index].nex;
     }
-    if((size_t)_queue[index].from == (size_t)x) {
+    if(_queue[index].from == x) {
       //_queue[index].to = y;
     }
     else{
@@ -864,16 +868,9 @@ public:
   }
 
   void push(oop x, oop y) {
-    //printf("Push oop: 0x%lx, klass 0x%lx, ", (size_t)x, (size_t)x->klass());
-    if((size_t)x->klass()<0x400000000000) {
-      printf("Wrong!");
-    }
-    //printf("size %d", x->size());
-
-
-    size_t k = (size_t)x;
+    size_t k = (size_t)((HeapWord*)x - _base);
     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
-    insert(hash_k, x, y);
+    insert(hash_k, k);
     
 
     //mhr: debug
@@ -898,9 +895,7 @@ public:
       hash_k = _queue[hash_k].nex;
     }
     if(k == (size_t)_queue[hash_k].from) {
-      //return _queue[hash_k].to;
-
-      return _queue[hash_k].from;
+      return (oop)(_base+_queue[hash_k].from);
     }
     else{
       log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
@@ -919,6 +914,7 @@ public:
   }
   
 };
+
 
 
 

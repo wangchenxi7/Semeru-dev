@@ -629,16 +629,16 @@ void G1SemeruSTWCompactTerminatorTask::record_new_addr_for_target_obj(SemeruHeap
 		elem_ptr = cross_region_ref_ptr->retrieve_item(i);
 		
 		// For HashMap, it's ok to find some items to null.
-		if(elem_ptr->from == NULL){
-			continue;
-		}
+		// if(elem_ptr->from == NULL){
+		// 	continue;
+		// }
 
-		new_addr = elem_ptr->from->forwardee(); // If the object is not moved, to can also be null.
-		//elem_ptr->to = new_addr;
+		// new_addr = elem_ptr->from->forwardee(); // If the object is not moved, to can also be null.
+		// //elem_ptr->to = new_addr;
 		
-		//debug
-		log_trace(semeru,mem_compact)("%s, worker[0x%x] store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, 
-																				worker_id(), i, (size_t)elem_ptr->from, (size_t)new_addr );
+		// //debug
+		// log_trace(semeru,mem_compact)("%s, worker[0x%x] store target obj[0x%lx] <old addr 0x%lx, new addr 0x%lx >",__func__, 
+		// 																		worker_id(), i, (size_t)elem_ptr->from, (size_t)new_addr );
 	}// end of for
 
 }
@@ -1152,17 +1152,17 @@ void G1SemeruSTWCompactTerminatorTask::check_cross_region_reg_queue( SemeruHeapR
 	tty->print("%s,check_cross_region_reg_queue, Start for Region[0x%lx] \n", message, (size_t)hr->hrm_index() );
 
 	for(i=0; i < length; i++){
-		q_iter = cross_region_reg_queue->retrieve_item(i);
+		// q_iter = cross_region_reg_queue->retrieve_item(i);
 
-		if(q_iter->from != NULL){
-					// error Check
-			if(hr->is_in_reserved(q_iter->from) == false ){
-				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)hr->hrm_index() );
-			}else{
-				//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
-			}
+		// if(q_iter->from != NULL){
+		// 			// error Check
+		// 	if(hr->is_in_reserved(q_iter->from) == false ){
+		// 		tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)hr->hrm_index() );
+		// 	}else{
+		// 		//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+		// 	}
 
-		}
+		// }
 
 
 

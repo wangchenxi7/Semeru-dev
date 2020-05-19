@@ -567,7 +567,7 @@ void SemeruHeapRegion::allocate_init_cross_region_ref_update_queue(uint hrm_inde
   
   // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
   _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue();   // The instance should be allocated in RDMA Meta space.
-  _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index);
+  _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index, bottom());
 	log_debug(semeru,alloc)("%s,Region[0x%x] cross_region_ref_update_queue [0x%lx, 0x%lx) ", __func__, 
                                                                           hrm_index, 
                                                                           (size_t)_sync_mem_cpu->_cross_region_ref_update_queue, 
@@ -1287,13 +1287,13 @@ void SemeruHeapRegion::check_cross_region_reg_queue(  const char* message){
 
 	for(i=0; i < length; i++){
 		q_iter = cross_region_reg_queue->retrieve_item(i);
-		if(q_iter->from != NULL){
-			if(this->is_in_reserved(q_iter->from) == false ){
-				tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)this->hrm_index() );
-			}else{
-				//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
-			}
-		}// non-null
+		// if(q_iter->from != NULL){
+		// 	if(this->is_in_reserved(q_iter->from) == false ){
+		// 		tty->print("	Wong obj 0x%lx in Region[0x%lx]'s cross_region_reg_queue \n", (size_t)q_iter->from , (size_t)this->hrm_index() );
+		// 	}else{
+		// 		//tty->print("	non-null item[0x%lx] from 0x%lx, to 0x%lx \n", i, (size_t)q_iter->from, (size_t)q_iter->to );
+		// 	}
+		// }// non-null
 
 
 	}
