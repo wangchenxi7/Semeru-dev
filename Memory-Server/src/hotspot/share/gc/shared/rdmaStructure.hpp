@@ -789,6 +789,7 @@ public:
   volatile size_t _length;
   size_t _region_index;
   HeapWord* _base;
+  bool _marked_from_root;
 
   Mutex _m;
 
@@ -807,6 +808,7 @@ public:
     memset(_queue, 0xff, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
     _length = _key_tot + 1;
     _num = 0;
+    _marked_from_root=false;
   }
 
   void print_info() {
@@ -824,7 +826,7 @@ public:
     _region_index = region_index;
     _base = bottom;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
-
+    _marked_from_root=false;
 
 
     tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
@@ -840,6 +842,7 @@ public:
       _queue = NULL;
       _tot = _length = _key_tot = 0;
       _num = 0;
+      _marked_from_root=false;
     }
   }
 
@@ -868,13 +871,18 @@ public:
   }
 
   void push(oop x, oop y) {
+    if(_marked_from_root) {
+      return;
+    }
+
+
     size_t k = (size_t)((HeapWord*)x - _base);
     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
     insert(hash_k, k);
     
 
     //mhr: debug
-    if(_length%0x1000==0) {
+    if(_length%0x40000==0) {
       printf("move_to_current_len: 0x%lx ", _length);
     }
 
@@ -914,12 +922,6 @@ public:
   }
   
 };
-
-
-
-
-
-
 
 
 

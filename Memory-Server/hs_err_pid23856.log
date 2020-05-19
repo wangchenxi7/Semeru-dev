@@ -1,0 +1,53 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  Internal Error (/home/haoran/Semeru/Memory-Server/src/hotspot/share/gc/g1/g1SemeruConcurrentMark.cpp:3879), pid=23856, tid=23870
+#  guarantee(_semeru_cm->mark_stack_empty()) failed: only way to reach here
+#
+# JRE version: OpenJDK Runtime Environment (12.0.2) (slowdebug build 12.0.2-internal+0-adhoc.haoran.Memory-Server)
+# Java VM: OpenJDK 64-Bit Server VM (slowdebug 12.0.2-internal+0-adhoc.haoran.Memory-Server, mixed mode, tiered, g1 gc, linux-amd64)
+# Problematic frame:
+# V  [libjvm.so+0xb2602b]  G1SemeruCMTask::do_semeru_marking_step(double, bool, bool)+0x12b1
+#
+# No core dump will be written. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   http://bugreport.java.com/bugreport/crash.jsp
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -XX:+UseG1GC -XX:-UseCompressedOops -Xlog:heap=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=4G -XX:SemeruMemPoolInitialSize=4G -XX:SemeruMemPoolAlignment=256M -XX:SemeruConcGCThreads=2 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 Case1
+
+Host: Zion-6.CS.UCLA.EDU, Intel(R) Xeon(R) CPU E5-2640 v3 @ 2.60GHz, 32 cores, 125G, CentOS Linux release 7.7.1908 (Core)
+Time: Mon May 18 23:10:34 2020 PDT elapsed time: 657 seconds (0d 0h 10m 57s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007fffec0da800):  ConcurrentGCThread "Semeru Memory Server Conc#1" [stack: 0x00007fffb5ad7000,0x00007fffb5bd7000] [id=23870]
+
+Stack: [0x00007fffb5ad7000,0x00007fffb5bd7000],  sp=0x00007fffb5bd5c10,  free space=1019k
+Native frames: (J=compiled Java code, A=aot compiled Java code, j=interpreted, Vv=VM code, C=native code)
+V  [libjvm.so+0xb2602b]  G1SemeruCMTask::do_semeru_marking_step(double, bool, bool)+0x12b1
+V  [libjvm.so+0xb29372]  G1SemeruCMConcurrentMarkingTask::work(unsigned int)+0x1b2
+V  [libjvm.so+0x1482d6e]  GangWorker::run_task(WorkData)+0xaa
+V  [libjvm.so+0x1482e23]  GangWorker::loop()+0x37
+V  [libjvm.so+0x1482a74]  AbstractGangWorker::run()+0x3e
+V  [libjvm.so+0x137c7f1]  Thread::call_run()+0xf3
+V  [libjvm.so+0x10a9cb8]  thread_native_entry(Thread*)+0x1dc
+
+Register to memory mapping:
+
+RAX=0x00007ffff7ff6000 points into unknown readable memory: 58 00 00 00 00 00 00 00
+RBX=0x0 is NULL
+RCX=0x0000000000000008 is an unknown value
+RDX=0x0000000000000004 is an unknown value
+RSP=0x00007fffb5bd5c10 points into unknown readable memory: 01 00 00 00 00 00 00 00
+RBP=0x00007fffb5bd5d10 points into unknown readable memory: b0 5d bd b5 ff 7f 00 00
+RSI=0x00000000ffffffff is an unknown value
+RDI=0x00007fffec0d1200 points into unknown readable memory: 00 00 01 00 00 00 00 00
+R8 =0x00007fffb5bd6700 points into unknown readable memory: 00 67 bd b5 ff 7f 00 00
+R9 =0x00007ffff6de027d: _IO_vfprintf+0x0000000000004ccd in /lib64/libc.so.6 at 0x00007ffff6d93000
+R10=0x532079726f6d654d is an unknown value
+R11=0x0 is NULL
+R12=

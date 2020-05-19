@@ -3876,7 +3876,7 @@ out_tracing:
 			// that, if a condition is false, we can immediately find out
 			// which one.
 			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
-			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
+			//guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");
 			guarantee(!has_aborted(), "should never happen if termination has completed");

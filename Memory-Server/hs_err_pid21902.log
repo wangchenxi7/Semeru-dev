@@ -1,0 +1,57 @@
+#
+# A fatal error has been detected by the Java Runtime Environment:
+#
+#  SIGSEGV (0xb) at pc=0x00007ffff45d0062, pid=21902, tid=21917
+#
+# JRE version: OpenJDK Runtime Environment (12.0.2) (slowdebug build 12.0.2-internal+0-adhoc.haoran.Memory-Server)
+# Java VM: OpenJDK 64-Bit Server VM (slowdebug 12.0.2-internal+0-adhoc.haoran.Memory-Server, mixed mode, tiered, g1 gc, linux-amd64)
+# Problematic frame:
+# V  [libjvm.so+0x324062]  HashQueue::length()+0xc
+#
+# No core dump will be written. Core dumps have been disabled. To enable core dumping, try "ulimit -c unlimited" before starting Java again
+#
+# If you would like to submit a bug report, please visit:
+#   http://bugreport.java.com/bugreport/crash.jsp
+#
+
+---------------  S U M M A R Y ------------
+
+Command Line: -XX:+UseG1GC -XX:-UseCompressedOops -Xlog:heap=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=1G -XX:SemeruMemPoolInitialSize=1G -XX:SemeruMemPoolAlignment=32M -XX:SemeruConcGCThreads=2 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 Case1
+
+Host: Zion-6.CS.UCLA.EDU, Intel(R) Xeon(R) CPU E5-2640 v3 @ 2.60GHz, 32 cores, 125G, CentOS Linux release 7.7.1908 (Core)
+Time: Mon May 18 18:45:57 2020 PDT elapsed time: 421 seconds (0d 0h 7m 1s)
+
+---------------  T H R E A D  ---------------
+
+Current thread (0x00007fffec0e2800):  ConcurrentGCThread "Semeru Memory Server Conc#1" [stack: 0x00007fffb6ae3000,0x00007fffb6be3000] [id=21917]
+
+Stack: [0x00007fffb6ae3000,0x00007fffb6be3000],  sp=0x00007fffb6be1900,  free space=1018k
+Native frames: (J=compiled Java code, A=aot compiled Java code, j=interpreted, Vv=VM code, C=native code)
+V  [libjvm.so+0x324062]  HashQueue::length()+0xc
+V  [libjvm.so+0xb251ed]  G1SemeruCMTask::do_semeru_marking_step(double, bool, bool)+0x473
+V  [libjvm.so+0xb29372]  G1SemeruCMConcurrentMarkingTask::work(unsigned int)+0x1b2
+V  [libjvm.so+0x1482d6e]  GangWorker::run_task(WorkData)+0xaa
+V  [libjvm.so+0x1482e23]  GangWorker::loop()+0x37
+V  [libjvm.so+0x1482a74]  AbstractGangWorker::run()+0x3e
+V  [libjvm.so+0x137c7f1]  Thread::call_run()+0xf3
+V  [libjvm.so+0x10a9cb8]  thread_native_entry(Thread*)+0x1dc
+
+
+siginfo: si_signo: 11 (SIGSEGV), si_code: 1 (SEGV_MAPERR), si_addr: 0x0000000000000018
+
+Register to memory mapping:
+
+RAX=0x0 is NULL
+RBX=0x0 is NULL
+RCX=0x0000000000000008 is an unknown value
+RDX=0x0000000000000002 is an unknown value
+RSP=0x00007fffb6be1900 points into unknown readable memory: 10 1a be b6 ff 7f 00 00
+RBP=0x00007fffb6be1900 points into unknown readable memory: 10 1a be b6 ff 7f 00 00
+RSI=0x0000000000000002 is an unknown value
+RDI=0x0 is NULL
+R8 =0x00007fffb6be2700 points into unknown readable memory: 00 27 be b6 ff 7f 00 00
+R9 =0x00007ffff6de027d: _IO_vfprintf+0x0000000000004ccd in /lib64/libc.so.6 at 0x00007ffff6d93000
+R10=0x305b72656b726f77 is an unknown value
+R11=0x0 is NULL
+R12=0x0000000000000001 is an unknown value
+R13=
