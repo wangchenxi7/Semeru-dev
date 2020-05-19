@@ -39,7 +39,7 @@ void* Build_rdma_to_cpu_server(void* _args ){
 	char* heap_start	= NULL;
 	size_t heap_size	=	0;
   const char* port_str  = "9400";
-  const char* ip_str    = "10.0.10.6";
+  const char* ip_str    = "10.0.0.2";
 
 	// Parse the paramters
 	struct rdma_main_thread_args *args = (struct rdma_main_thread_args *) _args;
@@ -47,9 +47,10 @@ void* Build_rdma_to_cpu_server(void* _args ){
 	heap_size		=	(size_t)args->heap_size;
 
 	#ifdef DEBUG_RDMA_SERVER
-	tty->print("%s, Register Semeru Space: 0x%llx, size : 0x%llx \n",__func__, 
+	tty->print("%s, Register Semeru Space: 0x%llx, size : 0x%llx. \n",__func__, 
                                                     (unsigned long long)heap_start, 
                                                     (unsigned long long)heap_size);
+  tty->print("%s, trying to bind to %s:%s \n.", __func__, ip_str, port_str );
 	#endif
 
 
@@ -58,15 +59,15 @@ void* Build_rdma_to_cpu_server(void* _args ){
   inet_pton(AF_INET6, ip_str, &addr.sin6_addr);		// Remote memory pool is waiting on 10.0.10.6:9400.
   addr.sin6_port = htons(atoi(port_str));
 
-  assert((ec = rdma_create_event_channel()) != NULL, "rdma_create_event_channel failed.");
-  assert(rdma_create_id(ec, &listener, NULL, RDMA_PS_TCP) == 0, "rdma_create_id failed.");
+  guarantee((ec = rdma_create_event_channel()) != NULL, "rdma_create_event_channel failed.");
+  guarantee(rdma_create_id(ec, &listener, NULL, RDMA_PS_TCP) == 0, "rdma_create_id failed.");
   //assert(rdma_bind_addr(listener, (struct sockaddr *)&addr) == 0, "rdma_bind_addr failed :return non-zero ");
   if(rdma_bind_addr(listener, (struct sockaddr *)&addr) != 0){
     // Bind ip:port failed
     perror("rdma_bind_addr failed.");
     assert(0,"rdma_bind_addr failed.");  // trigger vm_error report.
   }
-  assert(rdma_listen(listener, 10) == 0, "rdma_listen failed,return non-zero"); 						/* backlog=10 is arbitrary */
+  guarantee(rdma_listen(listener, 10) == 0, "rdma_listen failed,return non-zero"); 						/* backlog=10 is arbitrary */
   port = ntohs(rdma_get_src_port(listener));
 
   tty->print("listening on port %d.\n", port);
@@ -149,25 +150,25 @@ void init_memory_pool(char* heap_start, size_t heap_size, struct context* rdma_c
   //rdma_ctx->mem_pool->region_mapped_size[0]  = 4096;  // count at bytes
   rdma_ctx->mem_pool->cache_status[0] = -1;
 
-  #ifdef ASSERT
+  //#ifdef ASSERT
     // the first Chunk.
     log_debug(semeru,rdma)("%s, Prepare to register memory Region[%d]( Meata DATA)  : 0x%llx, size 0x%lx ", __func__, 
                                                               0, 
                                                               (unsigned long long)rdma_ctx->mem_pool->region_list[0], 
                                                               (size_t)rdma_ctx->mem_pool->region_mapped_size[0]);
-  #endif
+  //#endif
 
 	for(i=1;i<rdma_ctx->mem_pool->region_num ;i++){
 		rdma_ctx->mem_pool->region_list[i]  = rdma_ctx->mem_pool->region_list[i-1] + (size_t)REGION_SIZE_GB*ONE_GB;  // Not exceed the int limitation.
 		rdma_ctx->mem_pool->region_mapped_size[i]  = (size_t)(REGION_SIZE_GB*ONE_GB);  // count at bytes.
     rdma_ctx->mem_pool->cache_status[i] = -1;  // -1 means not bind  to CPU server.
 
-    #ifdef ASSERT
+    //#ifdef ASSERT
       log_debug(semeru,rdma)("%s, Prepare to register memory Region[%d] (Object DATA) : 0x%llx, size 0x%lx ", __func__, 
                                                               i, 
                                                               (unsigned long long)rdma_ctx->mem_pool->region_list[i],
                                                               (size_t)rdma_ctx->mem_pool->region_mapped_size[i]);
-    #endif
+    //#endif
 	}
 
 

@@ -3006,6 +3006,7 @@ void G1SemeruCMTask::reached_limit() {
 
 bool G1SemeruCMTask::regular_clock_call() {
 	if (has_aborted()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : G1SemeruCMTask->has_aborted()", __func__, worker_id());
 		return false;
 	}
 
@@ -3017,6 +3018,7 @@ bool G1SemeruCMTask::regular_clock_call() {
 
 	// (1) If an overflow has been flagged, then we abort.
 	if (_semeru_cm->has_overflown()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : _semeru_cm->has_overflown()", __func__, worker_id());
 		return false;
 	}
 
@@ -3029,6 +3031,7 @@ bool G1SemeruCMTask::regular_clock_call() {
 
 	// (2) If marking has been aborted for Full GC, then we also abort.
 	if (_semeru_cm->has_aborted()) {
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : _semeru_cm->has_aborted()", __func__, worker_id());
 		return false;
 	}
 
@@ -3038,6 +3041,7 @@ bool G1SemeruCMTask::regular_clock_call() {
 	if (SuspendibleThreadSet::should_yield()) {
 		// We should yield. To do this we abort the task. The caller is
 		// responsible for yielding.
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check : SuspendibleThreadSet::should_yield()", __func__, worker_id());
 		return false;
 	}
 
@@ -3057,6 +3061,7 @@ bool G1SemeruCMTask::regular_clock_call() {
 	if (!_draining_satb_buffers && satb_mq_set.process_completed_buffers()) {
 		// we do need to process SATB buffers, we'll abort and restart
 		// the marking task to do so
+		log_debug(semeru,mem_trace)("%s, to set worker[0x%x] aborted because check: !_draining_satb_buffers && satb_mq_set.process_completed_buffers()", __func__, worker_id());
 		return false;
 	}
 	return true;
@@ -3184,7 +3189,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 			// Add the chunk back		
 			_semeru_cm->mark_stack_push(buffer);
 			// failed to claim
-			return false;
+			return false;  // !! ERROR here can cause problem : exit with global stack not empty. !!
 		}
 	}
 
@@ -3560,6 +3565,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 		// and this task, after a yield point, restarts. We have to abort
 		// as we need to get into the overflow protocol which happens
 		// right at the end of this task.
+		log_debug(semeru,mem_trace)("%s, has_overflown() %d, set worker[0x%x] aborted.", __func__, _semeru_cm->has_overflown(), worker_id());
 		set_has_aborted();
 	}
 
@@ -3971,7 +3977,7 @@ out_tracing:
 
 	//unsigned int microseconds = 10000000; //10s.
 	//usleep(microseconds);
-	log_debug(semeru,mem_trace)("%s, Running thread(worker 0x%x), %s, gc_id %d, 0x%lx finished. has_aborted ? %d \n", __func__,
+	log_debug(semeru,mem_trace)("%s, Running thread(worker[0x%x]), %s, gc_id %d, 0x%lx finished. has_aborted ? %d \n", __func__,
 																													worker_id(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
 																													((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),

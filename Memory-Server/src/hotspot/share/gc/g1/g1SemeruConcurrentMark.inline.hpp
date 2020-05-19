@@ -359,6 +359,7 @@ inline void G1SemeruCMTask::update_liveness(oop const obj, const size_t obj_size
 
 inline void G1SemeruCMTask::abort_marking_if_regular_check_fail() {
   if (!regular_clock_call()) {
+    log_debug(semeru,mem_trace)("%s, set worker[0x%x] aborted.",__func__, worker_id());
     set_has_aborted();
   }
 }
