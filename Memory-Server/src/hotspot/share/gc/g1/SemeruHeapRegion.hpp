@@ -175,7 +175,7 @@ public:
   // It should be allocated in fixed address : defined in SEMERU_START_ADDR
   //
   // [x] Only allocate && initialize this queue in Semeru heap.
-  TargetObjQueue* _target_obj_queue;
+  //TargetObjQueue* _target_obj_queue;
 
 
 
@@ -185,8 +185,7 @@ public:
    _type(),
    _humongous_start_region(NULL),
    _next(NULL),
-   _prev(NULL),
-   _target_obj_queue(NULL)
+   _prev(NULL)   
    { }
 
 
@@ -729,7 +728,7 @@ public:
   // End of fields override.
   //
 
-  void allocate_init_target_oop_queue(uint hrm_index);
+  //void allocate_init_target_oop_queue(uint hrm_index);
   void allocate_init_cross_region_ref_update_queue(uint hrm_index);
 
   static int    SemeruLogOfHRGrainBytes;
@@ -910,9 +909,9 @@ public:
     return _rem_set;
   }
 
-  TargetObjQueue* target_obj_queue() const {
-    return _cpu_to_mem_gc->_target_obj_queue;
-  }
+  // TargetObjQueue* target_obj_queue() const {
+  //   return _cpu_to_mem_gc->_target_obj_queue;
+  // }
 
   HashQueue* cross_region_ref_update_queue() const{
     return _sync_mem_cpu->_cross_region_ref_update_queue;
@@ -1183,7 +1182,7 @@ public:
 
   //
   // Debug functions
-  void check_target_obj_queue(const char* message);
+  //void check_target_obj_queue(const char* message);
 
   void check_cross_region_reg_queue( const char* message);
 

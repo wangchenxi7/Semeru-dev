@@ -722,7 +722,7 @@ typedef OverflowTaskQueue<size_t, mtGC>             RegionTaskQueue;
 typedef GenericTaskQueueSet<RegionTaskQueue, mtGC>  RegionTaskQueueSet;
 
 
-typedef OverflowTaskQueue<StarTask, mtGC, TARGET_OBJ_QUEUE_SIZE>  SemeruCompactTaskQueue;
+typedef OverflowTaskQueue<StarTask, mtGC, TASKQUEUE_SIZE>  SemeruCompactTaskQueue;
 typedef GenericTaskQueueSet<SemeruCompactTaskQueue, mtGC>  SemeruCompactTaskQueueSet;
 
 

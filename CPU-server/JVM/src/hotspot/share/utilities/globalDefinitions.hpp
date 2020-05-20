@@ -45,7 +45,7 @@
 //
 // Debug options
 
-#define ASSERT 1
+//#define ASSERT 1
 
 
 

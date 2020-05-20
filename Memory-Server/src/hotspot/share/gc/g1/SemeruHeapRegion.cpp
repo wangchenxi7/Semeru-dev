@@ -262,7 +262,7 @@ void SemeruHeapRegion::setup_semeru_heap_region_size(size_t initial_sermeru_heap
   // The cast to int is safe, given that we've bounded region_size by
   // MIN_REGION_SIZE and MAX_REGION_SIZE.
   SemeruGrainBytes = region_size;
-  log_info(heap)("Heap region size: " SIZE_FORMAT "M", SemeruGrainBytes / M);
+  log_info(semeru,heap)("Semeru Heap region size: " SIZE_FORMAT "M", SemeruGrainBytes / M);
 
 
   guarantee(SemeruGrainWords == 0, "we should only set it once");
@@ -555,13 +555,13 @@ G1RegionToSpaceMapper* SemeruHeapRegion::create_alive_bitmap_storage(size_t regi
 
 
 // Semeru
-void SemeruHeapRegion::allocate_init_target_oop_queue(uint hrm_index){
+// void SemeruHeapRegion::allocate_init_target_oop_queue(uint hrm_index){
   
-  // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
-  _cpu_to_mem_gc->_target_obj_queue = new (TARGET_OBJ_QUEUE_SIZE, hrm_index) TargetObjQueue();   // The instance should be allocated in RDMA Meta space.
-  _cpu_to_mem_gc->_target_obj_queue->initialize((size_t)hrm_index);
-	log_debug(semeru,alloc)("%s,Region[0x%x] target_obj_queue 0x%lx ", __func__,hrm_index, (size_t)_cpu_to_mem_gc->_target_obj_queue );
-}
+//   // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
+//   _cpu_to_mem_gc->_target_obj_queue = new (TARGET_OBJ_QUEUE_SIZE, hrm_index) TargetObjQueue();   // The instance should be allocated in RDMA Meta space.
+//   _cpu_to_mem_gc->_target_obj_queue->initialize((size_t)hrm_index);
+// 	log_debug(semeru,alloc)("%s,Region[0x%x] target_obj_queue 0x%lx ", __func__,hrm_index, (size_t)_cpu_to_mem_gc->_target_obj_queue );
+// }
 
 void SemeruHeapRegion::allocate_init_cross_region_ref_update_queue(uint hrm_index){
   
@@ -1218,59 +1218,59 @@ void SemeruHeapRegion::prepare_for_compaction(CompactPoint* cp) {
 
 
 
-// Drain the both overflow queue and taskqueue
-void SemeruHeapRegion::check_target_obj_queue( const char* message){
-  StarTask ref;
-  size_t count;
-  TargetObjQueue* target_obj_queue = this->target_obj_queue();
+// // Drain the both overflow queue and taskqueue
+// void SemeruHeapRegion::check_target_obj_queue( const char* message){
+//   StarTask ref;
+//   size_t count;
+//   TargetObjQueue* target_obj_queue = this->target_obj_queue();
 
-  log_trace(semeru,rdma)("\n%s, start for Region[0x%lx]", message, target_obj_queue->_region_index);
-
-
-  // #1 Drain the overflow queue
-  count =0;
-	while (target_obj_queue->pop_overflow(ref)) {
-    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
-		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
-			log_trace(semeru,rdma)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
-										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
-
-      if(this->is_in(obj) == false){
-        log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)obj, (size_t)this->hrm_index() );
-      }
-
-		}else{
-      log_trace(semeru,rdma)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
-    }
-
-    count++;
-  }
+//   log_trace(semeru,rdma)("\n%s, start for Region[0x%lx]", message, target_obj_queue->_region_index);
 
 
-  // #1 Drain the task queue
-  count =0;
-  while (target_obj_queue->pop_local(ref, 0 /*threshold*/)) { 
-    oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
-		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
-			log_trace(semeru,rdma)(" ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
-										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+//   // #1 Drain the overflow queue
+//   count =0;
+// 	while (target_obj_queue->pop_overflow(ref)) {
+//     oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+// 		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+// 			log_trace(semeru,rdma)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+// 										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
 
-      if(this->is_in(obj) == false){
-        log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] 0x%lx, to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)(oop*)ref, (size_t)obj, (size_t)this->hrm_index() );
-      }
-		}else{
-      log_trace(semeru,rdma)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );
-    }
+//       if(this->is_in(obj) == false){
+//         log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)obj, (size_t)this->hrm_index() );
+//       }
 
-    count++;
-  }
+// 		}else{
+//       log_trace(semeru,rdma)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
+//     }
+
+//     count++;
+//   }
+
+
+//   // #1 Drain the task queue
+//   count =0;
+//   while (target_obj_queue->pop_local(ref, 0 /*threshold*/)) { 
+//     oop const obj = RawAccess<MO_VOLATILE>::oop_load((oop*)ref);
+// 		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+// 			log_trace(semeru,rdma)(" ref[0x%lx] 0x%lx points to obj 0x%lx, klass 0x%lx, layout_helper 0x%x. is TypeArray ? %d",
+// 										           count, (size_t)(oop*)ref ,(size_t)obj, (size_t)obj->klass(), obj->klass()->layout_helper(), obj->is_typeArray()  );
+
+//       if(this->is_in(obj) == false){
+//         log_trace(semeru,rdma)("\n  ERROR ref[0x%lx] 0x%lx, to target obj 0x%lx in Region[0x%lx] \n", count, (size_t)(oop*)ref, (size_t)obj, (size_t)this->hrm_index() );
+//       }
+// 		}else{
+//       log_trace(semeru,rdma)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );
+//     }
+
+//     count++;
+//   }
 
 
 
-  assert(target_obj_queue->is_empty(), "should drain the queue");
+//   assert(target_obj_queue->is_empty(), "should drain the queue");
 
-  log_trace(semeru,rdma)("%s, End for Region[0x%lx] \n", message, target_obj_queue->_region_index);
-}
+//   log_trace(semeru,rdma)("%s, End for Region[0x%lx] \n", message, target_obj_queue->_region_index);
+// }
 
 
 
