@@ -605,12 +605,17 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
   oop obj;  // For semeru, we only yse non compressed oop.
 
   for(size_t i = 0; i < cross_region_ref_q->length(); i ++) {
-    obj = (oop)(cross_region_ref_q->_base + cross_region_ref_q->retrieve_item(i)->from);  // target object, addr before compaction
 
-    if(obj == NULL) {
-      // This is a Hash queue, its item can be null.
+    if(cross_region_ref_q->retrieve_item(i)->from == 0xffffffff) {
       continue;
     }
+
+    obj = (oop)(cross_region_ref_q->_base + (size_t)cross_region_ref_q->retrieve_item(i)->from);  // target object, addr before compaction
+
+    // if(obj == NULL) {
+    //   // This is a Hash queue, its item can be null.
+    //   continue;
+    // }
 
     //assert(_curr_region->is_in(obj) , "Wrong obj in Region[0x%lx]'s cross region ref queue.", (size_t)obj );
     if(_curr_region->is_in(obj) == false){
