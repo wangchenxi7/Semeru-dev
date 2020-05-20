@@ -484,19 +484,19 @@ public:
     char* ret;
     switch(Alloc_type)  // based on the instantiation of Template
     {
-      case ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE :
-        requested_addr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + index * commit_size) ;
+      // case ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE :
+      //   requested_addr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + index * commit_size) ;
 
-        assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET +TARGET_OBJ_SIZE_BYTE), 
-                                                        "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
+      //   assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET +TARGET_OBJ_SIZE_BYTE), 
+      //                                                   "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
         
-        // [?] How to handle the failure ?
-        //     The _alloc_ptr is useless here.
-        old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr;
-        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
-        assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+      //   // [?] How to handle the failure ?
+      //   //     The _alloc_ptr is useless here.
+      //   old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr;
+      //   ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
+      //   assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
         
-        break;
+      //   break;
 
 
 
