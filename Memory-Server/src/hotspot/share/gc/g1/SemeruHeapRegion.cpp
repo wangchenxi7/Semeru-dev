@@ -512,10 +512,8 @@ void SemeruHeapRegion::initialize(MemRegion mr,
 
   // bitmap#1, Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
-  _mem_to_cpu_gc->_alive_bitmap.initialize(mr,cur_region_alive_bitmap );
+  _alive_bitmap.initialize(mr,cur_region_alive_bitmap );
 
-  // OverflowTaskQueue, used to record the fields with  
-  //_inter_region_ref_queue =
 
   // assign the 1-sided rdma write check flag 
   G1SemeruCollectedHeap* g1h = G1SemeruCollectedHeap::heap();
