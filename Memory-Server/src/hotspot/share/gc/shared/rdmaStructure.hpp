@@ -761,7 +761,7 @@ public :
  * [?] Can we merge this queue with Target Object Queue to save some space ??
  * 
  */
-  struct ElemPair{
+struct ElemPair{
     uint from;     // 8 bytes
     uint nex;
   };
@@ -790,6 +790,7 @@ public:
   size_t _region_index;
   HeapWord* _base;
   bool _marked_from_root;
+  int _age;
 
   Mutex _m;
 
@@ -809,6 +810,7 @@ public:
     _length = _key_tot + 1;
     _num = 0;
     _marked_from_root=false;
+    _age = -1;
   }
 
   void print_info() {
@@ -827,6 +829,7 @@ public:
     _base = bottom;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
     _marked_from_root=false;
+    _age = -1;
 
 
     tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
@@ -843,6 +846,7 @@ public:
       _tot = _length = _key_tot = 0;
       _num = 0;
       _marked_from_root=false;
+      _age = -1;
     }
   }
 
@@ -922,6 +926,14 @@ public:
   }
   
 };
+
+
+
+
+
+
+
+
 
 
 
