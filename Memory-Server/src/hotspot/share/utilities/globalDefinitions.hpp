@@ -280,7 +280,7 @@
 // Record the <old_addr, new_addr > for the target object queue.
 #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(HEAP_REGION_MANAGER_OFFSET + HEAP_REGION_MANAGER_SIZE_LIMIT)   // 0x400,0D0,401,000
 #define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - CROSS_REGION_REF_UPDATE_Q_OFFSET)  // Warning : less than 768MB
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 20)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 22)    // 256k per Region.
 #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
 #define HASH_MUL                              (size_t)1000000007
 
