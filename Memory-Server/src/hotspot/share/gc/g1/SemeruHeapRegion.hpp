@@ -207,17 +207,6 @@ public:
   bool _cm_scanned;    
 
 
-  // Every SemeruHeapRegion should has its own _alive_bitmap.
-  // Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
-  // CPU server only caches the necessary bitmap to save CPU local memory size.
-  // So it's better to cut the bitmap into slices, one slice per SemeruHeapRegion.
-  //
-  // [x] Disable the prev_bitmap design by always setting the _prev_top_at_mark_start to the Region->_bottom. 
-  //
-  // [??] Change it to a pointer based instance.
-  //      Because the CPU server doesn't need this field for all the Regions.
-  //
-  G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
   volatile size_t        _marked_alive_bytes;  // Marked alive objects. [ Abandoned ? ]
   volatile double        _alive_ratio;         // Used to decide GC or not.
 
@@ -449,7 +438,23 @@ public:
   MemoryToCPUAtGC     *_mem_to_cpu_gc;
   SyncBetweenMemoryAndCPU   *_sync_mem_cpu;
 
-  // Other fields
+  //
+  // Other fields. No need to sync between CPU and memory server.
+  //
+
+  // Every SemeruHeapRegion should has its own _alive_bitmap.
+  // Memory server CSet Regions' bitmap will be sent to CPU server for fields update.
+  // CPU server only caches the necessary bitmap to save CPU local memory size.
+  // So it's better to cut the bitmap into slices, one slice per SemeruHeapRegion.
+  //
+  // [x] Disable the prev_bitmap design by always setting the _prev_top_at_mark_start to the Region->_bottom. 
+  //
+  // [??] Change it to a pointer based instance.
+  //      Because the CPU server doesn't need this field for all the Regions.
+  //
+  G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
+
+
   // 1-sied RDMA write check flags
   // Points to FLAGS_OF_CPU_WRITE_CHECK_OFFSET, 4KB
   // 32 bytes for each tag High| -- DIRTY_TAG --|-- VERSION_TAG --|Low
@@ -739,9 +744,9 @@ public:
   static size_t SemeruCardsPerRegion;  
 
   // get current Region's alive/dest bitmap
-  G1CMBitMap* alive_bitmap()  { return &(_mem_to_cpu_gc->_alive_bitmap);  }
+  G1CMBitMap* alive_bitmap()  { return &_alive_bitmap;  }
 
-	bool is_marked_alive(oop obj) const {	 return _mem_to_cpu_gc->_alive_bitmap.is_marked( obj);	}
+	bool is_marked_alive(oop obj) const {	 return _alive_bitmap.is_marked( obj);	}
 
   // allocate space for the alive/dest bitmap.
   G1RegionToSpaceMapper* create_alive_bitmap_storage(size_t region_idnex);
