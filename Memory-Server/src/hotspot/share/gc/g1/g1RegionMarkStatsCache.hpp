@@ -109,6 +109,10 @@ public:
     cur->_stats._live_words += live_words;
   }
 
+  /**
+   * Reset the local cache stats for a Region.
+   *  
+   */
   void reset(uint region_idx) {
     uint const cache_idx = hash(region_idx);
     G1RegionMarkStatsCacheEntry* cur = &_cache[cache_idx];

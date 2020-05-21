@@ -884,6 +884,10 @@ void G1SemeruConcurrentMark::clear_statistics_in_region(uint region_idx) {
 	_region_mark_stats[region_idx].clear();
 }
 
+/**
+ * Clear the concurrent marking statistics of the Region.
+ *  
+ */
 void G1SemeruConcurrentMark::clear_statistics(SemeruHeapRegion* r) {
 	uint const region_idx = r->hrm_index();
 	if (r->is_humongous()) {
@@ -3456,7 +3460,7 @@ void G1SemeruCMTask::clear_mark_stats_cache(uint region_idx) {
 }
 
 /**
- * Semeru MS : Transfer one Region's statistics to the Region
+ * Semeru MS : Transfer G1SemeruCMTask scanning Region's statistics to the Region
  * 1) Evict to global  
  * 2) Get the value from global
  * 3) Store the object marking alive ratio to Region.
@@ -3468,7 +3472,9 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	size_t alive_words;
 	double alive_ratio;
 
-	alive_words = _mark_stats_cache.evict_region(region_index);	// Add more alive words to current Region's stat. MT safe.
+	// Transfer the alive words from Worker local cache to Region's global stat . MT safe.
+	// And then clear the local cache entry.
+	alive_words = _mark_stats_cache.evict_region(region_index);	
 
 	// After adding more alive words, update the alive ratio.
 	// 1) Maybe updated by MT threads. [Fix ME]
@@ -3855,7 +3861,14 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
+				// #1 Reset the fields of claimed Region.
+				_semeru_cm->clear_statistics(claimed_region);
+
+				// #2 set current G1SemeruCMTask's context to claimed Region.
 				setup_for_region(claimed_region);
+
+
+
 				assert(_curr_region == claimed_region, "invariant");
 				log_debug(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
 

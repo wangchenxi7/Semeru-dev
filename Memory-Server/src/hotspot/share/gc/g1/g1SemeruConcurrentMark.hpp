@@ -652,6 +652,7 @@ class G1SemeruConcurrentMark : public CHeapObj<mtGC> {
   // Region statistics gathered during marking.
   // This is the global RegionMarkStats, <Region_id, live_words>, for all the G1SemeruCMTask.
   G1RegionMarkStats* _region_mark_stats;
+  
   // Top pointer for each region at the start of the rebuild remembered set process
   // for regions which remembered sets need to be rebuilt. A NULL for a given region
   // means that this region does not be scanned during the rebuilding remembered
