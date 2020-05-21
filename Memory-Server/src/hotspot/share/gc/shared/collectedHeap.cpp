@@ -185,13 +185,13 @@ bool CollectedHeap::is_oop(oop object) const {
 	}
 
 	if (!is_in_reserved(object) && !is_in_semeru_reserved(object)  ) {
-		log_debug(semeru)("%s, obj 0x%lx check falied #1.", __func__, (size_t)object );
+		log_debug(semeru)("%s, obj 0x%lx check falied #1.", __func__, (size_t)(HeapWord*)object );
 		return false;
 	}
 
 	// klass instance can't in the reserved space ?
 	if (is_in_reserved(object->klass_or_null()) ||  is_in_semeru_reserved(object->klass_or_null()) ) {
-		log_debug(semeru)("%s, obj 0x%lx check falied #2.", __func__, (size_t)object );
+		log_debug(semeru)("%s, obj 0x%lx check falied #2.", __func__, (size_t)(HeapWord*)object );
 		return false;
 	}
 

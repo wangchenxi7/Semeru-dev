@@ -42,7 +42,7 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
 
   oop obj = CompressedOops::decode_not_null(heap_oop);
 
-  log_info(semeru,mem_compact)("\n Warning in %s. Should Not Reach Here ? or obj 0x%lx is not moved. \n\n", __func__, (size_t)obj );
+  log_info(semeru,mem_compact)("\n Warning in %s. Should Not Reach Here ? or obj 0x%lx is not moved. \n\n", __func__, (size_t)(HeapWord*)obj );
 
 
   // Warning - Only when one object is not moved, it can reach here.
@@ -65,7 +65,7 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
     // It's also safe to delete after the compaction.
 		//#ifdef ASSERT
 		
-		log_debug(semeru, mem_compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)obj );
+		log_debug(semeru, mem_compact)("%s, Record an inter-Region reference field 0x%lx --> obj 0x%lx", __func__,(size_t)p, (size_t)(HeapWord*)obj );
 		//_curr_region->_inter_region_ref_bitmap.
 
     // Push the &field, oop*, of p into queue.
@@ -88,7 +88,7 @@ inline void G1SemeruAdjustClosure::adjust_intra_region_pointer(T* p, SemeruHeapR
   if (G1ArchiveAllocator::is_archived_object(obj)) {
     // We never forward archive objects.
     log_debug(semeru,mem_compact)("%s,target obj 0x%lx is in archived Region, can't be moved. skip pointer adjustment p 0x%lx -> it.", __func__,
-                                   (size_t)obj, (size_t)p );
+                                   (size_t)(HeapWord*)obj, (size_t)p );
     return;
   }
 
@@ -146,18 +146,18 @@ inline void G1SemeruAdjustClosure::semeru_ms_adjust_intra_region_pointer(oop src
     assert(src_obj->forwardee() != NULL, "Must be a legal forwarding pointer." );
 
 		log_trace(semeru,mem_compact)("%s, Record an inter-Region reference src_obj 0x%lx[ field 0x%lx ] --> obj 0x%lx", 
-                                                      __func__, (size_t)src_obj, (size_t)p, (size_t)obj );
+                                                      __func__, (size_t)(HeapWord*)src_obj, (size_t)p, (size_t)(HeapWord*)obj );
 		//_curr_region->_inter_region_ref_bitmap.
 
     // Push the &field, oop*, of p into queue.
     // Attention, use the new address of the field. The address after compaction.
     // Assumption, the field offset in old and new objects is same.
-    size_t field_offset = (char*)p - (char*)src_obj;
-    T* new_field_addr =  (T*)((char*)src_obj->forwardee() + field_offset) ;  // T is oop.
+    size_t field_offset = (char*)p - (char*)(HeapWord*)src_obj;
+    T* new_field_addr =  (T*)((char*)(HeapWord*)src_obj->forwardee() + field_offset) ;  // T is oop.
 
 
     log_trace(semeru,mem_compact)("%s, enqueue the new addr. new obj addr 0x%lx, new field addr 0x%lx \n", 
-                                                        __func__, (size_t)src_obj->forwardee(), (size_t)new_field_addr );
+                                                        __func__, (size_t)(HeapWord*)src_obj->forwardee(), (size_t)new_field_addr );
 
     // curr_region is the old/original Region.
     // It can only be claimed by one thread. So the push is thread safe.
@@ -176,7 +176,7 @@ inline void G1SemeruAdjustClosure::semeru_ms_adjust_intra_region_pointer(oop src
   if (G1ArchiveAllocator::is_archived_object(obj)) {
     // We never forward archive objects.
     log_debug(semeru,mem_compact)("%s,target obj 0x%lx is in archived Region, can't be moved. skip pointer adjustment p 0x%lx -> it.", __func__,
-                                   (size_t)obj, (size_t)p );
+                                   (size_t)(HeapWord*)obj, (size_t)p );
     return;
   }
 

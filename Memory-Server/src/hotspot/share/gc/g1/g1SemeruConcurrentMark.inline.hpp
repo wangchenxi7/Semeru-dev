@@ -444,7 +444,7 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
     return false;
   }
 
-	log_trace(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)obj ,_curr_region->hrm_index() );
+	log_trace(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)(HeapWord*)obj ,_curr_region->hrm_index() );
 
   // No OrderAccess:store_load() is needed. It is implicit in the
   // CAS done in G1CMBitMap::parMark() call in the routine above.
@@ -504,7 +504,7 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
     return false;
   }
 
-	log_trace(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)obj);
+	log_trace(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)(HeapWord*)obj);
   
   // Check if this object is in current Region, if not, skip it.
   // Assume 1) Write Barrier has captured all the cross-region reference caused by mutator
@@ -512,7 +512,7 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
   if(_curr_region->is_in_reserved(obj) == false ){
 
 		log_trace(semeru,mem_trace)("%s, Referenced obj 0x%lx is Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx). SKIP", __func__, 
-																			(size_t)obj, _curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
+																			(size_t)(HeapWord*)obj, _curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
 
     return false;
   }
@@ -619,11 +619,11 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
 
     //assert(_curr_region->is_in(obj) , "Wrong obj in Region[0x%lx]'s cross region ref queue.", (size_t)obj );
     if(_curr_region->is_in(obj) == false){
-      log_info(semeru,mem_trace)("Warning in %s, obj 0x%lx is NOT in current Region[0x%lx]", __func__, (size_t)obj, cross_region_ref_q->_region_index);
+      log_info(semeru,mem_trace)("Warning in %s, obj 0x%lx is NOT in current Region[0x%lx]", __func__, (size_t)(HeapWord*)obj, cross_region_ref_q->_region_index);
       return;
     }
     
-    log_trace(semeru,mem_trace)("%s, get an obj 0x%lx from Region[0x%lx]->corss_region_ref_q ", __func__, (size_t)obj, cross_region_ref_q->_region_index );
+    log_trace(semeru,mem_trace)("%s, get an obj 0x%lx from Region[0x%lx]->corss_region_ref_q ", __func__, (size_t)(HeapWord*)obj, cross_region_ref_q->_region_index );
 
     make_reference_alive(obj);
   }// end of for.

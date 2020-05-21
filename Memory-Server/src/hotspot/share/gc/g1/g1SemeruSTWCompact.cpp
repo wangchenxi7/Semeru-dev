@@ -714,31 +714,31 @@ void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
     old_target_oop_addr = RawAccess<>::oop_load((oop*)ref);		
 		if(old_target_oop_addr!= NULL ){
 
-			assert((size_t)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
+			assert((size_t)(HeapWord*)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
 
 			target_region = _semeru_sc->_semeru_h->heap_region_containing(old_target_oop_addr); // [??] This is too slow ?
 
 			new_target_oop_addr = target_region->cross_region_ref_update_queue()->get(old_target_oop_addr);
 			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
 			//Debug
-			if(new_target_oop_addr == (oop)MAX_SIZE_T){
+			if(new_target_oop_addr == (oop)(HeapWord*)MAX_SIZE_T){
 				tty->print("Overflow :Wrong in %s,  worker[0x%x]  old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
-																																		worker_id(), (size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+																																		worker_id(), (size_t)(HeapWord*)old_target_oop_addr, (size_t)target_region->hrm_index() );
 				continue;
 			}
 
 			if(new_target_oop_addr!=NULL ){
 				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
 			}else{
-				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)(HeapWord*)old_target_oop_addr );
 			}
 
 			log_debug(semeru,mem_compact)(" Overflow: update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
-										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
-																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
+										           																count, (size_t)(HeapWord*)(oop*)ref ,(size_t)(HeapWord*)old_target_oop_addr, 
+																															new_target_oop_addr == NULL ? (size_t)(HeapWord*)old_target_oop_addr : (size_t)(HeapWord*)new_target_oop_addr );
 
 		}else{
-       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)(HeapWord*)old_target_oop_addr);
     }
 
     count++;
@@ -754,31 +754,31 @@ void G1SemeruSTWCompactTerminatorTask::update_cross_region_ref_taskqueue(){
     old_target_oop_addr = RawAccess<>::oop_load((oop*)ref);		
 		if(old_target_oop_addr!= NULL ){
 
-			assert((size_t)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
+			assert((size_t)(HeapWord*)old_target_oop_addr != (size_t)0xbaadbabebaadbabe, "Wrong fields.");
 
 			target_region = _semeru_sc->_semeru_h->heap_region_containing(old_target_oop_addr); // [??] This is too slow ?
 
 			new_target_oop_addr = target_region->cross_region_ref_update_queue()->get(old_target_oop_addr);
 			//assert(new_target_oop_addr != (oop)MAX_SIZE_T, "The corresponding item for old target oop 0x%lx can't be found.", (size_t)old_target_oop_addr );
 			//Debug
-			if(new_target_oop_addr == (oop)MAX_SIZE_T){
+			if(new_target_oop_addr == (oop)(HeapWord*)MAX_SIZE_T){
 				tty->print(" Wrong in %s, worker[0x%x]  old_target_oop_addr 0x%lx is not in Region[0x%lx]'s cross_region_ref queue \n", __func__, 
-																																worker_id(), (size_t)old_target_oop_addr, (size_t)target_region->hrm_index() );
+																																worker_id(), (size_t)(HeapWord*)old_target_oop_addr, (size_t)target_region->hrm_index() );
 				continue;
 			}
 
 			if(new_target_oop_addr!=NULL){
 				RawAccess<IS_NOT_NULL>::oop_store((oop*)ref, new_target_oop_addr);
 			}else{
-				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)old_target_oop_addr );
+				log_debug(semeru,mem_compact)("%s, old target oop 0x%lx is not moved. ", __func__,(size_t)(HeapWord*)old_target_oop_addr );
 			}
 
 			log_debug(semeru,mem_compact)(" update ref[0x%lx] 0x%lx from obj 0x%lx to new obj 0x%lx",
-										           																count, (size_t)(oop*)ref ,(size_t)old_target_oop_addr, 
-																															new_target_oop_addr == NULL ? (size_t)old_target_oop_addr : (size_t)new_target_oop_addr );
+										           																count, (size_t)(oop*)ref ,(size_t)(HeapWord*)old_target_oop_addr, 
+																															new_target_oop_addr == NULL ? (size_t)(HeapWord*)old_target_oop_addr : (size_t)(HeapWord*)new_target_oop_addr );
 
 		}else{
-       log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)old_target_oop_addr);
+       log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)(HeapWord*)old_target_oop_addr);
     }
     count++;
   }// end of while
@@ -1185,12 +1185,12 @@ void G1SemeruSTWCompactTerminatorTask::check_overflow_taskqueue( const char* mes
   count =0;
 	while (inter_region_ref_queue->pop_overflow(ref)) {
     oop const obj = RawAccess<>::oop_load((oop*)ref);
-		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+		if(obj!= NULL && (size_t)(HeapWord*)obj != (size_t)0xbaadbabebaadbabe){
 			 log_debug(semeru,mem_compact)(" Overflow: ref[0x%lx] 0x%lx points to obj 0x%lx",
-										           																								count, (size_t)(oop*)ref ,(size_t)obj);
+										           																								count, (size_t)(HeapWord*)(oop*)ref ,(size_t)(HeapWord*)obj);
 
 		}else{
-       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj);
+       log_debug(semeru,mem_compact)(" Overflow: ERROR Find filed 0x%lx points to 0x%lx",(size_t)(HeapWord*)(oop*)ref, (size_t)(HeapWord*)obj);
     }
 
     count++;
@@ -1201,12 +1201,12 @@ void G1SemeruSTWCompactTerminatorTask::check_overflow_taskqueue( const char* mes
   count =0;
   while (inter_region_ref_queue->pop_local(ref, 0 /*threshold*/)) { 
     oop const obj = RawAccess<>::oop_load((oop*)ref);
-		if(obj!= NULL && (size_t)obj != (size_t)0xbaadbabebaadbabe){
+		if(obj!= NULL && (size_t)(HeapWord*)obj != (size_t)0xbaadbabebaadbabe){
 		 log_debug(semeru,mem_compact)(" ref[0x%lx] 0x%lx points to obj 0x%lx",
-										           																	count, (size_t)(oop*)ref ,(size_t)obj);
+										           																	count, (size_t)(HeapWord*)(oop*)ref ,(size_t)(HeapWord*)obj);
 
 		}else{
-      log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(oop*)ref, (size_t)obj );
+      log_debug(semeru,mem_compact)(" ERROR Find filed 0x%lx points to 0x%lx",(size_t)(HeapWord*)(oop*)ref, (size_t)(HeapWord*)obj );
     }
 
     count++;

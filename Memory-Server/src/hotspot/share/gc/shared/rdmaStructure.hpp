@@ -852,6 +852,9 @@ public:
 
   void insert(uint index, uint x) {
     MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+    if(_length == _tot) {
+      return;
+    }
     if(_queue[index].from == 0xffffffff) {
       _queue[index].from = x;
       //_queue[index].to = y;
@@ -879,6 +882,9 @@ public:
       return;
     }
 
+    if(_length == _tot) {
+      return;
+    }
 
     size_t k = (size_t)((HeapWord*)x - _base);
     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
@@ -890,7 +896,7 @@ public:
       printf("move_to_current_len: 0x%lx ", _length);
     }
 
-    if(_length >= _tot) {
+    if(_length > _tot) {
       assert(false, "Not OK!");
     }
 
@@ -901,7 +907,7 @@ public:
    *  
    */
   oop get(oop x){
-    size_t k = (size_t)x;
+    size_t k = (size_t)(HeapWord*)x;
     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
     while(_queue[hash_k].nex != 0 && k != (size_t)_queue[hash_k].from) {
       hash_k = _queue[hash_k].nex;
@@ -910,8 +916,8 @@ public:
       return (oop)(_base+_queue[hash_k].from);
     }
     else{
-      log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
-      return (oop)MAX_SIZE_T;  // No this key, return unsigned long max.
+      //log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
+      return (oop)(HeapWord*)MAX_SIZE_T;  // No this key, return unsigned long max.
     }
   }
 
@@ -926,7 +932,6 @@ public:
   }
   
 };
-
 
 
 
