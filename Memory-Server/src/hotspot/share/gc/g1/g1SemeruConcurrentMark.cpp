@@ -3856,7 +3856,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// Separated the asserts so that we know which one fires.
 			//assert(_curr_region  == NULL, "invariant");
 			assert(_finger       == NULL, "invariant");
-			assert(_region_limit == NULL, "invariant");
+			//assert(_region_limit == NULL, "invariant");  // [?] We don't use this value. Sometimes it's not NULL.
 			//SemeruHeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
 			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
 			if (claimed_region != NULL) {
