@@ -3862,8 +3862,10 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
 				// #1 Reset the fields of claimed Region.
+				claimed_region->_mem_to_cpu_gc->reset();
 				_semeru_cm->clear_statistics(claimed_region);
-
+				claimed_region->_alive_bitmap.clear_region(claimed_region); // the bitmap only cover itself.
+		
 				// #2 set current G1SemeruCMTask's context to claimed Region.
 				setup_for_region(claimed_region);
 

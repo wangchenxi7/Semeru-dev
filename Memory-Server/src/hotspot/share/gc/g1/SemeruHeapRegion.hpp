@@ -222,6 +222,11 @@ public:
   }
 
 
+  void reset() {
+    _cm_scanned = 0;  // Should alrady be restted by CPU server.
+    _marked_alive_bytes = 0;
+    _alive_ratio = 0;
+  }
 
 };
 
