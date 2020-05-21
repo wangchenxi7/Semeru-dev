@@ -448,7 +448,7 @@ SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
   //
 
   // _alive_bitmap
-  tty->print("%s, Change SemeruHeapRegion->_alive_bitmap to pointer-based java object instance. \n",__func__);
+  tty->print("%s, SemeruHeapRegion->_alive_bitmap is initialized in SemeruHeapRegion::initialize(). \n",__func__);
   
   // Initialize the RDMA meta data space
   _cpu_to_mem_init = new(hrm_index) CPUToMemoryAtInit(hrm_index);

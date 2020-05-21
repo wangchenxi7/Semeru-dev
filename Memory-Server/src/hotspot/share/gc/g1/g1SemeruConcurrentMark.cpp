@@ -3765,7 +3765,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 				_curr_region->set_region_cm_scanned();	// also set this continous humongous regions as cm scanned.
 				giveup_current_region();								// _curr_region will be setted as NULL.
-				abort_marking_if_regular_check_fail();
+				semeru_ms_abort_marking_if_regular_check_fail();  
 
 			} else{
 			
@@ -3867,7 +3867,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// block of empty regions. So we need to call the regular clock
 			// method once round the loop to make sure it's called
 			// frequently enough.
-			abort_marking_if_regular_check_fail();
+			semeru_ms_abort_marking_if_regular_check_fail();
 
 
 			// [x] If abort the tracing after cliaming the Region, leave the region to _curr_region and relaunch the do_semeru_marking_step.
