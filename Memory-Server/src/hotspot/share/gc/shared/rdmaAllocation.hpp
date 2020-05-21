@@ -147,13 +147,16 @@ public:
   ALWAYSINLINE void* operator new(size_t instance_size, size_t index ) throw() {
     // Calculate the queue's entire size, 4KB alignment
     // The commit_size for every queue type is fixed.
-    size_t commit_size = align_up(instance_size, RDMA_ALIGNMENT_BYTES); // need to record how much memory is used
+    size_t commit_size = 0;
     char* requested_addr = NULL;
     char* old_val;
     char* ret;
     switch(Alloc_type)  // based on the instantiation of Template
     {
       case CPU_TO_MEM_AT_INIT_ALLOCTYPE :
+        // 1) page alignment
+        commit_size = align_up(instance_size, PAGE_SIZE);
+
         // 1) commit all the reserved space for easy debuging
         //    First time entering the zone.
         if(CHeapRDMAObj<E, CPU_TO_MEM_AT_INIT_ALLOCTYPE>::_alloc_ptr == NULL){
@@ -199,7 +202,10 @@ public:
 
 
       case CPU_TO_MEM_AT_GC_ALLOCTYPE :
-        // 1) commit all the reserved space for easy debuging
+        // 1) page alignment
+        commit_size = align_up(instance_size, PAGE_SIZE);
+
+        // 2) commit all the reserved space for easy debuging
         //    First time entering the zone.
         if(CHeapRDMAObj<E, CPU_TO_MEM_AT_GC_ALLOCTYPE>::_alloc_ptr == NULL){
           requested_addr = (char*)(SEMERU_START_ADDR + CPU_TO_MEMORY_GC_OFFSET);
@@ -245,7 +251,10 @@ public:
 
 
       case MEM_TO_CPU_AT_GC_ALLOCTYPE :
-        // 1) commit all the reserved space for easy debuging
+        // 1) page alignment
+        commit_size = align_up(instance_size, PAGE_SIZE);
+
+        // 2) commit all the reserved space for easy debuging
         //    First time entering the zone.
         if(CHeapRDMAObj<E, MEM_TO_CPU_AT_GC_ALLOCTYPE>::_alloc_ptr == NULL){
           requested_addr = (char*)(SEMERU_START_ADDR + MEMORY_TO_CPU_GC_OFFSET);
@@ -291,7 +300,10 @@ public:
 
 
       case SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE :
-        // 1) commit all the reserved space for easy debuging
+        // 1) page alignment
+        commit_size = align_up(instance_size, PAGE_SIZE);
+
+        // 2) commit all the reserved space for easy debuging
         //    First time entering the zone.
         if(CHeapRDMAObj<E, SYNC_BETWEEN_MEM_AND_CPU_ALLOCTYPE>::_alloc_ptr == NULL){
           requested_addr = (char*)(SEMERU_START_ADDR + SYNC_MEMORY_AND_CPU_OFFSET);
@@ -337,7 +349,10 @@ public:
 
 
       case METADATA_SPACE_ALLOCTYPE :
-        // 1) commit all the reserved space for easy debuging
+        // 1) page alignment
+        commit_size = align_up(instance_size, PAGE_SIZE);
+
+        // 2) commit all the reserved space for easy debuging
         //    First time entering the zone.
         if(CHeapRDMAObj<E, METADATA_SPACE_ALLOCTYPE>::_alloc_ptr == NULL){
           requested_addr = (char*)(SEMERU_START_ADDR + KLASS_INSTANCE_OFFSET);
@@ -383,7 +398,7 @@ public:
       case HEAP_REGION_MANAGER_ALLOCTYPE :
 
         // 1) Change to page_alignment  for this type
-        commit_size = align_up(commit_size, PAGE_SIZE);
+        commit_size = align_up(instance_size, PAGE_SIZE);
 
         // 2) Precommit all the reserved space for easy debuging
         //    First time entering the zone.

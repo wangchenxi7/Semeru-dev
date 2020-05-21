@@ -206,8 +206,8 @@
 //    Used for store klass instance, class loader related information.
 //    range [1GB, 1GB+256MB). The usage is based on application.
 //    [?] Pre commit tall the space ?
-#define KLASS_INSTANCE_OFFSET               (size_t)(ALIVE_BITMAP_OFFSET + ALIVE_BITMAP_SIZE)    // +512MB, 0x400,040,000,000
-#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)(256*ONE_MB)                                 //       0x400,050,000,000
+#define KLASS_INSTANCE_OFFSET               (size_t)(ALIVE_BITMAP_OFFSET + ALIVE_BITMAP_SIZE)    // +512MB, 0x400,020,000,000
+#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)(256*ONE_MB)                                 //       0x400,030,000,000
 
 
 // 3. Small meta data 
@@ -220,7 +220,7 @@
 // 3.1 SemeruHeapRegion Manager
 //     The structure of SemeruHeapRegion. 4K for each Region is enough.
 //     [x] precommit all the space.
-#define HEAP_REGION_MANAGER_OFFSET           (size_t)(KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)  // +3GB 256MB + 4KB,  0x400,0D0,001,000
+#define HEAP_REGION_MANAGER_OFFSET           (size_t)(KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)  // +768MB,  0x400,030,000,000
 #define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(4*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
 
 
