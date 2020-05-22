@@ -36,8 +36,8 @@ E* CHeapRDMAObj<E, Alloc_type>::commit_at(size_t commit_size, MEMFLAGS flags, ch
 
 /**
  * Byte size for the whole OverflowTargetObjQueue - Used for Operator new.
- * 		1) instance size
- * 		2) class E* _elems size. 
+ * 		1) instance size , PAGE_SIZE alignment.
+ * 		2) class E* _elems size. points to start_addr + align_up(instance_size, PAGE_SIZE).
  * 		
  * 	4KB alginment.
  * 
@@ -45,7 +45,7 @@ E* CHeapRDMAObj<E, Alloc_type>::commit_at(size_t commit_size, MEMFLAGS flags, ch
  */
 template <class E, CHeapAllocType Alloc_type>
 size_t CHeapRDMAObj<E, Alloc_type>::commit_size_for_queue(size_t instance_size, size_t elem_length) {
-  size_t size = elem_length * sizeof(E) + instance_size;
+  size_t size = elem_length * sizeof(E) + align_up(instance_size, PAGE_SIZE);
   int alignment = os::vm_allocation_granularity();  // 4KB alignment.
   return align_up(size, alignment);
 }
