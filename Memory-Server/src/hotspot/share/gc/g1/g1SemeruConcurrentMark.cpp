@@ -428,7 +428,7 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 	// _claimed_cm_scanned_regions increases linearly.
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_cm_scanned_regions) - 1;
 	if (claimed_index < _num_cm_scanned_regions) {
-		return _cm_scanned_regions[claimed_index];
+		return _cm_scanned_regions[claimed_index%_max_regions];
 	}
 	return NULL;
 }
@@ -455,10 +455,11 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
 	if (claimed_index < _num_freshly_evicted_regions) {
-		claimed_region = _freshly_evicted_regions[claimed_index];
+		claimed_region = _freshly_evicted_regions[claimed_index%_max_regions];
 		if(claimed_region->write_check_tag_dirty()){
 			// Path#1 dirty_tag = 1, skip this region.
-			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring, skip it(add it back to CSet.).", __func__, claimed_region->hrm_index());
+			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring (tag 0x%x), skip it(add it back to CSet.).", 
+																		__func__, claimed_region->hrm_index(),  claimed_region->_version_tag );
 			add_freshly_evicted_regions(claimed_region);	// add this region back.
 			// return null directly.
 			// Let the caller to decide what to do.
@@ -4045,7 +4046,13 @@ out_tracing:
 			// all other tasks have finished. We separated the guarantees so
 			// that, if a condition is false, we can immediately find out
 			// which one.
-			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
+
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx \n",
+													__func__, worker_id(), 
+													_semeru_cm->mem_server_cset()->is_cm_scan_finished(), cpu_srever_flags->_is_cpu_server_in_stw ,
+													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size() );
+
+			//guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");
