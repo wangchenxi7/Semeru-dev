@@ -96,12 +96,12 @@ public:
   }
 
   oop obj() const {
-    assert(!is_array_slice(), "Trying to read array slice " PTR_FORMAT " as oop", p2i(_holder));
+   // assert(!is_array_slice(), "Trying to read array slice " PTR_FORMAT " as oop", p2i(_holder));
     return (oop)_holder;
   }
 
   HeapWord* slice() const {
-    assert(is_array_slice(), "Trying to read oop " PTR_FORMAT " as array slice", p2i(_holder));
+   // assert(is_array_slice(), "Trying to read oop " PTR_FORMAT " as array slice", p2i(_holder));
     return (HeapWord*)((uintptr_t)_holder & ~ArraySliceBit);
   }
 
