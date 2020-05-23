@@ -57,7 +57,7 @@ class oopDesc {
  private:
   volatile markOop _mark;
   union _metadata {
-    Klass*      _klass;
+    volatile Klass*      _klass; // alreays read from memory.
     narrowKlass _compressed_klass;
   } _metadata;
 

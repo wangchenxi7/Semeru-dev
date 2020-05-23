@@ -428,7 +428,7 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_cm_scanned_next() {
 	// _claimed_cm_scanned_regions increases linearly.
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_cm_scanned_regions) - 1;
 	if (claimed_index < _num_cm_scanned_regions) {
-		return _cm_scanned_regions[claimed_index];
+		return _cm_scanned_regions[claimed_index%_max_regions];
 	}
 	return NULL;
 }
@@ -455,10 +455,11 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 
 	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
 	if (claimed_index < _num_freshly_evicted_regions) {
-		claimed_region = _freshly_evicted_regions[claimed_index];
+		claimed_region = _freshly_evicted_regions[claimed_index%_max_regions];
 		if(claimed_region->write_check_tag_dirty()){
 			// Path#1 dirty_tag = 1, skip this region.
-			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring, skip it(add it back to CSet.).", __func__, claimed_region->hrm_index());
+			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring (tag 0x%x), skip it(add it back to CSet.).", 
+																		__func__, claimed_region->hrm_index(),  claimed_region->_version_tag );
 			add_freshly_evicted_regions(claimed_region);	// add this region back.
 			// return null directly.
 			// Let the caller to decide what to do.
@@ -3791,6 +3792,9 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 				scan_cross_region_ref_queue(cross_region_ref_queue);
 
+				// Reset the cross_region reference queue after scanning it immediately
+				// Because CPU server only send the content and  we traverse the whole queue to find alive content.
+				cross_region_ref_queue->reset();
 			}
 
 			// 1.2） At this point we have either completed iterating over the
@@ -3810,14 +3814,17 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
 			// 1) for the Range[_bottom, _top_at_mark_start)The write is only about field references changing.
 			// 2) We don't care about the changing for range [_start_at_mark_top ,_current_top)
-			if(_curr_region->is_override_during_tracing() ){
-				// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
-				// But the keep the garbage ratio.
-				log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
-																																																worker_id(), _curr_region->hrm_index() );
-				_semeru_cm->mem_server_cset()->add_freshly_evicted_regions(_curr_region);
-				goto claim_region;	// Try to claim another region to scan.
-			}
+			// if(_curr_region->is_override_during_tracing() ){
+			// 	// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
+			// 	// But the keep the garbage ratio.
+			// 	log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
+			// 																																													worker_id(), _curr_region->hrm_index() );
+				
+			// 	// [Fix Me] The add procedure is NOT MT safe !!!
+			// 	// It can't be invoked here.
+			// 	//_semeru_cm->mem_server_cset()->add_freshly_evicted_regions(_curr_region);
+			// 	goto claim_region;	// Try to claim another region to scan.
+			// }
 
 			// debug
 			log_debug(semeru,rdma)("_curr_region[0x%x]->version_tag: 0x%x , tag addr 0x%lx ", 
@@ -4010,8 +4017,12 @@ out_tracing:
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be concurrently pushing objects on it.
 		// Separated the asserts so that we know which one fires.
-		assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
-		assert(_semeru_task_queue->size() == 0, "only way to reach here");
+		
+		
+		//assert(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
+		//assert(_semeru_task_queue->size() == 0, "only way to reach here");
+		
+		
 		_termination_start_time_ms = os::elapsedVTime() * 1000.0;
 
 		// The G1SemeruCMTask class also extends the TerminatorTerminator class,
@@ -4035,7 +4046,13 @@ out_tracing:
 			// all other tasks have finished. We separated the guarantees so
 			// that, if a condition is false, we can immediately find out
 			// which one.
-			guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
+
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx \n",
+													__func__, worker_id(), 
+													_semeru_cm->mem_server_cset()->is_cm_scan_finished(), cpu_srever_flags->_is_cpu_server_in_stw ,
+													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size() );
+
+			//guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
 			guarantee(_semeru_task_queue->size() == 0, "only way to reach here");
 			guarantee(!_semeru_cm->has_overflown(), "only way to reach here");

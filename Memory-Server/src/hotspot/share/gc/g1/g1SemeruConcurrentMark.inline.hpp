@@ -232,13 +232,13 @@ inline void G1SemeruCMTask::scan_task_entry(G1SemeruTaskQueueEntry task_entry) {
 
 
 inline void G1SemeruCMTask::push(G1SemeruTaskQueueEntry task_entry) {
-  assert(task_entry.is_array_slice() || _semeru_h->is_in_g1_reserved(task_entry.obj()), "invariant");
+  // assert(task_entry.is_array_slice() || _semeru_h->is_in_g1_reserved(task_entry.obj()), "invariant");
   
-	//Loose#1 Memory Server has no information about which Region is allocated or not. (SemeruHeapRegionManager->_free_list isn't updated.)
-	// assert(task_entry.is_array_slice() || !_semeru_h->is_on_master_free_list(
-  //             _semeru_h->heap_region_containing(task_entry.obj())), "invariant");
-  assert(task_entry.is_array_slice() || !_semeru_h->is_obj_ill(task_entry.obj()), "invariant");  // FIXME!!!
-	assert(task_entry.is_array_slice() || _curr_region->alive_bitmap()->is_marked((HeapWord*)task_entry.obj())  , "invariant");
+	// //Loose#1 Memory Server has no information about which Region is allocated or not. (SemeruHeapRegionManager->_free_list isn't updated.)
+	// // assert(task_entry.is_array_slice() || !_semeru_h->is_on_master_free_list(
+  // //             _semeru_h->heap_region_containing(task_entry.obj())), "invariant");
+  // assert(task_entry.is_array_slice() || !_semeru_h->is_obj_ill(task_entry.obj()), "invariant");  // FIXME!!!
+	// assert(task_entry.is_array_slice() || _curr_region->alive_bitmap()->is_marked((HeapWord*)task_entry.obj())  , "invariant");
 
   if (!_semeru_task_queue->push(task_entry)) {
     // The local task queue looks full. We need to push some entries
@@ -321,9 +321,9 @@ inline bool G1SemeruCMTask::is_below_finger(oop obj, HeapWord* global_finger) co
  */
 template<bool scan>
 inline void G1SemeruCMTask::process_grey_task_entry(G1SemeruTaskQueueEntry task_entry) {
-  assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
-  assert(task_entry.is_array_slice() || _alive_bitmap->is_marked((HeapWord*)task_entry.obj()),
-         "Any stolen object should be a slice or marked");
+  // assert(scan || (task_entry.is_oop() && task_entry.obj()->is_typeArray()), "Skipping scan of grey non-typeArray");
+  // assert( _alive_bitmap->is_marked((HeapWord*)task_entry.obj() ) || task_entry.is_array_slice(),
+  //        "Any stolen object should be a slice or marked");
 
   if (scan) {
     if (task_entry.is_array_slice()) {    // the large array is  alrady sliced
@@ -385,9 +385,9 @@ inline void G1SemeruCMTask::semeru_ms_abort_marking_if_regular_check_fail() {
  * 
  */
 inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const obj) {
-  assert(_curr_region != NULL, "just checking");
-  assert(_curr_region->is_in_reserved(obj), "Attempting to mark object at " PTR_FORMAT " that is not contained in the given region %u", 
-                                                                                                  p2i(obj), _curr_region->hrm_index());
+  // assert(_curr_region != NULL, "just checking");
+  // assert(_curr_region->is_in_reserved(obj), "Attempting to mark object at " PTR_FORMAT " that is not contained in the given region %u", 
+  //                                                                                                 p2i(obj), _curr_region->hrm_index());
 
   // if ture, skip the marking for current oop.
   // also, this make sure the object is belone current Region's top.
@@ -397,12 +397,12 @@ inline bool G1SemeruCMTask::mark_in_alive_bitmap(uint const worker_id, oop const
 
   // Some callers may have stale objects to mark above nTAMS after humongous reclaim.
   // Can't assert that this is a valid object at this point, since it might be in the process of being copied by another thread.
-  assert(!_curr_region->is_continues_humongous(), "Should not try to mark object " PTR_FORMAT " in Humongous continues region %u above nTAMS " PTR_FORMAT, 
-                                                                                    p2i(obj), _curr_region->hrm_index(), p2i(_curr_region->next_top_at_mark_start()));
+  // assert(!_curr_region->is_continues_humongous(), "Should not try to mark object " PTR_FORMAT " in Humongous continues region %u above nTAMS " PTR_FORMAT, 
+  //                                                                                   p2i(obj), _curr_region->hrm_index(), p2i(_curr_region->next_top_at_mark_start()));
 
   HeapWord* const obj_addr = (HeapWord*)obj;
 
-  assert(_curr_region->alive_bitmap() == alive_bitmap(), "%s, Not marking at the corrent alive_bitmap \n", __func__);
+  // assert(_curr_region->alive_bitmap() == alive_bitmap(), "%s, Not marking at the corrent alive_bitmap \n", __func__);
   bool success = _alive_bitmap->par_mark(obj_addr);   // [?] Mark obj alive in current
 
   // Calculate the alive objects information. 
