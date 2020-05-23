@@ -564,7 +564,7 @@ G1RegionToSpaceMapper* SemeruHeapRegion::create_alive_bitmap_storage(size_t regi
 void SemeruHeapRegion::allocate_init_cross_region_ref_update_queue(uint hrm_index){
   
   // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
-  _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue();   // The instance should be allocated in RDMA Meta space.
+  _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue(NULL);   // The instance should be allocated in RDMA Meta space.
   _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index, bottom());
 	log_debug(semeru,alloc)("%s,Region[0x%x] cross_region_ref_update_queue [0x%lx, 0x%lx) ", __func__, 
                                                                           hrm_index, 

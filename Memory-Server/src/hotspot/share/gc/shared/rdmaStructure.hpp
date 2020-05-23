@@ -761,81 +761,228 @@ public :
  * [?] Can we merge this queue with Target Object Queue to save some space ??
  * 
  */
+// struct ElemPair{
+//     uint from;     // 8 bytes
+//     uint nex;
+//   };
+
+
+// class HashQueue : public CHeapRDMAObj<struct ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE> {
+
+// public:
+
+//   static int compare_elempair(const ElemPair a, const ElemPair b) {
+//     if ((unsigned long long)a.from > (unsigned long long)b.from) {
+//       return 1;
+//     } else if ((unsigned long long)a.from == (unsigned long long)b.from) {
+//       return 0;
+//     } else {
+//       return -1;
+//     }
+//   }
+
+// //private:
+
+//   size_t _key_tot;
+//   size_t _tot;
+//   size_t _num;
+//   volatile size_t _length;
+//   size_t _region_index;
+//   HeapWord* _base;
+//   bool _marked_from_root;
+//   int _age;
+
+//   Mutex _m;
+
+//   ElemPair* _queue; // Flexible array, must be the last field. length limitation : CROSS_REGION_REF_UPDATE_Q_LEN.
+
+// public:
+//   HashQueue():_m(Mutex::leaf, FormatBuffer<128>("HashQueue"), true, Monitor::_safepoint_check_never){
+
+//   }
+
+//   ~HashQueue(){clear();}
+
+//   void reset() {
+//     //print_info();
+
+//     memset(_queue, 0xff, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
+//     _length = _key_tot + 1;
+//     _num = 0;
+//     _marked_from_root=false;
+//     _age = -1;
+//   }
+
+//   void print_info() {
+//       tty->print("Region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
+
+//     tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
+//   }
+
+//   // invoke the initialization function explicitly 
+//   void initialize(size_t region_index, HeapWord* bottom) {
+//     _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
+//     _key_tot = CROSS_REGION_REF_UPDATE_Q_LEN_SQRT;
+//     _length = _key_tot + 1; // bump pointer
+//     _num = 0;
+//     _region_index = region_index;
+//     _base = bottom;
+//     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
+//     _marked_from_root=false;
+//     _age = -1;
+
+
+//     tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
+
+//     tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
+
+//     log_debug(semeru,alloc)("%s, Cross region refernce update queue, 0x%lx,  _queue 0x%lx , length 0x%lx", __func__, (size_t)this, (size_t)_queue, (size_t)_tot);
+//   }
+
+//   void clear() {
+//     if(_queue != NULL){
+//       ArrayAllocator<ElemPair>::free(_queue, _tot);
+//       _queue = NULL;
+//       _tot = _length = _key_tot = 0;
+//       _num = 0;
+//       _marked_from_root=false;
+//       _age = -1;
+//     }
+//   }
+
+//   void insert(uint index, uint x) {
+//     MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
+//     if(_length == _tot) {
+//       return;
+//     }
+//     if(_queue[index].from == 0xffffffff) {
+//       _queue[index].from = x;
+//       //_queue[index].to = y;
+//       _queue[index].nex = 0;
+//       _num ++;
+//       return;
+//     }
+//     while(_queue[index].nex != 0 && _queue[index].from != x) {
+//       index = _queue[index].nex;
+//     }
+//     if(_queue[index].from == x) {
+//       //_queue[index].to = y;
+//     }
+//     else{
+//       _queue[index].nex = _length;
+//       _queue[_length].from = x;
+//       _queue[_length].nex = 0;
+//       _length++;
+//       _num++;
+//     }
+//   }
+
+//   void push(oop x, oop y) {
+//     if(_marked_from_root) {
+//       return;
+//     }
+
+//     if(_length == _tot) {
+//       return;
+//     }
+
+//     size_t k = (size_t)((HeapWord*)x - _base);
+//     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+//     insert(hash_k, k);
+    
+
+//     //mhr: debug
+//     if(_length%0x40000==0) {
+//       printf("move_to_current_len: 0x%lx ", _length);
+//     }
+
+//     if(_length > _tot) {
+//       assert(false, "Not OK!");
+//     }
+
+//   }
+
+//   /**
+//    * Get the item by key.
+//    *  
+//    */
+//   oop get(oop x){
+//     size_t k = (size_t)(HeapWord*)x;
+//     uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
+//     while(_queue[hash_k].nex != 0 && k != (size_t)_queue[hash_k].from) {
+//       hash_k = _queue[hash_k].nex;
+//     }
+//     if(k == (size_t)_queue[hash_k].from) {
+//       return (oop)(_base+_queue[hash_k].from);
+//     }
+//     else{
+//       //log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
+//       return (oop)(HeapWord*)MAX_SIZE_T;  // No this key, return unsigned long max.
+//     }
+//   }
+
+//   bool is_empty() {
+//     return (_num == 0);
+//   }
+
+//   inline size_t    length(){  return _length;  }
+//   inline ElemPair* retrieve_item(size_t index) { 
+//     assert(index < _length, "Exceed the stored length.");
+//     return &_queue[index]; 
+//   }
+  
+// };
+
+
 struct ElemPair{
     uint from;     // 8 bytes
-    uint nex;
-  };
+};
 
 
 class HashQueue : public CHeapRDMAObj<struct ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE> {
 
 public:
-
-  static int compare_elempair(const ElemPair a, const ElemPair b) {
-    if ((unsigned long long)a.from > (unsigned long long)b.from) {
-      return 1;
-    } else if ((unsigned long long)a.from == (unsigned long long)b.from) {
-      return 0;
-    } else {
-      return -1;
-    }
-  }
-
 //private:
 
   size_t _key_tot;
   size_t _tot;
-  size_t _num;
   volatile size_t _length;
   size_t _region_index;
   HeapWord* _base;
   bool _marked_from_root;
   int _age;
-
-  Mutex _m;
+  //G1CollectedHeap* g1h;
+  size_t bitmap_st;
+  size_t* g1hbitmap;
 
   ElemPair* _queue; // Flexible array, must be the last field. length limitation : CROSS_REGION_REF_UPDATE_Q_LEN.
 
 public:
-  HashQueue():_m(Mutex::leaf, FormatBuffer<128>("HashQueue"), true, Monitor::_safepoint_check_never){
+  HashQueue(size_t* bmap):g1hbitmap(bmap){
 
   }
 
   ~HashQueue(){clear();}
 
   void reset() {
-    //print_info();
-
-    memset(_queue, 0xff, (CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair));
-    _length = _key_tot + 1;
-    _num = 0;
+    //memset(g1hbitmap + bitmap_st, 0, 536870912ULL/8/64 * sizeof(size_t));
+    _length = 0;
     _marked_from_root=false;
     _age = -1;
-  }
-
-  void print_info() {
-      tty->print("Region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
-
-    tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
   }
 
   // invoke the initialization function explicitly 
   void initialize(size_t region_index, HeapWord* bottom) {
     _tot = CROSS_REGION_REF_UPDATE_Q_LEN;
-    _key_tot = CROSS_REGION_REF_UPDATE_Q_LEN_SQRT;
-    _length = _key_tot + 1; // bump pointer
-    _num = 0;
+    _length = 0; // bump pointer
     _region_index = region_index;
     _base = bottom;
     _queue  = (ElemPair*)((char*)this + align_up(sizeof(HashQueue),PAGE_SIZE)); // page alignment, can we save this space ?
     _marked_from_root=false;
     _age = -1;
-
-
-    tty->print("Initialize region 0x%lx's queue: 0x%lx, len: 0x%lx, ", _region_index, (size_t)_queue, ((CROSS_REGION_REF_UPDATE_Q_LEN_SQRT+1) * sizeof(ElemPair)));
-
-    tty->print("keytot: 0x%lx, _tot: 0x%lx, num: 0x%lx \n", _key_tot, _tot, _num);
-
+    
+    bitmap_st = (_region_index * 536870912ULL)/8/64;
+    //memset(g1hbitmap + bitmap_st, 0, 536870912ULL/8/64 * sizeof(size_t));
     log_debug(semeru,alloc)("%s, Cross region refernce update queue, 0x%lx,  _queue 0x%lx , length 0x%lx", __func__, (size_t)this, (size_t)_queue, (size_t)_tot);
   }
 
@@ -843,63 +990,55 @@ public:
     if(_queue != NULL){
       ArrayAllocator<ElemPair>::free(_queue, _tot);
       _queue = NULL;
-      _tot = _length = _key_tot = 0;
-      _num = 0;
+      _tot = _length = 0;
       _marked_from_root=false;
       _age = -1;
     }
   }
 
-  void insert(uint index, uint x) {
-    MutexLockerEx z(&_m, Mutex::_no_safepoint_check_flag);
-    if(_length == _tot) {
-      return;
-    }
-    if(_queue[index].from == 0xffffffff) {
-      _queue[index].from = x;
-      //_queue[index].to = y;
-      _queue[index].nex = 0;
-      _num ++;
-      return;
-    }
-    while(_queue[index].nex != 0 && _queue[index].from != x) {
-      index = _queue[index].nex;
-    }
-    if(_queue[index].from == x) {
-      //_queue[index].to = y;
-    }
-    else{
-      _queue[index].nex = _length;
-      _queue[_length].from = x;
-      _queue[_length].nex = 0;
-      _length++;
-      _num++;
-    }
+  size_t* getbyte(size_t x) {
+    return g1hbitmap + bitmap_st + (x/64);
   }
+
+  
 
   void push(oop x, oop y) {
     if(_marked_from_root) {
       return;
     }
-
-    if(_length == _tot) {
+    if(_length >= _tot) {
       return;
     }
-
     size_t k = (size_t)((HeapWord*)x - _base);
-    uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
-    insert(hash_k, k);
     
-
+    size_t* bytee = getbyte(k);
+    size_t mask = 1ULL << (k%64);
+    size_t old_val = *bytee;
+    while((old_val&mask)==0){
+      if(Atomic::cmpxchg((old_val|mask), bytee, old_val ) != old_val){
+        old_val = *bytee;
+        continue;
+      }
+      else {
+        size_t new_index;
+        do{
+          new_index = _length;
+        }while( Atomic::cmpxchg((new_index+1), &_length, new_index ) != new_index );
+        if(new_index < _tot){
+          _queue[new_index].from = (uint)k;
+        }
+        break;
+      }
+    }
     //mhr: debug
     if(_length%0x40000==0) {
       printf("move_to_current_len: 0x%lx ", _length);
     }
 
     if(_length > _tot) {
-      assert(false, "Not OK!");
+      _length = _tot;
+      //assert(false, "Not OK!");
     }
-
   }
 
   /**
@@ -907,22 +1046,11 @@ public:
    *  
    */
   oop get(oop x){
-    size_t k = (size_t)(HeapWord*)x;
-    uint hash_k = ((k>>1) % _key_tot * (HASH_MUL))  % _key_tot + 1;
-    while(_queue[hash_k].nex != 0 && k != (size_t)_queue[hash_k].from) {
-      hash_k = _queue[hash_k].nex;
-    }
-    if(k == (size_t)_queue[hash_k].from) {
-      return (oop)(_base+_queue[hash_k].from);
-    }
-    else{
-      //log_trace(semeru,mem_compact)("Waring : can't find item for key 0x%lx", (size_t)x );
-      return (oop)(HeapWord*)MAX_SIZE_T;  // No this key, return unsigned long max.
-    }
+    return x;
   }
 
   bool is_empty() {
-    return (_num == 0);
+    return (_length == 0);
   }
 
   inline size_t    length(){  return _length;  }
@@ -930,7 +1058,6 @@ public:
     assert(index < _length, "Exceed the stored length.");
     return &_queue[index]; 
   }
-  
 };
 
 

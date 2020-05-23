@@ -319,7 +319,7 @@
 //
 #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT)   // 0x400,0D0,401,000
 #define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - CROSS_REGION_REF_UPDATE_Q_OFFSET)  // Warning : 
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 22)    // 256k per Region.
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 23)    // 256k per Region.
 #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
 #define HASH_MUL                              (size_t)1000000007
 struct AddrPair{
