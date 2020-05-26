@@ -620,7 +620,7 @@ void G1SemeruConcurrentMarkThread::run_service() {
     //#ifdef ASSERT
       // Infinite loop. 
       // Sleep and wake up to check CSet.
-      os::sleep(this, 300, false); // sleep a while to wait for CSet..
+      //os::sleep(this, 300, false); // sleep a while to wait for CSet..
     //#endif
     //set_semeru_ms_gc_terminated();
     //this->_should_terminate = true;
@@ -765,7 +765,7 @@ void G1SemeruConcurrentMarkThread::sleep_before_next_cycle() {
 	}
 
 	// debug - memory server
-	int sleep_time = 60;
+	int sleep_time = 10;
 	log_debug(semeru,rdma)("%s, Sleep Concurrent GC thread %d seconds to let connect to CPU server. \n",__func__, sleep_time);
 	//sleep(sleep_time);
 	os::sleep(this, sleep_time*100, false);
