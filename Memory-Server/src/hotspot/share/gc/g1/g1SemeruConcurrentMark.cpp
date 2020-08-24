@@ -71,6 +71,10 @@
 #include "gc/g1/SemeruHeapRegion.inline.hpp"
 #include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 
+//debug
+#include <time.h>
+
+
 
 
 G1SemeruCMMarkStack::G1SemeruCMMarkStack() :
@@ -476,6 +480,48 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 	}
 	return NULL;
 }
+
+
+
+/**
+ * Debug function : Claim Region without considering thee Region write state.
+ *  
+ */
+SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next_without_consider_data_path_write() {
+
+	SemeruHeapRegion* claimed_region;
+
+	if (_should_abort_scan  ) {
+		// If someone has set the should_abort flag, we return NULL to
+		// force the caller to bail out of their loop.
+		return NULL;
+	}
+
+	// _bottom == _top, means empty.
+	if (_claimed_freshly_evicted_regions == _num_freshly_evicted_regions) {
+		return NULL;
+	}
+
+	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
+	if (claimed_index < _num_freshly_evicted_regions) {
+		claimed_region = _freshly_evicted_regions[claimed_index%_max_regions];
+
+		log_debug(semeru,mem_trace)("%s, claimed Region[0x%x], _claimed_freshly_evicted_regions 0x%lx, _num_freshly_evicted_regions 0x%lx", __func__,
+																								claimed_region->hrm_index(), _claimed_freshly_evicted_regions, _num_freshly_evicted_regions);
+
+		return claimed_region;
+	}
+	return NULL;
+}
+
+
+
+
+
+
+
+
+
 
 
 size_t G1SemeruCMCSetRegions::num_cm_scanned_regions() const {
@@ -3670,6 +3716,10 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 															 bool do_termination,
 															 bool is_serial) {
+
+	//debug
+	clock_t start, end;
+
 	assert(time_target_ms >= 1.0, "minimum granularity is 1ms");
 
 	log_debug(semeru, mem_trace)("%s, start.",__func__);
@@ -3781,6 +3831,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// The source queue for the Region.
 				HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
 
+			
+
 				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
 																																					worker_id(),
 																																					(size_t)_curr_region->hrm_index(), 
@@ -3789,6 +3841,11 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 																																					(size_t)cross_region_ref_queue->length() );
 
 				assert(_curr_region->hrm_index() == cross_region_ref_queue->_region_index, "TargetObjQueue and Region aren't match.");
+
+
+				// debug
+				// add a timer here
+				start = clock();
 
 				scan_cross_region_ref_queue(cross_region_ref_queue);
 
@@ -3803,12 +3860,19 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// The purpose is to limit the tracing memory footprint to reduce the CM conflict with mutators.
 			// if already aborted, leave the enqueued items to the rest procedures.
 
-			log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
+			//log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
 			drain_local_queue(false);		// Current G1SemeruCMTask->_semeru_task_queue
 			drain_global_stack(false);  // Get a Chunk from global/overflow _global_mark_stack, ONLY process objects pushed by this G1SemeruCMTask.
 
+			//debug
+			// timer
+			end = clock();
+			log_debug(semeru,mem_trace)(" Time %f s for Region[0x%lx] \n", ((double) (end - start)) / CLOCKS_PER_SEC,  (size_t)_curr_region->hrm_index() );
+
 			// Transfer the marking statistics to Region.
 			restore_region_mark_stats();
+
+
 
 			// End Check #1, Cehck if the Region is written during the concurrent marking.
 			// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
@@ -3838,7 +3902,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// Finish Site#1
 			// Processed all the freshly scanned Regions.
 			if(	_semeru_cm->mem_server_cset()->is_cm_scan_finished()){
-				log_debug(semeru,mem_trace)("%s, worker[0x%x]  processed all  the freshly evicted region.",__func__, worker_id() );
+				log_info(semeru,mem_trace)("%s, worker[0x%x]  processed all  the freshly evicted region.",__func__, worker_id() );
 			//	_semeru_cm->mem_server_cset()->scan_finished();  // [?] is this the right place to notify the finish of CM scanning ?
 			}
 
@@ -3864,8 +3928,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			//assert(_curr_region  == NULL, "invariant");
 			assert(_finger       == NULL, "invariant");
 			//assert(_region_limit == NULL, "invariant");  // [?] We don't use this value. Sometimes it's not NULL.
-			//SemeruHeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
-			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
+			//SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
+			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next_without_consider_data_path_write();
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
 				// #1 Reset the fields of claimed Region.

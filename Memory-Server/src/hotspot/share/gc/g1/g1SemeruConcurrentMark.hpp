@@ -391,6 +391,7 @@ public:
   // all have been claimed.
   SemeruHeapRegion* claim_cm_scanned_next();
   SemeruHeapRegion* claim_freshly_evicted_next();
+  SemeruHeapRegion* claim_freshly_evicted_next_without_consider_data_path_write();
 
   // The number of root regions to scan.
   size_t num_cm_scanned_regions() const;
