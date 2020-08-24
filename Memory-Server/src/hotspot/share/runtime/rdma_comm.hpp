@@ -36,7 +36,7 @@
 
 
 // Enable the debug information.
-#define DEBUG_RDMA_SERVER 		1
+//#define DEBUG_RDMA_SERVER 		1
 
 
 // Used for describing RDMA QP status.
