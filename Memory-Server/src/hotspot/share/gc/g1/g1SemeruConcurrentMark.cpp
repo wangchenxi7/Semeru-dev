@@ -3501,12 +3501,18 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	// 1) Maybe updated by MT threads. [Fix ME]
 	// 2) Need to add the objects above _top_at_mark_start
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
-	if(alive_ratio >_curr_region->alive_ratio() ){ 
+	if(alive_ratio >_curr_region->alive_ratio() && _curr_region->scan_failure == false ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
-		
 		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio to %f", __func__, worker_id(), region_index, alive_ratio);
 	}
 
+	// Memory server concurrent tracing for this region falied 
+	// Update its alive ratio to 1.0.
+	// [?] This may cause some performance overhead ?
+	if(_curr_region->scan_failure){
+		_curr_region->set_alive_ratio(1.0);
+		log_debug(semeru,mem_trace)("%s, wroker[0x%x] scan Region[0x%x] falied. Update alive_ratio to 1.0", __func__, worker_id(), region_index);
+	}
 
 }
 
@@ -3902,6 +3908,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				claimed_region->_mem_to_cpu_gc->reset();
 				_semeru_cm->clear_statistics(claimed_region);
 				claimed_region->_alive_bitmap.clear_region(claimed_region); // the bitmap only cover itself.
+				claimed_region->scan_failure = false;
 		
 				// #2 set current G1SemeruCMTask's context to claimed Region.
 				setup_for_region(claimed_region);

@@ -518,6 +518,14 @@ inline bool G1SemeruCMTask::deal_with_reference(T* p) {
     return false;
   }
 
+  // Semeru fault tolerance path
+  if(obj->klass() == NULL){
+    log_debug(semeru,mem_trace)("%s, obj 0x%lx is not accessible for now. klass value: 0x%lx skip it. \n", __func__, 
+                                                                  (size_t)(HeapWord*)obj, (size_t)obj->_metadata._klass);
+    return false;
+  }
+
+
   //return make_reference_grey(obj);
   // Mark the object alive and push it into the task_queue to scan its field.
   return make_reference_alive(obj);
