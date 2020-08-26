@@ -55,9 +55,11 @@ class ParCompactionManager;
 class oopDesc {
   friend class VMStructs;
   friend class JVMCIVMStructs;
- private:
-  volatile markOop _mark;     // first 8 bytes, 
-  union _metadata {
+  
+// private:
+public:  
+  volatile  markOop _mark;     // first 8 bytes, 
+  volatile union _metadata {
     Klass*      _klass;
     narrowKlass _compressed_klass;
   } _metadata;                // second 8 bytes,

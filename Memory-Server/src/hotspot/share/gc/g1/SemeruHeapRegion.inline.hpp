@@ -277,7 +277,10 @@ inline void SemeruHeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyT
 	HeapWord* next_addr = bottom();		// from Region start
 
 	while (next_addr < limit) {
-		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
+		
+		// disable prefetch for safe. Cause memory error Bug#8.
+		//Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
+		
 		// This explicit is_marked check is a way to avoid
 		// some extra work done by get_next_marked_addr for
 		// the case where next_addr is marked.

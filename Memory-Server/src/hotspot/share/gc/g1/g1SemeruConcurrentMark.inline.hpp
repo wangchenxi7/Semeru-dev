@@ -48,6 +48,7 @@
 #include "gc/g1/g1SemeruRemSetTrackingPolicy.hpp"
 
 
+
 // inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
 //   return !_semeru_h->is_obj_ill(obj);
 // }
@@ -638,7 +639,11 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
 // Process each alive object find in the target_oop_bitmap
 
 inline size_t SemeruScanTargetOopClosure::apply(oop obj){
-  size_t obj_size = obj->size();
+  //size_t obj_size = obj->size();
+  
+  // Try to avoid inline functions
+  size_t obj_size = obj->size_given_klass(obj->_metadata._klass);  // we are NOT using Compressed Pointers 
+
   _semeru_cm_scan_task->make_reference_alive(obj);
   return obj_size;
 }

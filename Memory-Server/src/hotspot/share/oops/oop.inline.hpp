@@ -51,6 +51,7 @@
 #include "oops/objArrayKlass.hpp"
 
 
+
 // Implementation of all inlined member functions defined in oop.hpp
 // We need a separate file to avoid circular references
 
@@ -231,6 +232,10 @@ int oopDesc::size()  {
  * 
  */
 int oopDesc::size_given_klass(Klass* klass)  {
+
+	assert(klass!= NULL, "klass 0x%lx error for obj: 0x%lx,  obj->_metadata->_klass value: 0x%lx \n", 
+																																(size_t)klass, (size_t)this, (size_t)(this->_metadata._klass) );
+
 	int lh = klass->layout_helper();
 	int s;
 
