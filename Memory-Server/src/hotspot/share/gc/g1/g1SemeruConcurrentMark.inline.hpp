@@ -643,6 +643,8 @@ inline size_t SemeruScanTargetOopClosure::apply(oop obj){
   
   // Try to avoid inline functions
   size_t obj_size = obj->size_given_klass(obj->_metadata._klass);  // we are NOT using Compressed Pointers 
+  if(obj_size == 0)
+    return 0;
 
   _semeru_cm_scan_task->make_reference_alive(obj);
   return obj_size;

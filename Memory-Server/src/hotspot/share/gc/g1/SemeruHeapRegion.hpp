@@ -460,6 +460,7 @@ public:
   //
   G1CMBitMap  _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
   G1CMBitMap  _target_oop_bitmap;   // Points to _sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap
+  bool        scan_failure;     // identify if the concurrent tracing is failed.
 
   // 1-sied RDMA write check flags
   // Points to FLAGS_OF_CPU_WRITE_CHECK_OFFSET, 4KB
@@ -801,6 +802,12 @@ public:
   // objects to call size_t ApplyToMarkedClosure::apply(oop) for.
   template<typename ApplyToMarkedClosure>
   inline void apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
+
+  // Semeru memory server tracing
+  // fault tolerance
+  template<typename ApplyToMarkedClosure>
+  inline void semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
+
   // Override for scan_and_forward support.
   void prepare_for_compaction(CompactPoint* cp);
   // Update heap region to be consistent after compaction.

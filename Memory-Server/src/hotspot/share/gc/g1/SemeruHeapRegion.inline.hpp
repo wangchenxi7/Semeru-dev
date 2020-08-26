@@ -278,8 +278,9 @@ inline void SemeruHeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyT
 
 	while (next_addr < limit) {
 		
-		// disable prefetch for safe. Cause memory error Bug#8.
-		//Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
+		// disable prefetch for safe. Cause memory error Bug#8 ?
+		// After disable the prefetch, Bug#8 can also be triggered. 
+		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
 		
 		// This explicit is_marked check is a way to avoid
 		// some extra work done by get_next_marked_addr for
@@ -287,6 +288,46 @@ inline void SemeruHeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyT
 		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing ?
 			oop current = oop(next_addr);
 			next_addr += closure->apply(current);		// the apply() function is defiend by the parameter, closure.
+		} else {
+			next_addr = bitmap->get_next_marked_addr(next_addr, limit);  // next alive objects. 
+		}
+	}
+
+	assert(next_addr == limit, "Should stop the scan at the limit.");
+}
+
+
+/**
+ * Specific for Memory server concurrent tracing.
+ * Falut tolerance concurrent tracing.
+ * 
+ */
+template<typename ApplyToMarkedClosure>
+inline void SemeruHeapRegion::semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure) {
+	HeapWord* limit = scan_limit();		// current Region top
+	HeapWord* next_addr = bottom();		// from Region start
+	size_t obj_size;
+
+	while (next_addr < limit) {
+		
+		// disable prefetch for safe. Cause memory error Bug#8 ?
+		// After disable the prefetch, Bug#8 can also be triggered. 
+		Prefetch::write(next_addr, PrefetchScanIntervalInBytes);  
+		
+		// This explicit is_marked check is a way to avoid
+		// some extra work done by get_next_marked_addr for
+		// the case where next_addr is marked.
+		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing
+			oop current = oop(next_addr);
+			obj_size = closure->apply(current);
+			if(obj_size == 0){
+				// Trigerred Bug#8, concurrent tracing failed.
+				this->scan_failure = true;
+				next_addr = limit;
+				break;	// end the tracing
+			}
+
+			next_addr += obj_size;	// the apply() function is defiend by the parameter, closure.
 		} else {
 			next_addr = bitmap->get_next_marked_addr(next_addr, limit);  // next alive objects. 
 		}

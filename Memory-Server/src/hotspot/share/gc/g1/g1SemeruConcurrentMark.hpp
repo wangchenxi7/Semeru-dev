@@ -1110,6 +1110,10 @@ public:
   // true, then it stops when the queue size is of a given limit. If
   // partially is false, then it stops when the queue is empty.
   void drain_local_queue(bool partially);
+
+  // Fault tolerance
+  void fault_tolerance_drain_local_queue();
+
   // Moves entries from the global stack to the local queue and
   // drains the local queue. If partially is true, then it stops when
   // both the global stack and the local queue reach a given size. If

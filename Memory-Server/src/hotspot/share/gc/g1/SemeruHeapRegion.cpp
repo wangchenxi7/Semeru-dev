@@ -432,6 +432,8 @@ SemeruHeapRegion::SemeruHeapRegion(uint hrm_index,
     _cpu_to_mem_init(NULL),
     _cpu_to_mem_gc(NULL),
     _mem_to_cpu_gc(NULL),
+    _sync_mem_cpu(NULL),
+    scan_failure(false),
     _rem_set(NULL),
     _evacuation_failed(false),
 #ifdef ASSERT

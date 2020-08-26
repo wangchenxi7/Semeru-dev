@@ -49,6 +49,7 @@
 #include "oops/instanceClassLoaderKlass.hpp"
 #include "oops/typeArrayKlass.hpp"
 #include "oops/objArrayKlass.hpp"
+#include "logging/log.hpp"
 
 
 
@@ -233,8 +234,17 @@ int oopDesc::size()  {
  */
 int oopDesc::size_given_klass(Klass* klass)  {
 
-	assert(klass!= NULL, "klass 0x%lx error for obj: 0x%lx,  obj->_metadata->_klass value: 0x%lx \n", 
-																																(size_t)klass, (size_t)this, (size_t)(this->_metadata._klass) );
+	//assert(klass!= NULL, "klass 0x%lx error for obj: 0x%lx,  obj->_metadata->_klass value: 0x%lx \n", 
+	//																															(size_t)klass, (size_t)this, (size_t)(this->_metadata._klass) );
+	
+	// Semeru memory server error check
+	// Please check Semeru Bug#8.
+	if(klass == NULL){
+		log_debug(semeru,mem_trace)("obj 0x%lx is not accessible now, obj->_metadata->_klass value: 0x%lx. Skip this Region \n",
+																																	(size_t)this,  (size_t)(this->_metadata._klass));
+		return 0;	// concurent scanning error
+	}
+
 
 	int lh = klass->layout_helper();
 	int s;

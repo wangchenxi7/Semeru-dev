@@ -3336,6 +3336,26 @@ void G1SemeruCMTask::drain_local_queue(bool partially) {
 }
 
 /**
+ * Fault tolerance
+ * Drain the task_queue cause of concurrent tracing failure.
+ * Pop all the objects but not processing them.
+ */
+void G1SemeruCMTask::fault_tolerance_drain_local_queue() {
+	size_t	target_size = 0;  // Drain all the items.
+
+	if (_semeru_task_queue->size() > target_size) {
+		G1SemeruTaskQueueEntry entry;
+		bool ret = _semeru_task_queue->pop_local(entry);
+		while (ret) {
+			ret = _semeru_task_queue->pop_local(entry);	// pop all the enqueued objects directly.
+		}
+
+	} // end of if
+}
+
+
+
+/**
  * Semeru : Drain the overflow entries pushed by current thread.
  * 
  * Go process the entries stored in the global/overflow task queue.
@@ -3792,10 +3812,17 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				
 				// Scan the Region by using target_oop_bitmap as root.
 				SemeruScanTargetOopClosure scan_target_bipmap(this);
-				_curr_region->apply_to_marked_objects(target_oop_bitmap_ptr, &scan_target_bipmap);
+				_curr_region->semeru_apply_to_marked_objects(target_oop_bitmap_ptr, &scan_target_bipmap);
 
 				// reset the value on bitmap after scaning.
 				target_oop_bitmap_ptr->clear();
+				if(_curr_region->scan_failure){
+					log_debug(semeru,mem_trace)("%s, concurrent tracing for Region[0x%x] failed. skip it.\n",__func__, _curr_region->hrm_index());
+					// Clear the object already pushed into task_queue and stack
+					fault_tolerance_drain_local_queue();	// assume we didn't overflow the taskqueue.
+
+					goto scan_done;
+				}
 			}
 
 			// 1.2） At this point we have either completed iterating over the
@@ -3807,6 +3834,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
 			drain_local_queue(false);		// Current G1SemeruCMTask->_semeru_task_queue
 			drain_global_stack(false);  // Get a Chunk from global/overflow _global_mark_stack, ONLY process objects pushed by this G1SemeruCMTask.
+
+		scan_done:
 
 			// Transfer the marking statistics to Region.
 			restore_region_mark_stats();
@@ -3947,7 +3976,8 @@ out_tracing:
 
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
-		assert( cpu_srever_flags->_is_cpu_server_in_stw == true || _semeru_task_queue->size() == 0,
+		// 
+		assert( cpu_srever_flags->_is_cpu_server_in_stw == true || _semeru_task_queue->size() == 0 ,
 					 "only way to reach here");
 
 		while (!has_aborted()) {
