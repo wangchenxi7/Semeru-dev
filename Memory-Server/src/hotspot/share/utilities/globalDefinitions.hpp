@@ -317,11 +317,17 @@
 // Record the <old_addr, new_addr > for the target object queue.
 // [?] Not sure how much space is needed for the cross-region-reference queue, give all the rest space to it. Need to shrink it latter.
 //
-#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT)   // 0x400,0D0,401,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - CROSS_REGION_REF_UPDATE_Q_OFFSET)  // Warning : 
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 23)    // 256k per Region.
-#define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)20011
-#define HASH_MUL                              (size_t)1000000007
+// #define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT)   // 0x400,0D0,401,000
+// #define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - CROSS_REGION_REF_UPDATE_Q_OFFSET)  // Warning : 
+// #define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(1<< 22)    // 256k per Region.
+// #define CROSS_REGION_REF_UPDATE_Q_LEN_SQRT    (size_t)1000003
+
+
+#define CROSS_REGION_REF_TARGET_Q_OFFSET        (size_t)(FLAGS_OF_CPU_WRITE_CHECK_OFFSET + FLAGS_OF_CPU_WRITE_CHECK_SIZE_LIMIT)
+#define CROSS_REGION_REF_TARGET_Q_LEN           (size_t)(512*ONE_MB/8/64)  // Region size/ bits per HeapWord / bits per size_t. 
+#define CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT    (size_t)(512 * ONE_MB + 1 * ONE_MB)  // 32GB heap + reserved instance size, 4KB per instance/region. 
+
+
 struct AddrPair{
   char* st;
   char* ed;
@@ -331,7 +337,7 @@ struct AddrPair{
 //
 // x. End of RDMA structure commit size
 //
-#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT)
+#define END_OF_RDMA_COMMIT_ADDR   (size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_TARGET_Q_OFFSET + CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT)
 
 
 // properties for the whole Semeru heap.

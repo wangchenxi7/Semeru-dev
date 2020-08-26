@@ -633,5 +633,16 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
 
 
 
+//
+// Closure for do_heap_region(G1CMBitMap*, Closure*)
+// Process each alive object find in the target_oop_bitmap
+
+inline size_t SemeruScanTargetOopClosure::apply(oop obj){
+  size_t obj_size = obj->size();
+  _semeru_cm_scan_task->make_reference_alive(obj);
+  return obj_size;
+}
+
+
 
 #endif // SHARE_VM_GC_G1_SEMERU_G1CONCURRENTMARK_INLINE_HPP

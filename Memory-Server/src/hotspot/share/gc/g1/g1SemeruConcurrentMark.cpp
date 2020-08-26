@@ -3779,22 +3779,23 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// 1.2) Process a Normal Region.
 
 				// The source queue for the Region.
-				HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
+				//HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
+				G1CMBitMap *target_oop_bitmap_ptr = _curr_region->target_obj_queue();
 
-				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s target_oop_bitmap[0x%lx]: bitmap start at 0x%lx. \n",__func__,
 																																					worker_id(),
 																																					(size_t)_curr_region->hrm_index(), 
-																																					(size_t)cross_region_ref_queue->_region_index, 
-																																					(size_t)cross_region_ref_queue,
-																																					(size_t)cross_region_ref_queue->length() );
+																																					(size_t)_curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_region_index,
+																																					(size_t)_curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap );
 
-				assert(_curr_region->hrm_index() == cross_region_ref_queue->_region_index, "TargetObjQueue and Region aren't match.");
+				assert(_curr_region->hrm_index() == _curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_region_index, "Target oop bitmap and Region aren't match.");
+				
+				// Scan the Region by using target_oop_bitmap as root.
+				SemeruScanTargetOopClosure scan_target_bipmap(this);
+				_curr_region->apply_to_marked_objects(target_oop_bitmap_ptr, &scan_target_bipmap);
 
-				scan_cross_region_ref_queue(cross_region_ref_queue);
-
-				// Reset the cross_region reference queue after scanning it immediately
-				// Because CPU server only send the content and  we traverse the whole queue to find alive content.
-				cross_region_ref_queue->reset();
+				// reset the value on bitmap after scaning.
+				target_oop_bitmap_ptr->clear();
 			}
 
 			// 1.2） At this point we have either completed iterating over the

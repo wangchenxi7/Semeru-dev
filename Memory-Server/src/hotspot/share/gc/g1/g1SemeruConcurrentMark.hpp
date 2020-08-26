@@ -1165,7 +1165,26 @@ public:
   inline void scan_cross_region_ref_queue(HashQueue* cross_region_ref_q);
 
 
+
 };
+
+
+
+  // Closure definition
+  //
+
+  // Closure for do_heap_region(G1CMBitMap*, Closure*)
+  // Process each alive object find in the target_oop_bitmap
+  class SemeruScanTargetOopClosure : public StackObj {
+    G1SemeruCMTask* _semeru_cm_scan_task;
+
+  public:
+    SemeruScanTargetOopClosure(G1SemeruCMTask* semeru_cm_scan_task) : _semeru_cm_scan_task(semeru_cm_scan_task) { };
+    size_t apply(oop object);
+  };
+
+
+
 
 // Class that's used to to print out per-region liveness
 // information. It's currently used at the end of marking and also

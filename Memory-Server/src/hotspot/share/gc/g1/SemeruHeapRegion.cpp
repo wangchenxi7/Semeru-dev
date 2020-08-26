@@ -510,7 +510,7 @@ void SemeruHeapRegion::initialize(MemRegion mr,
   reset_bot();
 
 
-  // bitmap#1, Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
+  // memory server bitmap#1, Assign the commit alive/dest_bitmap size to the SemeruHeapRegion->_alive/_dest_bitmap
   G1RegionToSpaceMapper* cur_region_alive_bitmap	= create_alive_bitmap_storage(region_index);
   _alive_bitmap.initialize(mr,cur_region_alive_bitmap );
 
@@ -550,26 +550,64 @@ G1RegionToSpaceMapper* SemeruHeapRegion::create_alive_bitmap_storage(size_t regi
 }
 
 
+/**
+ * Reserve a bitmap for target oop.
+ * Its content is wasted for now. [Fix it]
+ * 
+ * The space for this bitmap points to SemeruHeapRegion->SyncBetweenMemoryAndCPU->_cross_region_ref_target_queue->_target_bitmap
+ * 
+ */
+G1RegionToSpaceMapper* SemeruHeapRegion::create_target_oop_bitmap_storage(size_t region_idnex){
+	
+	size_t per_region_bitmap_size = G1CMBitMap::compute_size(SemeruHeapRegion::SemeruGrainBytes);// for alive_bitmap, count by bytes.
+  G1SemeruCollectedHeap* semeru_h = G1SemeruCollectedHeap::heap();
+
+	// The target_oop_bitmap of current region is already reserved.
+  // points to it.
+  size_t cur_region_target_oop_bitmap_offset = (size_t)this->_sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap - SEMERU_START_ADDR;
+	G1RegionToSpaceMapper* target_oop_bitmap_storage = 
+			semeru_h->create_aux_memory_mapper_from_rs("Semeru target oop Bitmap", per_region_bitmap_size, 
+                                                                G1CMBitMap::heap_map_factor(), 
+																						                     cur_region_target_oop_bitmap_offset);
+
+	// Commit the bitmap immediately
+	target_oop_bitmap_storage->commit_regions(0, 1, semeru_h->workers());  // There is only 1 regions
+
+  log_debug(semeru, alloc)("%s, SemeruHeapRegion[0x%lu]->_target_oop_bitmap points to 0x%lx ", __func__, 
+                                                                              region_idnex, 
+                                                                              (size_t)this->_sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap);
+
+	return target_oop_bitmap_storage;
+}
+
+
 
 
 // Semeru
-// void SemeruHeapRegion::allocate_init_target_oop_queue(uint hrm_index){
+
+// RDMA structure
+void SemeruHeapRegion::allocate_init_target_oop_bitmap(uint hrm_index){
   
-//   // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
-//   _cpu_to_mem_gc->_target_obj_queue = new (TARGET_OBJ_QUEUE_SIZE, hrm_index) TargetObjQueue();   // The instance should be allocated in RDMA Meta space.
-//   _cpu_to_mem_gc->_target_obj_queue->initialize((size_t)hrm_index);
-// 	log_debug(semeru,alloc)("%s,Region[0x%x] target_obj_queue 0x%lx ", __func__,hrm_index, (size_t)_cpu_to_mem_gc->_target_obj_queue );
-// }
+  // Use target oop bitmap to replace the cross-region-update queue
+  // The instance should be allocated in RDMA Meta space.
+  _sync_mem_cpu->_cross_region_ref_target_queue = new (CROSS_REGION_REF_TARGET_Q_LEN, hrm_index) BitQueue(SemeruGrainWords);  
+  _sync_mem_cpu->_cross_region_ref_target_queue->initialize((size_t)hrm_index, bottom());
+  log_debug(semeru,alloc)("%s,Region[0x%x] _cross_region_ref_target_queue [0x%lx, 0x%lx), bitmap : 0x%lx ", __func__, 
+                                                                           hrm_index, 
+                                                                           (size_t)_sync_mem_cpu->_cross_region_ref_target_queue, 
+                                                                           (size_t)CHeapRDMAObj<ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr,
+                                                                           (size_t)_sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap );
+}
 
 void SemeruHeapRegion::allocate_init_cross_region_ref_update_queue(uint hrm_index){
   
   // CHeapRDMAObj::new(instance_size(asigned by new), element_legnth, q_index, alloc_type )
-  _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue(NULL);   // The instance should be allocated in RDMA Meta space.
-  _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index, bottom());
-	log_debug(semeru,alloc)("%s,Region[0x%x] cross_region_ref_update_queue [0x%lx, 0x%lx) ", __func__, 
-                                                                          hrm_index, 
-                                                                          (size_t)_sync_mem_cpu->_cross_region_ref_update_queue, 
-                                                                          (size_t)CHeapRDMAObj<ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr );
+  // _sync_mem_cpu->_cross_region_ref_update_queue = new (CROSS_REGION_REF_UPDATE_Q_LEN, hrm_index) HashQueue(NULL);   // The instance should be allocated in RDMA Meta space.
+  // _sync_mem_cpu->_cross_region_ref_update_queue->initialize((size_t)hrm_index, bottom());
+	// log_debug(semeru,alloc)("%s,Region[0x%x] cross_region_ref_update_queue [0x%lx, 0x%lx) ", __func__, 
+  //                                                                         hrm_index, 
+  //                                                                         (size_t)_sync_mem_cpu->_cross_region_ref_update_queue, 
+  //                                                                         (size_t)CHeapRDMAObj<ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr );
 }
 
 

@@ -33,8 +33,11 @@
 #include "gc/g1/g1SemeruCollectedHeap.inline.hpp"
 
 /**
- * [?] Allocate bitmap space from storage to cover the MemRegion, heap. 
+ * Intialize the MarkBitMap.
  * 
+ * Parameters:
+ *    heap : Covered Heap range by this bitmap.
+ *    storage : the storage of the real content, bitmap. 
  */
 void G1CMBitMap::initialize(MemRegion heap, G1RegionToSpaceMapper* storage) {
   MarkBitMap::initialize(heap, storage->reserved());
