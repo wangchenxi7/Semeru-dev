@@ -227,19 +227,113 @@ int oopDesc::size()  {
 }
 
 
-
 /**
  * Tag : Calculate the oops by using klass information
  * 
  */
 int oopDesc::size_given_klass(Klass* klass)  {
 
+	int lh = klass->layout_helper();
+	int s;
+
+	// lh is now a value computed at class initialization that may hint
+	// at the size.  For instances, this is positive and equal to the
+	// size.  For arrays, this is negative and provides log2 of the
+	// array element size.  For other oops, it is zero and thus requires
+	// a virtual call.
+	//
+	// We go to all this trouble because the size computation is at the
+	// heart of phase 2 of mark-compaction, and called for every object,
+	// alive or dead.  So the speed here is equal in importance to the
+	// speed of allocation.
+
+	if (lh > Klass::_lh_neutral_value) {
+		if (!Klass::layout_helper_needs_slow_path(lh)) {  // [?] In which situation, need the slow path to calculate the instance size ?
+			s = lh >> LogHeapWordSize;  // deliver size scaled by wordSize
+		} else {
+			//s = klass->oop_size(this);  // For a Transfered Object, klas, how to locate its member function oop_size() ?
+			s = semeru_oop_size(this, klass);
+		
+		}
+	} else if (lh <= Klass::_lh_neutral_value) {
+		// The most common case is instances; fall through if so.
+		if (lh < Klass::_lh_neutral_value) {
+			// Second most common case is arrays.  We have to fetch the
+			// length of the array, shift (multiply) it appropriately,
+			// up to wordSize, add the header, and align to object size.
+			size_t size_in_bytes;
+			size_t array_length = (size_t) ((arrayOop)this)->length();
+			size_in_bytes = array_length << Klass::layout_helper_log2_element_size(lh);
+			size_in_bytes += Klass::layout_helper_header_size(lh);
+
+			// This code could be simplified, but by keeping array_header_in_bytes
+			// in units of bytes and doing it this way we can round up just once,
+			// skipping the intermediate round to HeapWordSize.
+			s = (int)(align_up(size_in_bytes, MinObjAlignmentInBytes) / HeapWordSize);
+
+			// ParNew (used by CMS), UseParallelGC and UseG1GC can change the length field
+			// of an "old copy" of an object array in the young gen so it indicates
+			// the grey portion of an already copied array. This will cause the first
+			// disjunct below to fail if the two comparands are computed across such
+			// a concurrent change.
+			// ParNew also runs with promotion labs (which look like int
+			// filler arrays) which are subject to changing their declared size
+			// when finally retiring a PLAB; this also can cause the first disjunct
+			// to fail for another worker thread that is concurrently walking the block
+			// offset table. Both these invariant failures are benign for their
+			// current uses; we relax the assertion checking to cover these two cases below:
+			//     is_objArray() && is_forwarded()   // covers first scenario above
+			//  || is_typeArray()                    // covers second scenario above
+			// If and when UseParallelGC uses the same obj array oop stealing/chunking
+			// technique, we will need to suitably modify the assertion.
+			assert((s ==semeru_oop_size(this, klass)) ||
+						 (Universe::heap()->is_gc_active() &&
+							((is_typeArray() && UseConcMarkSweepGC) ||
+							 (is_objArray()  && is_forwarded() && (UseConcMarkSweepGC || UseParallelGC || UseG1GC)))),
+						 "wrong array object size");
+		} else {
+			// Must be zero, so bite the bullet and take the virtual call.
+			//s = klass->oop_size(this);
+			s = semeru_oop_size(this, klass);
+		}
+	}
+
+	assert(s > 0, "Oop size must be greater than zero, not %d", s);
+	assert(is_object_aligned(s), "Oop size is not properly aligned: %d", s);
+	return s;
+}
+
+
+
+// Semeru
+// check if the klass is valid
+static bool valid_klass(Klass* klass){
+	if((HeapWord*)klass <(HeapWord*)SEMERU_START_ADDR ){
+		return false;
+	}else if((HeapWord*)klass >= (HeapWord*)END_OF_RDMA_COMMIT_ADDR ){
+		return false;
+	}
+
+	return true;
+}
+
+
+
+
+/**
+ * Tag : Calculate the oops by using klass information
+ * 
+ */
+int oopDesc::semeru_size_given_klass(Klass* klass)  {
+
 	//assert(klass!= NULL, "klass 0x%lx error for obj: 0x%lx,  obj->_metadata->_klass value: 0x%lx \n", 
 	//																															(size_t)klass, (size_t)this, (size_t)(this->_metadata._klass) );
 	
 	// Semeru memory server error check
 	// Please check Semeru Bug#8.
-	if(klass == NULL){
+	//if(klass == NULL){
+	
+	if( SemeruEnableMemPool && !valid_klass(klass)  ){
 		log_debug(semeru,mem_trace)("obj 0x%lx is not accessible now, obj->_metadata->_klass value: 0x%lx. Skip this Region \n",
 																																	(size_t)this,  (size_t)(this->_metadata._klass));
 		return 0;	// concurent scanning error
@@ -315,6 +409,17 @@ int oopDesc::size_given_klass(Klass* klass)  {
 	assert(is_object_aligned(s), "Oop size is not properly aligned: %d", s);
 	return s;
 }
+
+
+
+
+
+
+
+
+
+
+
 
 bool oopDesc::is_instance()  const { return klass()->is_instance_klass();  }
 bool oopDesc::is_array()     const { return klass()->is_array_klass();     }
