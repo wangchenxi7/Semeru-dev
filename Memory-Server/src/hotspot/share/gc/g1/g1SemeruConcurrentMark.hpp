@@ -1105,6 +1105,7 @@ public:
 
   // semeru
   bool get_entries_from_global_stack_may_switch_region();
+  bool delete_entries_from_global_stack();
 
   // Pops and scans objects from the local queue. If partially is
   // true, then it stops when the queue size is of a given limit. If
@@ -1122,6 +1123,7 @@ public:
 
   // semeru
   void drain_global_stack_may_switch_region(bool partially);
+  void falut_tolerance_drain_global_stack();
 
   // Keeps picking SATB buffers and processing them until no SATB
   // buffers are available.

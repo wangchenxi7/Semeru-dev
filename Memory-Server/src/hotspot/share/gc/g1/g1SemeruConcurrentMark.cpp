@@ -3215,6 +3215,13 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
 	if(buffer[0].is_null() == false){
 		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
+		
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}
+
 		if(target_region != _curr_region){
 
 			log_debug(semeru,mem_trace)("%s, Current global_mark_stack chunk doesn't pushed by worker[0x%x], who is processing region[0x%x]. push it back.", 
@@ -3257,7 +3264,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 	// from the global stack.
 	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
 
-	if (!_semeru_cm->mark_stack_pop(buffer)) {
+	if (!_semeru_cm->mark_stack_pop(buffer)) {  // [?] Is it possible that the buffer contains oops pushed by different tasks ?
 		return false;
 	}
 
@@ -3266,7 +3273,14 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
 	if(buffer[0].is_null() == false){
 		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
-		if(_curr_region == NULL || target_region != _curr_region){
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}
+
+		// switch scanned regions
+		if(_curr_region == NULL || target_region != _curr_region  ){
 
 			log_debug(semeru,mem_trace)("%s, Current global_mark_stack chunk doesn't pushed by worker[0x%x], who is processing region[0x%x]. switch to region[0x%x].", 
 																				__func__, worker_id(), _curr_region->hrm_index(),target_region->hrm_index()  );
@@ -3296,7 +3310,38 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 
 
 
+/**
+ * delete entries belong to Region with scan_failure falg setted. 
+ */
+bool G1SemeruCMTask::delete_entries_from_global_stack() {
+	// Local array where we'll store the entries that will be popped
+	// from the global stack.
+	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
 
+	if (!_semeru_cm->mark_stack_pop(buffer)) {
+		return false;
+	}
+
+	// 1) Only process the Chunk belong to current scanning Region. Do not switch the scanning region here.
+	//    The entries will be on claimed by the G1SemeruCMTask who cause the overflow.
+	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
+	if(buffer[0].is_null() == false){
+		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
+		
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}else{
+			// get a normal buffer, push it back and stop.
+			// Sure, we may not find all the entries belong the region with scan_failure setted, process them later.
+			_semeru_cm->mark_stack_push(buffer);
+		}
+
+	}// get a non-null buffer
+
+	return false;
+}
 
 
 
@@ -3352,6 +3397,7 @@ void G1SemeruCMTask::fault_tolerance_drain_local_queue() {
 
 	} // end of if
 }
+
 
 
 
@@ -3433,8 +3479,31 @@ void G1SemeruCMTask::drain_global_stack_may_switch_region(bool partially) {
 			drain_local_queue(partially);
 		}
 	}
+
+	log_debug(semeru,mem_trace)("%s, after stealing, global cm mark stack size 0x%lx ",__func__, _semeru_cm->mark_stack_size() );
+
 }
 
+
+
+/**
+ * Try to delete the entries belong to region with scan_failure flag setted.
+ *  
+ */
+void G1SemeruCMTask::falut_tolerance_drain_global_stack() {
+	if (has_aborted()) {
+		return;
+	}
+
+	// We have a policy to drain the local queue before we attempt to
+	// drain the global stack.
+	assert(_semeru_task_queue->size() == 0, "invariant");
+
+	while (!has_aborted() && delete_entries_from_global_stack()) {
+		// just delete entries/buffers, nothing need to be done.
+	}
+	
+}
 
 
 
@@ -3825,8 +3894,8 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				if(_curr_region->scan_failure){
 					log_debug(semeru,mem_trace)("%s, concurrent tracing for Region[0x%x] failed. skip it.\n",__func__, _curr_region->hrm_index());
 					// Clear the object already pushed into task_queue and stack
-					fault_tolerance_drain_local_queue();	// assume we didn't overflow the taskqueue.
-
+					fault_tolerance_drain_local_queue(); 	// drain the local task_queue
+					falut_tolerance_drain_global_stack();
 					goto scan_done;
 				}
 			}
@@ -3993,7 +4062,7 @@ out_tracing:
 
 				log_trace(semeru,mem_trace)("%s, worker[0x%x] steal work, entry 0x%lx , from other threads ", __func__, worker_id(), (size_t)entry.holder_addr() );
 				// switch processing Region.
-				// Don't care entry is oop or array slice, only want its address.
+				// Not care about if the entry is an oop or an array slice, we only want its address.
 				// _curr_region should be NULL.
 				if(_curr_region == NULL || !_curr_region->is_in_reserved(entry.holder_addr()) ){
 					_curr_region = _semeru_h->hrm()->addr_to_region((HeapWord*)entry.holder_addr());
@@ -4085,10 +4154,11 @@ out_tracing:
 			// that, if a condition is false, we can immediately find out
 			// which one.
 
-			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx \n",
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx, _semeru_cm->mark_stack_size() 0x%lx \n",
 													__func__, worker_id(), 
 													_semeru_cm->mem_server_cset()->is_cm_scan_finished(), cpu_srever_flags->_is_cpu_server_in_stw ,
-													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size() );
+													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size(),
+													_semeru_cm->mark_stack_size() );
 
 			//guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");
