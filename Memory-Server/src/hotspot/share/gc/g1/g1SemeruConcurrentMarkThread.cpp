@@ -681,7 +681,7 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
 
   G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
   //size_t* received_num = mem_server_cset->num_received_regions();
-  volatile int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
+  volatile int received_region_ind = recv_mem_server_cset->pop(CUR_MEMORY_SERVER_ID);  // can be negative 
    SemeruHeapRegion* region_received = NULL;
 
   while(received_region_ind != -1){
@@ -707,7 +707,7 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
     }
 
     // process next region_id
-		received_region_ind = recv_mem_server_cset->pop();
+		received_region_ind = recv_mem_server_cset->pop(CUR_MEMORY_SERVER_ID);
 
   }// Received CSet isn't emtpy.
 

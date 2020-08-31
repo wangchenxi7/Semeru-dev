@@ -2004,7 +2004,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 
 
 
-	#ifdef ASSERT
+//	#ifdef ASSERT
 		log_debug(semeru, alloc)("%s, Meta data allocation Start\n", __func__);
 		log_debug(semeru, alloc)("	received_memory_server_cset 0x%lx, flexible array 0x%lx",  
 																							(size_t)_recv_mem_server_cset, (size_t)_recv_mem_server_cset->_region_cset  );
@@ -2015,7 +2015,7 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 		log_debug(semeru, alloc)("	flags_of_rdma_write_check  0x%lx, flexible array 0x%lx",  
 																							(size_t)_rdma_write_check_flags, (size_t)_rdma_write_check_flags->one_sided_rdma_write_check_flags_base );
 		log_debug(semeru, alloc)("%s, Meta data allocation End \n", __func__);
-	#endif
+//	#endif
 
 	// Debug
 	// Do padding for the first GB meta data space. Until the start of alive_bitmap.

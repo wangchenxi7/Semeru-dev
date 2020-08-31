@@ -373,23 +373,22 @@ class received_memory_server_cset : public CHeapRDMAObj<received_memory_server_c
 
 private :
 	// First field, identify if CPU server pushed new Regions here.
-	volatile size_t 	_num_regions;
+	volatile size_t 	_num_regions[NUM_OF_MEMORY_SERVER];
 
 
 public :
 	// [?] a flexible array, points the memory just behind this instance.
 	// The size of current instance should be limited within 4K, 
 	// The array size should be limited by MEM_SERVER_CSET_BUFFER_SIZE.
-	volatile size_t	_region_cset[];			
+	volatile uint	_region_cset[NUM_OF_MEMORY_SERVER][128];    // 	within 4KB, support 64GB per memory server. e.g. 512M per Region
 
 
 
-//public :
 	
 	received_memory_server_cset();
 	
-	volatile size_t*	num_received_regions()	{	return &_num_regions;	}
-
+	volatile size_t*	num_received_regions(size_t mem_id)	    {	return &_num_regions[mem_id];	}
+  uint              num_of_enqueued_regions(size_t mem_id)  { return _num_regions[mem_id]; }
 
 	// Allocate the _region_cset just behind this instance ?
 	// void initialize(){
@@ -398,27 +397,51 @@ public :
 
 
 
-	void reset()	{	_num_regions = 0;	}
+	void reset(){	
+    int i;
+    for(i=0; i<NUM_OF_MEMORY_SERVER; i++){
+      _num_regions[i] = 0;	
+    }
+  }
+
+  void reset_cset_for_target_mem(size_t mem_id){
+    _num_regions[mem_id]  = 0;
+  }
 
 	//
 	// This function isn't MT safe.
 	// 
-	int	pop()	{
-		if(_num_regions >= 1)
-			return _region_cset[--_num_regions];	
+	int	pop(size_t mem_id)	{
+		if(_num_regions[mem_id] >= 1)
+			return _region_cset[mem_id][--_num_regions[mem_id]];	
 		else
 			return -1; 
 	}
 
-  
-  size_t get(size_t i) {
-    //assert(i)
-    return _region_cset[i];
+    //mhr: modify
+  uint get(size_t mem_id, size_t i) {
+    return _region_cset[mem_id][i];
   }
 
-  	void add(int region_id) {
-		_region_cset[_num_regions++] = region_id;
+  //
+  // !! Fix Here !!
+  //  1) Assume 2 memory servers
+  //  2) Assume each JVM region is 512 MB
+  void add( uint region_id) {
+    // Region#0 is meta data region. Data Region is #1 to #8. REGION_SIZE_GB * ONE_GB, e.g. 4GB, per Region.
+    // For JVM,  region size is GrainBytes, e.g. 512MB. 
+    uint region_boundary_id =  (MEMORY_SERVER_1_REGION_START_ID - MEMORY_SERVER_0_REGION_START_ID) * ((REGION_SIZE_GB * ONE_GB)/(512*ONE_MB));
+    int mem_id;
+
+    if( region_id < region_boundary_id){
+      mem_id = 0;
+    }else{
+      mem_id = 1;
+    }
+
+    _region_cset[mem_id][_num_regions[mem_id]++] = region_id;
 	}
+
 
 };
 
