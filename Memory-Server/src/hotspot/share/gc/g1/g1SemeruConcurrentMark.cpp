@@ -3480,8 +3480,6 @@ void G1SemeruCMTask::drain_global_stack_may_switch_region(bool partially) {
 		}
 	}
 
-	log_debug(semeru,mem_trace)("%s, after stealing, global cm mark stack size 0x%lx ",__func__, _semeru_cm->mark_stack_size() );
-
 }
 
 
@@ -3572,7 +3570,8 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
 	if(alive_ratio >_curr_region->alive_ratio() && _curr_region->scan_failure == false ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
-		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio to %f", __func__, worker_id(), region_index, alive_ratio);
+		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio from %f to %f", 
+																		__func__, worker_id(), region_index, _curr_region->alive_ratio(), alive_ratio);
 	}
 
 	// Memory server concurrent tracing for this region falied 

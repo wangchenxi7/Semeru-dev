@@ -38,8 +38,8 @@ void* Build_rdma_to_cpu_server(void* _args ){
   uint16_t 	port = 0;
 	char* heap_start	= NULL;
 	size_t heap_size	=	0;
-  const char* port_str  = "9400";
-  const char* ip_str    = "10.0.0.2";
+  const char* port_str  = cur_mem_server_port;
+  const char* ip_str    = cur_mem_server_ip; // defined in globalDefinitions.hpp
 
 	// Parse the paramters
 	struct rdma_main_thread_args *args = (struct rdma_main_thread_args *) _args;
@@ -70,7 +70,7 @@ void* Build_rdma_to_cpu_server(void* _args ){
   guarantee(rdma_listen(listener, 10) == 0, "rdma_listen failed,return non-zero"); 						/* backlog=10 is arbitrary */
   port = ntohs(rdma_get_src_port(listener));
 
-  tty->print("listening on port %d.\n", port);
+  tty->print("listening on %s::%d.\n", ip_str, port);
 
   //
   // [?] 1) How to bind the global_rdma_ctx with these created rdma_cm_id, rdma_event_channel ??

@@ -114,6 +114,21 @@
 // Semeru Macros
 //
 
+//
+// //################################## Global variable control ##################################
+
+// Number of Memory server
+#define NUM_OF_MEMORY_SERVER	2
+
+#define CUR_MEMORY_SERVER_ID 0
+
+static const char cur_mem_server_ip[]    = "10.0.0.2";
+static const char cur_mem_server_port[]  = "9400";
+
+#define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
+#define RDMA_DATA_REGION_NUM   8
+
+
 
 //
 // Debug options
@@ -134,12 +149,8 @@
   #define PAGE_SIZE		      ((size_t)4096)	// bytes
 #endif
 
-#define REGION_SIZE_GB    ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
-#define RDMA_DATA_REGION_NUM     8
-
 
 #define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
-
 
 
 // Synchronization mask
@@ -177,10 +188,6 @@
 //#define SEMERU_COMPACT
 
 
-#define CUR_MEMORY_SERVER_ID 0
-
-
-
 //
 //################################## Address information ##################################
 
@@ -193,9 +200,6 @@
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
 #define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
 
-
-// Number of Memory server
-#define NUM_OF_MEMORY_SERVER	2
 
 // Memory server #1, Region[1] to Region[5]
 #define MEMORY_SERVER_0_REGION_START_ID		1

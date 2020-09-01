@@ -227,19 +227,37 @@ int oopDesc::size()  {
 }
 
 
+/**
+ * Semeru check
+ * 
+ * 1) Bug#8, For Single QP, the object information maybe transferred later than control path.
+ * 		So the klass is NULL. 
+ * 
+ * 2) Bug#9, for Multiple-QP, the object information may be wrong as 0xdeafbabe or 0xbaadbabe. or other wrong value. 
+ * 
+ */
+bool oopDesc::is_klass_valid(Klass* klass){
+	//bug#8
+	if(klass == NULL)
+		return false;
+	
+	//bug#9
+	if( ((size_t)klass >> 60) ==  (size_t)0xd  )  //0xdeaf,babe,deaf,babe check
+		return false;
+	
+	return true;
+}
+
 
 /**
  * Tag : Calculate the oops by using klass information
  * 
  */
 int oopDesc::size_given_klass(Klass* klass)  {
-
-	//assert(klass!= NULL, "klass 0x%lx error for obj: 0x%lx,  obj->_metadata->_klass value: 0x%lx \n", 
-	//																															(size_t)klass, (size_t)this, (size_t)(this->_metadata._klass) );
 	
 	// Semeru memory server error check
 	// Please check Semeru Bug#8.
-	if(klass == NULL){
+	if(!is_klass_valid(klass)){
 		log_debug(semeru,mem_trace)("obj 0x%lx is not accessible now, obj->_metadata->_klass value: 0x%lx. Skip this Region \n",
 																																	(size_t)this,  (size_t)(this->_metadata._klass));
 		return 0;	// concurent scanning error
