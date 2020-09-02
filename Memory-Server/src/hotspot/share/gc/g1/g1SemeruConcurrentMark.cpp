@@ -2505,9 +2505,6 @@ public:
 		//		b. The Remark is STW. why not use serial marking ??
 		//			  Or  the serial marking doesn't mean STW parallel marking ??
 		do {
-			// task->do_marking_step(1000000000.0 /* something very large */,
-			// 											true         /* do_termination       */,
-			// 											false        /* is_serial            */);
 
 				 task->do_semeru_marking_step(1000000000.0 /* something very large */,
 														true         /* do_termination       */,
@@ -3559,19 +3556,21 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	uint region_index = _curr_region->hrm_index();
 	size_t alive_words;
 	double alive_ratio;
+	double ratio_before_update; // debug
 
 	// Transfer the alive words from Worker local cache to Region's global stat . MT safe.
 	// And then clear the local cache entry.
-	alive_words = _mark_stats_cache.evict_region(region_index);	
+	alive_words = _mark_stats_cache.evict_region(region_index);	 // [!!] Work stealing thread can cause error here ???
+	ratio_before_update = _curr_region->alive_ratio();
 
 	// After adding more alive words, update the alive ratio.
 	// 1) Maybe updated by MT threads. [Fix ME]
 	// 2) Need to add the objects above _top_at_mark_start
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
-	if(alive_ratio >_curr_region->alive_ratio() && _curr_region->scan_failure == false ){ 
+	if(alive_ratio > ratio_before_update && _curr_region->scan_failure == false ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
 		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio from %f to %f", 
-																		__func__, worker_id(), region_index, _curr_region->alive_ratio(), alive_ratio);
+																		__func__, worker_id(), region_index, ratio_before_update, _curr_region->alive_ratio() );
 	}
 
 	// Memory server concurrent tracing for this region falied 
@@ -3775,6 +3774,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	// enable stealing when the termination protocol is enabled
 	// and do_marking_step() is not being called serially.
 	bool do_stealing = do_termination && !is_serial;
+
 	flags_of_cpu_server_state* cpu_srever_flags = _semeru_h->cpu_server_flags();
 	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
 
