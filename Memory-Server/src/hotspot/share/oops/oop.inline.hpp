@@ -258,7 +258,7 @@ int oopDesc::size_given_klass(Klass* klass)  {
 	// Semeru memory server error check
 	// Please check Semeru Bug#8.
 	if(!is_klass_valid(klass)){
-		log_debug(semeru,mem_trace)("obj 0x%lx is not accessible now, obj->_metadata->_klass value: 0x%lx. Skip this Region \n",
+		log_warning(semeru,mem_trace)("obj 0x%lx is not accessible now, obj->_metadata->_klass value: 0x%lx. Skip this Region \n",
 																																	(size_t)this,  (size_t)(this->_metadata._klass));
 		return 0;	// concurent scanning error
 	}

@@ -1251,7 +1251,7 @@ public:
 			// Join the multiple mark workers,
 			// Only one can exit the block.
 			SuspendibleThreadSetJoiner sts_join;		// [?] gdb Concurrent marking threads always get stuck here ??
-			log_debug(semeru, mem_trace)("%s, Schedule worker[0x%x] to do Concurrent Mark.", __func__, worker_id );
+			log_info(semeru, mem_trace)("%s, Schedule worker[0x%x] to do Concurrent Mark.", __func__, worker_id );
 
 			assert(worker_id < _semeru_cm->active_tasks(), "invariant");
 
@@ -3569,7 +3569,7 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
 	if(alive_ratio > ratio_before_update && _curr_region->scan_failure == false ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
-		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio from %f to %f", 
+		log_info(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio from %f to %f", 
 																		__func__, worker_id(), region_index, ratio_before_update, _curr_region->alive_ratio() );
 	}
 
@@ -3578,7 +3578,7 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	// [?] This may cause some performance overhead ?
 	if(_curr_region->scan_failure){
 		_curr_region->set_alive_ratio(1.0);
-		log_debug(semeru,mem_trace)("%s, wroker[0x%x] scan Region[0x%x] falied. Update alive_ratio to 1.0", __func__, worker_id(), region_index);
+		log_info(semeru,mem_trace)("%s, wroker[0x%x] scan Region[0x%x] falied. Update alive_ratio to 1.0", __func__, worker_id(), region_index);
 	}
 
 }
@@ -3942,7 +3942,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// Finish Site#1
 			// Processed all the freshly scanned Regions.
 			if(	_semeru_cm->mem_server_cset()->is_cm_scan_finished()){
-				log_debug(semeru,mem_trace)("%s, worker[0x%x]  processed all  the freshly evicted region.",__func__, worker_id() );
+				log_info(semeru,mem_trace)("%s, worker[0x%x]  processed all  the freshly evicted region.",__func__, worker_id() );
 			//	_semeru_cm->mem_server_cset()->scan_finished();  // [?] is this the right place to notify the finish of CM scanning ?
 			}
 
@@ -3984,7 +3984,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 
 				assert(_curr_region == claimed_region, "invariant");
-				log_debug(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
+				log_info(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
 
 				break; // break out of while loop.
 			}
@@ -4047,7 +4047,7 @@ out_tracing:
 	if (do_stealing && !has_aborted() ) {
 		// We have not aborted. This means that we have finished all that
 		// we could. Let's try to do some stealing...
-		log_debug(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
+		log_info(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
 
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
@@ -4088,7 +4088,7 @@ out_tracing:
 		// It's an adding procedure, will not cause MT problem.
 		// If we didn' steal any work,  the _curr_region should be NULL. We will skip the restore procedure.
 		restore_region_mark_stats();
-		log_debug(semeru,mem_trace)("%s, Restored tracing information for work_strealing..",__func__);
+		log_info(semeru,mem_trace)("%s, Restored tracing information for work_strealing..",__func__);
 					
 		// End Check #1, Cehck if the Region is written during the concurrent marking.
 		// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
