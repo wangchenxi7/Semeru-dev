@@ -724,6 +724,10 @@
           "Initial Semeru collected heap (Memory Pool) size (in bytes)")    \
           range(0, max_uintx)                                               \
                                                                             \
+  product(size_t, SemeruLocalCachePercent, 0,                               \
+          "Percentage of CPU memory to Remote memory pool. 0 to 100")       \
+          range(0, 100)                                                     \
+                                                                            \
   product(size_t, SemeruMemPoolMaxSize, ScaleForWordSize(96*M),             \
           "Maximum Semeru collected heap (Memory Pool) size (in bytes)")    \
           range(0, max_uintx)                                               \

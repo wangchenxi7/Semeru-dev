@@ -954,7 +954,7 @@ void G1RemSet::oops_into_collection_set_do(G1ParScanThreadState* pss, uint worke
   double mid = os::elapsedTime();
   scan_rem_set(pss, worker_i);;
   double end = os::elapsedTime();
-  tty->print("Update and scan remset: %lfs, %lfs\n", mid-start, end-mid);
+  log_debug(semeru)("Update and scan remset: %lfs, %lfs\n", mid-start, end-mid);
 }
 
 void G1RemSet::prepare_for_oops_into_collection_set_do() {

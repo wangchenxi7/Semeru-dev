@@ -33,7 +33,7 @@ then
 fi
 
 ## Macros 
-
+HOME="/mnt/ssd/semeru"
 semeru_dir="${HOME}/Semeru/linux-4.11-rc8/semeru"
 
 

@@ -2639,6 +2639,27 @@ jint Arguments::parse_each_vm_init_arg(const JavaVMInitArgs* args, bool* patch_m
         return JNI_EINVAL;
       }
 
+    // Local memory percentage
+    }else if(match_option(option, "-XX:SemeruLocalCachePercent=", &tail)){
+      julong local_mem_percentage = 0;
+      ArgsRange errcode = parse_memory_size(tail, &local_mem_percentage, 10, 100);  // String, value, min, max=default_int_max.
+      if (errcode != arg_in_range) {
+        jio_fprintf(defaultStream::error_stream(),
+                    "Invalid SemeruLocalCachePercent size: %s\n", option->optionString);
+        describe_range_error(errcode);
+        return JNI_EINVAL;
+      }
+
+      if (FLAG_SET_CMDLINE(size_t, SemeruLocalCachePercent, (size_t)local_mem_percentage) != JVMFlag::SUCCESS) {
+        return JNI_EINVAL;
+      }
+
+      // SemeruLocalCachePercent default is 0, which means not setted.
+      // if set, the valid range is [10, 100].
+      // This parameter will override other parameters 
+      // e.g.  -XX:NewRatio=#, 
+
+
     // SemeruConcGCThreads
     }else if(match_option(option, "-XX:RebuildThreshold=", &tail)){
       julong max_rebuild_threshold = 0;

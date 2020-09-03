@@ -3045,13 +3045,13 @@ G1CollectedHeap::do_collection_pause_at_safepoint(double target_pause_time_ms) {
     }
     HeapRegion* hr = _hrm->at(i);
     
-    tty->print("Before read: Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
+    log_debug(semeru)("Before read: Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
     if(!hr->is_free() && hr->is_old() && hr->cross_region_ref_target_queue()->_marked_from_root && !hr->_mem_to_cpu_gc->_cm_scanned) {
       hr->read_info_before_gc();
     }
   }
   double read_time_ed = os::elapsedTime();
-  tty->print("read MetaData: %lf\n", read_time_ed-read_time_st);
+  log_debug(semeru)("read MetaData: %lf\n", read_time_ed-read_time_st);
           commtime += read_time_ed-read_time_st;
 
 
@@ -3611,7 +3611,7 @@ public:
 
         evac.do_void();
         double end_evac = os::elapsedTime();
-        tty->print("Evac: %lfs\n", end_evac-start_evac);
+        log_debug(semeru,rdma)("Evac: %lfs\n", end_evac-start_evac);
 
         evac_term_attempts = evac.term_attempts();
         term_sec = evac.term_time();
@@ -4351,11 +4351,11 @@ void G1CollectedHeap::evacuate_collection_set(G1ParScanThreadStateSet* per_threa
     _collection_set._old_region_length -= _collection_set._rebuild_set_length;
 
 
-    tty->print("Collectionset 0x%lx: ", _collection_set._collection_set_cur_length);
+    log_debug(semeru)("Collectionset 0x%lx: ", _collection_set._collection_set_cur_length);
     for(size_t i = 0; i < _collection_set._collection_set_cur_length; i ++){
-      tty->print("%u", _collection_set._collection_set_regions[i]);
+      log_debug(semeru)("%u", _collection_set._collection_set_regions[i]);
     }
-    tty->print("\n");
+    log_debug(semeru)("\n");
 
 
     size_t* server_0_cset = NEW_C_HEAP_ARRAY(size_t, max_regions()/2, mtGC);
@@ -4385,11 +4385,11 @@ void G1CollectedHeap::evacuate_collection_set(G1ParScanThreadStateSet* per_threa
       // Update cset to memory server, if non-empty
       if(num_mem_cset){
         update_cset_to_mem_server(mem_id);
-        log_debug(semeru,rdma)("%s, write %lx regions cset to memory server[%lx] ",__func__, num_mem_cset, mem_id);
+        log_info(semeru,rdma)("%s, write %lx regions cset to memory server[%lx] ",__func__, num_mem_cset, mem_id);
       }
 
     }// end of mem_id, each memory server
-    log_debug(semeru,rdma)("%s, Update CSet to all memory servers. \n", __func__);
+    log_info(semeru,rdma)("%s, Update CSet to all memory servers. \n", __func__);
 
 
     close_stw_window();

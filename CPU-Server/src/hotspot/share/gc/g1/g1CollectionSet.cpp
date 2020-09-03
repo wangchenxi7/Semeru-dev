@@ -636,19 +636,15 @@ void G1CollectionSet::finalize_parts(G1SurvivorRegions* survivors) {
       new_collection_set_length++;
     }
     else if(hr->is_old()){
-      // tty->print("Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
-      // tty->print("Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
-      // tty->print("Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
-      // if(hr->cross_region_ref_target_queue()->_marked_from_root)
-      //   hr->read_info_before_gc();
-      tty->print("Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
-      tty->print("Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
-      tty->print("Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
+      
+      log_debug(semeru)("Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
+      log_debug(semeru)("Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
+      log_debug(semeru)("Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
 
       if(cache_ratio_pages(hr) > cache_threshold_in_pages && hr->_mem_to_cpu_gc->_cm_scanned) {
          /*&& hr->_mem_to_cpu_gc->_alive_ratio < 0.5*/
-        tty->print("Candidate Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
-        tty->print("Candidate Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
+        log_debug(semeru)("Candidate Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
+        log_debug(semeru)("Candidate Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
         //mhr: debug
         candidates_regions[candidates_length++] = hr;
 
@@ -740,9 +736,9 @@ void G1CollectionSet::finalize_parts(G1SurvivorRegions* survivors) {
         hr->cross_region_ref_target_queue()->reset();
         //hr->_mem_to_cpu_gc->_cm_scanned = false;
         hr->reset_region_cm_scanned();
-        tty->print("Rescan Region %u marked from root: %d %d\n", hr->hrm_index(), hr->cross_region_ref_target_queue()->_marked_from_root, hr->cross_region_ref_target_queue()->_marked_from_root);
-        tty->print("Rescan Region %u scanned?: %d\n", hr->hrm_index(), hr->_mem_to_cpu_gc->_cm_scanned);
-        tty->print("Rescan Region %u alive ratio: %lf\n", hr->hrm_index(), hr->_mem_to_cpu_gc->_alive_ratio);
+        log_debug(semeru)("Rescan Region %u marked from root: %d %d\n", hr->hrm_index(), hr->cross_region_ref_target_queue()->_marked_from_root, hr->cross_region_ref_target_queue()->_marked_from_root);
+        log_debug(semeru)("Rescan Region %u scanned?: %d\n", hr->hrm_index(), hr->_mem_to_cpu_gc->_cm_scanned);
+        log_debug(semeru)("Rescan Region %u alive ratio: %lf\n", hr->hrm_index(), hr->_mem_to_cpu_gc->_alive_ratio);
         _collection_set_regions[_collection_set_cur_length++] = hr->hrm_index();
         _rebuild_set_length++;
       }
