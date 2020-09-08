@@ -57,6 +57,9 @@
 #define CP_ZERO_MAPPED_PAGE (int)-1  
 
 
+//#define DEBUG_LATENCY_CLIENT 1
+
+
 
 //
 // ################################ Structure definition of RDMA ###################################
@@ -71,30 +74,32 @@
  * For both CM event, data evetn.
  * RDMA data transfer is desinged in an asynchronous style. 
  */
-enum rdma_session_context_state { 
+enum rdma_queue_state { 
 	IDLE = 1,		 // 1, Start from 1.
 	CONNECT_REQUEST,
 	ADDR_RESOLVED,
 	ROUTE_RESOLVED,
 	CONNECTED,		// 5,  updated by IS_cma_event_handler()
 
-	FREE_MEM_RECV,
+	MEMORY_SERVER_AVAILABLE, // 6
+
+	FREE_MEM_RECV,		// After query, we know the available regions on memory server.
 	RECEIVED_CHUNKS,	// get chunks from remote memory server
 	RDMA_BUF_ADV,   // designed for server
 	WAIT_OPS,
-	RECV_STOP,    	// 10
+	RECV_STOP,    	// 11
 
 	RECV_EVICT,
 	RDMA_WRITE_RUNNING,
 	RDMA_READ_RUNNING,
 	SEND_DONE,
-	RDMA_DONE,     	// 15
+	RDMA_DONE,     	// 16
 
 	RDMA_READ_ADV,	// updated by IS_cq_event_handler()
 	RDMA_WRITE_ADV,
 	CM_DISCONNECT,
 	ERROR,
-	TEST_DONE,		// 20, for debug
+	TEST_DONE,		// 21, for debug
 };
 
 
@@ -107,19 +112,22 @@ enum mem_type {
 };
 
 
+  // 2-sided RDMA message type
+  // Used to communicate with cpu servers.
 	enum message_type{
-		DONE = 1,				// Start from 1
+		DONE = 1,					// Start from 1
 		GOT_CHUNKS,				// Get the remote_addr/rkey of multiple Chunks
-		GOT_SINGLE_CHUNK,		// Get the remote_addr/rkey of a single Chunk
-		FREE_SIZE,
-		EVICT,        			// 5
-		ACTIVITY,				
-		
-		STOP,					//7, upper SIGNALs are used by server, below SIGNALs are used by client.
+		GOT_SINGLE_CHUNK,	// Get the remote_addr/rkey of a single Chunk
+		FREE_SIZE,				//
+		EVICT,        		// 5
 
+		ACTIVITY,					// 6
+		STOP,							//7, upper SIGNALs are used by server, below SIGNALs are used by client.
 		REQUEST_CHUNKS,
 		REQUEST_SINGLE_CHUNK,	// Send a request to ask for a single chunk.
-		QUERY         			// 10
+		QUERY,         			// 10
+
+		AVAILABLE_TO_QUERY  // 11 This memory server is oneline to server.
 	};
 
 
@@ -247,6 +255,8 @@ struct rmem_meta_space_layout{
  */
 struct rmem_rdma_command{
  
+	struct semeru_rdma_queue * rdma_queue;
+
 	// RDMA wr for 1-sdied RDMA read/write.
 	struct ib_rdma_wr 	rdma_sq_wr;			// wr for 1-sided RDMA write/send.
 	
@@ -294,44 +304,40 @@ struct rmem_rdma_command{
 
 
 /**
- * Assign a rmem_rdma_queue to each dispatch queue to handle the poped request.
- * 		 rmem_rdma_queue is added to	 blk_mq_hw_ctx->driver_data
- * 
- * [?] We removed the rmem_rdma_command pool. Then is it necessary to keep this rdma_queue ??
- * 
- * Fields
- * 		struct rmem_rdma_command* rmem_rdma_cmd,  a list of rmem_rdma_command. 
- * 			Use a single pointer to traverse the rmem_rdma_cmd_list.
- * 			list_head : rmem_rdma_cmd_list
- * 			list_tail : rmem_rdma_cmd_list + rmem_rdma_queue->length -1
- * 
- * 		struct rmem_device_control, points to Disk Driver controller/context.
- * 											
- * 			
- * More Explanation
- * 	[?] But all these rdma_queues race for the same ib_qp ?? 
- * 	All the RDMA read/write WR are attached to the only ib_qp ??
- *  
- * 	Each poped I/O request needs a rmem_rdma_command to handle.
- * 	Length of rmem_rdma_cmd_list should match the depth/length of dispatch queue.
- * 	The rmem_rdma_cmd_list should be allocated intialized in advance.
- * 
+ * Build a QP for each core on cpu server. 
+ * [?] This design assume we only have one memory server.
+ * 			Extern this design later.
  * 
  */
-struct rmem_rdma_queue {
-	struct rmem_rdma_command			*rmem_rdma_cmd_list;	// one-sided RDMA read/write message list, one for each i/o request
-	uint32_t 											rdma_queue_depth;		// length of the rmem_rdma_comannd_list.
-	uint32_t											cmd_ptr;						// Manage the rmem_rdma_cmd_list in a bump pointer way.
-	uint32_t											q_index;						// Assign the hw_index in blk_mq_ops->.init_hctx.
+struct semeru_rdma_queue {
+  // RDMA client ID, one for per QP.
+	struct rdma_cm_id *cm_id;		//  ? bind to QP
 
-	//struct rmem_device_control		*rmem_dev_ctrl;  		// point to the device driver/context
+	// ib events 
+  struct ib_cq *cq;			// Completion queue
+	struct ib_qp *qp;			// Queue Pair
+
+	enum rdma_queue_state state;  // the current status of the QP.
+	wait_queue_head_t 		sem;    // semaphore for wait/wakeup
+	uint8_t  	freed;			// some function can only be called once, this is the flag to record this.
+	atomic_t rdma_post_counter;
+
+
+	int q_index;					// initialized to disk hardware queue index
 	struct rdma_session_context		*rdma_session;			// Record the RDMA session this queue belongs to.
-	// other fields
-
-	spinlock_t rdma_queue_lock;		// Used for manipulating on the rmem_rdma_cmd_list
-
 };
 
+
+/**
+ * The rdma device.
+ * It's shared by multiple QP and CQ. 
+ * One RDMA device per server.
+ * 
+ */
+struct semeru_rdma_dev {
+  struct ib_device *dev;
+  struct ib_pd *pd;
+};
 
 
 
@@ -339,31 +345,15 @@ struct rmem_rdma_queue {
  * Mange the RDMA connection to a remote server. 
  * Every Remote Memory Server has a dedicated rdma_session_context as controller.
  * 	
- * Fields
- * 		rdma_cm_id		:  the RDMA device ?
- * 		Queue Pair (QP) : 
- * 		Completion Queue (CQ) :
- * 		
  * More explanation 
- * 	In our design, the remote memory driver can have several RDMA sessions connected to
- * 	differnt Memory server. All the JVM heap constitue the universal Java heap.
- * 
- * [?] how can we get the device for MR register??
+ * [?] One session per server. Extend here later.
  * 
  */
 struct rdma_session_context {
 
-	// index
-	int session_index;
-
-	// cm events
-	struct rdma_cm_id *cm_id;	// IB device information ?
-
-  // ib events 
-  struct ib_cq *cq;			// Both send/recieve queue share the same ib_cq.
-	struct ib_pd *pd;			// protect_domain ? used for device protection ??
-	struct ib_qp *qp;			//[!] There is only one QP for a Remote Memory Server.
-
+	// 1) RDMA QP/CQ management
+	struct semeru_rdma_dev *rdma_dev; // The RDMA device of cpu server.
+	struct semeru_rdma_queue * rdma_queues;	// point to multiple QP 
 
   // For infiniband connection rdma_cm operation
   uint16_t 	port;			/* dst port in NBO */
@@ -372,12 +362,9 @@ struct rdma_session_context {
   int 			send_queue_depth;		// Send queue depth. Both 1-sided/2-sided RDMA wr is limited by this number.
 	int 			recv_queue_depth;		// Receive Queue depth. 2-sided RDMA need to post a recv wr.
 
-  enum rdma_session_context_state 	state;		/* used for cond/signalling */
-  wait_queue_head_t 								sem;      	// semaphore for wait/wakeup
-	uint8_t  	freed;			// some function can only be called once, this is the flag to record this.
 
 	//
-  // 3) 2-sided RDMA section. 
+  // 2) 2-sided RDMA section. 
   //		This section is used for RDMA connection and basic information exchange with remote memory server.
 
   // DMA Receive buffer
@@ -387,9 +374,9 @@ struct rdma_session_context {
   //dma_addr_t 			recv_dma_addr;	// It's better to check the IB DMA address limitations, 32 or 64
 	u64									recv_dma_addr;	
 	//DECLARE_PCI_UNMAP_ADDR(recv_mapping)	// Use MACRO to define a DMA fields. It will do architrecture check first. same some fields.
-	//struct ib_mr *recv_mr;
 
-  	// DMA send buffer
+
+  // DMA send buffer
 	// ib_send_wr, used for posting a two-sided RDMA message 
   struct ib_send_wr 	sq_wr;			// send queue wr
 	struct ib_sge 			send_sgl;		// attach the rdma buffer to sg entry. scatter-gather entry number is limitted by IB hardware.
@@ -397,32 +384,26 @@ struct rdma_session_context {
 	//dma_addr_t 			send_dma_addr;
 	u64 								send_dma_addr;
 	//DECLARE_PCI_UNMAP_ADDR(send_mapping)
-	//struct ib_mr *send_mr;
 
 
-	// [?]Unknown porpuse ??
-	// get lkey from dma_mr->lkey.
-	struct ib_mr 			*dma_mr;  // [?] receive mr to be registered ??
-  enum mem_type 		mem;		//  only when mem == DMA, we need allocate and intialize dma_mr.
-	
 
-	// 4) For 1-sided RDMA read/write
+	// 3) For 1-sided RDMA read/write
 	// I/O request --> 1 sided RDMA message.
 	// rmem_rdma_queue store these reserved 1-sided RDMA wr information.
 	
-	// 4.1) Data-Path, used for swaping mechanism
-	// [XXX] The queue is abandoned. All the rmem_rdma_command is reserved in each i/o request. No need to allocate and keep them separately.
-	struct rmem_rdma_queue		*rmem_rdma_queue_list; 		// one rdma_queue per dispatch queue.
+	// 3.1) Data-Path, used for swaping mechanism
 
-	// 4.2) Control-Path, used for user-space invocation.
+
+	// 3.2) Control-Path, used for user-space invocation.
 	struct rmem_rdma_command				*cp_rmem_rdma_read_cmd;
 	struct rmem_rdma_command				*cp_rmem_rdma_write_cmd;
-	atomic_t rdma_post_counter; // Control the outstanding wr number. Less than RDMA_SEND_QUEUE_DEPTH.
+	// Move into the rdma_queue
+	//atomic_t rdma_post_counter; // Control the outstanding wr number. Less than RDMA_SEND_QUEUE_DEPTH.
 
 
 	struct rmem_meta_space_layout 	semeru_meta_space;
 
-	// 5) manage the CHUNK mapping.
+	// 4) manage the CHUNK mapping.
 	struct remote_mapping_chunk_list remote_chunk_list;
 
 
@@ -434,7 +415,8 @@ struct rdma_session_context {
 	uint64_t	write_tag_dma_addr;  			 // corresponding dma address, just the physical address.
 	struct rmem_rdma_command *write_tag_rdma_cmd;
 
-	//
+
+	// 5) The block deivce
 	// Points to the Disk Driver Controller/Context.
 	// RDMA part is initialized first, 
 	// then invoke "RMEM_init_disk_driver(void)" to get the Disk Driver controller.
@@ -502,7 +484,7 @@ struct rmem_device_control {
 	//
 	//[?] What's  this queue used for ?
   	//struct rmem_rdma_queue	  	*rdma_queues;			//  [?] The rdma connection session ?? one rdma session queue per software staging queue ??
-	//struct rdma_session_context	*rdma_session;				// RDMA connection context, one per Remote Memory Server. Point to the first rdma_session.
+	struct rdma_session_context	*rdma_session;				// RDMA connection context, one per Remote Memory Server.
 
 
 	// Below fields are used for debug.
@@ -551,29 +533,30 @@ static DECLARE_WAIT_QUEUE_HEAD(req_event);
 
 
 
-int 	octopus_RDMA_connect(struct rdma_session_context **rdma_session_ptr);
+int 	rdma_session_connect(struct rdma_session_context *rdma_session_ptr);
 int 	octopus_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event *event);
 
-void 	octopus_cq_event_handler(struct ib_cq * cq, void *rdma_session_context);
-int 	handle_recv_wr(struct rdma_session_context *rdma_session, struct ib_wc *wc);
-int 	send_message_to_remote(struct rdma_session_context *rdma_session, int messge_type  , int size_gb);
+void 	semeru_cq_event_handler(struct ib_cq * cq, void *rdma_session_context);
+int 	handle_recv_wr(struct semeru_rdma_queue *rdma_session, struct ib_wc *wc);
+int 	send_message_to_remote(struct rdma_session_context *rdma_session, int rmda_queue_ind, int messge_type  , int size_gb);
 void 	map_single_remote_memory_chunk(struct rdma_session_context *rdma_session);
-
+int 	init_rdma_sessions(struct rdma_session_context *rdma_session);
+int 	setup_rdma_session_commu_buffer(struct rdma_session_context * rdma_session);
 //
 // 1-sided RDMA message
 //
 
 // Control the number of outstanding wr.
-int enqueue_send_wr(struct rdma_session_context *rdma_session, struct rmem_rdma_command *rdma_cmd_ptr);
+int enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct rmem_rdma_command *rdma_cmd_ptr);
 
 // Data-Path 
-int 	dp_build_rdma_wr(struct rdma_session_context *rdma_session, struct rmem_rdma_command *rdma_cmd_ptr, struct request * io_rq, 
+int 	dp_build_rdma_wr( struct rmem_rdma_command *rdma_cmd_ptr, struct request * io_rq, 
 									struct remote_mapping_chunk *	remote_chunk_ptr , uint64_t offse_within_chunk, uint64_t len);
 
-int		dp_post_rdma_write(struct rdma_session_context *rdma_session, struct request* io_rq, 
+int		dp_post_rdma_write(struct rdma_session_context *rdma_session, struct request* io_rq, struct semeru_rdma_queue* rdma_q_ptr,  
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offse_within_chunk, uint64_t len );
 
-int 	dp_post_rdma_read(struct rdma_session_context *rdma_session, struct request* io_rq, 
+int 	dp_post_rdma_read(struct rdma_session_context *rdma_session, struct request* io_rq, struct semeru_rdma_queue* rdma_q_ptr,  
 					struct remote_mapping_chunk *remote_chunk_ptr, uint64_t offse_within_chunk, uint64_t len );
 
 int 	init_write_tag_rdma_command(struct rdma_session_context *rdma_session);
@@ -588,14 +571,14 @@ int cp_post_rdma_read(struct rdma_session_context *rdma_session, char __user * s
 int cp_post_rdma_write(struct rdma_session_context *rdma_session, char __user * start_addr, uint64_t bytes_len );
 
 // Data-Path and Control-Path use the same receive functions.
-int rdma_write_done(struct rdma_session_context * rdma_session, struct ib_wc *wc);
-int rdma_read_done(struct rdma_session_context * rdma_session, struct ib_wc *wc);
+int rdma_write_done(struct ib_wc *wc);
+int rdma_read_done(struct ib_wc *wc);
 
-int dp_rdma_read_done(struct rdma_session_context * rdma_session, struct rmem_rdma_command 	*rdma_cmd_ptr);
-int cp_rdma_read_done(struct rdma_session_context * rdma_session, struct rmem_rdma_command 	*rdma_cmd_ptr);
+int dp_rdma_read_done(struct rmem_rdma_command 	*rdma_cmd_ptr);
+int cp_rdma_read_done(struct rmem_rdma_command 	*rdma_cmd_ptr);
 
-int dp_rdma_write_done(struct rdma_session_context * rdma_session, struct rmem_rdma_command 	*rdma_cmd_ptr);
-int cp_rdma_write_done(struct rdma_session_context * rdma_session, struct rmem_rdma_command 	*rdma_cmd_ptr);
+int dp_rdma_write_done(struct rmem_rdma_command 	*rdma_cmd_ptr);
+int cp_rdma_write_done(struct rmem_rdma_command 	*rdma_cmd_ptr);
 
 uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session,  struct scatterlist* sgl, 
 													char  ** addr_scan_ptr, char* end_addr);
@@ -612,7 +595,7 @@ void 	bind_remote_memory_chunks(struct rdma_session_context *rdma_session );
 
 
 // Transfer Block I/O to RDMA message
-int 	transfer_requet_to_rdma_message( struct request * rq);
+int 	transfer_requet_to_rdma_message(struct semeru_rdma_queue* rdma_queue, struct request * rq);
 void 	copy_data_to_rdma_buf(struct request *io_rq, struct rmem_rdma_command *rdma_ptr);
 
 
@@ -625,9 +608,9 @@ int 	RMEM_create_device(char* dev_name, struct rmem_device_control* rmem_dev_ctr
 //
 // Resource free
 //
-void 	octopus_free_buffers(struct rdma_session_context *rdma_session);
-void 	octopus_free_rdma_structure(struct rdma_session_context *rdma_session);
-int 	octopus_disconenct_and_collect_resource(struct rdma_session_context *rdma_session);
+void 	semeru_free_buffers(struct rdma_session_context *rdma_session);
+void 	semeru_free_rdma_structure(struct rdma_session_context *rdma_session);
+int 	semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_session);
 
 int 	octopus_free_block_devicce(struct rmem_device_control * rmem_dev_ctl );
 
@@ -665,8 +648,7 @@ bool 	check_sector_and_page_size(struct request *io_rq, const char* message);
 
 // Initialize in main().
 // One rdma_session_context per memory server connected by IB.
-extern struct rdma_session_context 	*rdma_session_global;   // [!!] Unify the RDMA context and Disk Driver context global var [!!]
-extern int		*region_to_mem_server_mapping;
+extern struct rdma_session_context 	rdma_session_global;   // [!!] Unify the RDMA context and Disk Driver context global var [!!]
 extern struct rmem_device_control  	rmem_dev_ctrl_global;
 extern struct local_block_device	local_bd;
 
@@ -728,8 +710,8 @@ int syscall_hello(int num);
 //long sys_hello(void);
 
 
-char* semeru_rdma_read(int target_server, char __user * start_addr, unsigned long size);
-char* semeru_rdma_write(int target_server, char __user * start_addr, unsigned long size);
+char* semeru_rdma_read(int target_mem_server, char __user * start_addr, unsigned long size);
+char* semeru_rdma_write(int target_mem_server, char __user * start_addr, unsigned long size);
 
 // Get the pte_t value  of the user space virtual address.
 // For the kernel space virtual address, allocated by kmalloc or kzalloc, user the virt_to_phys is good.

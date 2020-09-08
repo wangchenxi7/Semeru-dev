@@ -80,37 +80,28 @@ u64 * last_cycles;
  * 
  * 
  * More Explanation
- *      1) [?] The problem is that every hardware core will invoke blk_mq_ops->.init_hctx  ?
- *        => Sure, check ?
- *      
- *      2) Should initialize rdma_session_context->rmem_rdma_queue first.
- * 
- *      3) [?] Each hardware queue can correspond to rdma queue of any memory server.
+ *     Each hardware queue coresponds to a rdma_queue.
  * 
  */
 static int rmem_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int hw_index){
 
   int ret  = 0;
-
-  //struct rmem_device_control  *rmem_dev_ctrl = data;
-  //struct rmem_rdma_queue      *rdma_q_ptr; 
+  struct rmem_device_control  *rmem_dev_ctrl = data;
+  struct semeru_rdma_queue      *rdma_queue; 
 
   #ifdef DEBUG_BD_ONLY
     // Debug Disk driver module
 
   #else
-    //rdma_q_ptr  = &(rmem_dev_ctrl->rdma_session->rmem_rdma_queue_list[hw_index]);  // Initialize rdma_queue first.
+    rdma_queue  = &(rmem_dev_ctrl->rdma_session->rdma_queues[hw_index]);  // Initialize rdma_queue first.
 
     // do some initialization for the  rmem_rdma_queues
-    // 
-    //rdma_q_ptr->q_index   = hw_index;
-
-
-  // end of no-define DEBUG_BD_ONLY
+    rdma_queue->q_index   = hw_index;
+    
   #endif
     // Assign rdma_queue to dispatch queue as driver data.
     // Decide the mapping between dispatch queue and RDMA queues 
-    //hctx->driver_data = rdma_q_ptr;  // Assign the RDMA queue as dispatch queue driver data.
+    hctx->driver_data = rdma_queue;  // Assign the RDMA queue as dispatch queue driver data.
 
 
   return ret;
@@ -130,7 +121,7 @@ static int rmem_init_hctx(struct blk_mq_hw_ctx *hctx, void *data, unsigned int h
  * 
  * More Explanation
  * 
- * [?] For the usage of bio : Documentation/block/biodoc.txt
+ * For the usage of bio : Documentation/block/biodoc.txt
  * 
  * [?] Which thread is executing this code ?
  *     Kswapd ? or this is a disk driver daemon thread ?
@@ -143,14 +134,10 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
   int cpu;
   // Get the corresponding RDMA queue of this dispatch queue.
   // blk_mq_hw_ctx->driver_data  stores the RDMA connection context.
-  //struct rmem_rdma_queue* rdma_q_ptr = hctx->driver_data;   // [X] RDMA queue is useless now.
-  struct rmem_rdma_queue* rdma_q_ptr = NULL;
+  struct semeru_rdma_queue* rdma_queue = hctx->driver_data;   // get the corresponding rdma_queue
   struct request *rq = bd->rq;
   
 
-  //
-  // TO BE DONE
-  //
   #ifdef DEBUG_MODE_BRIEF
     u64 seg_num   = rq->nr_phys_segments;  // For swap bio, each segment should be 4K with 4K alignemtn. 
     u64 byte_len  = blk_rq_bytes(rq);       // request->_data_len, the sector size to be read/written.
@@ -173,7 +160,7 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
     //  }
     // #endif
 
-    check_segment_address_of_request(rq, "rmem_queue_rq");
+   // check_segment_address_of_request(rq, "rmem_queue_rq");
 
   #endif  // end of DEBUG_MODE_BRIEF
 
@@ -223,7 +210,7 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
     cpu = get_cpu();  // disable cpu preempt
     #ifdef DEBUG_MODE_BRIEF
-      printk(KERN_INFO "%s: get cpu %d for hardware queue 0x%x \n",__func__, cpu, hctx->queue_num);
+      printk(KERN_INFO "%s: get cpu %d for hardware queue %d \n",__func__, cpu, hctx->queue_num);
     #endif
   
     // start counting the time
@@ -241,7 +228,7 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
     #endif
 
     // Transfer I/O request to 1-sided RDMA messages.
-    internal_ret = transfer_requet_to_rdma_message( rq);
+    internal_ret = transfer_requet_to_rdma_message(rdma_queue, rq);
     #ifdef DEBUG_MODE_BRIEF
     if(unlikely(internal_ret)){
       printk(KERN_ERR "%s, transfer_requet_to_rdma_message is failed. \n", __func__);
@@ -278,6 +265,11 @@ static int rmem_queue_rq(struct blk_mq_hw_ctx *hctx, const struct blk_mq_queue_d
 
 
 	  #endif
+
+
+
+
+
 
 
     put_cpu();  // enable cpu preempt 
@@ -331,7 +323,7 @@ int rmem_end_io(struct bio * bio, int err){
  */
 static struct blk_mq_ops rmem_mq_ops = {
     .queue_rq       = rmem_queue_rq,
-    .map_queues     = blk_mq_map_queues,      // Map staging queues to  hardware dispatch queues via the cpu id.
+    .map_queues     = blk_mq_map_queues,    // Map staging queues to  hardware dispatch queues via the cpu id.
     .init_hctx      = rmem_init_hctx,
  // .complete       =                       // [?] Do we need to initialize this ?
 };
@@ -342,6 +334,7 @@ static struct blk_mq_ops rmem_mq_ops = {
  * Transfer the I/O requset to 1-sided RDMA message.
  * 
  * Parameters
+ *    rdma_queue: the corresponding RDMA queue of this dispatch queue.
  *    rq        : the popped requset from dispatch queue.
  * 
  * 
@@ -351,14 +344,16 @@ static struct blk_mq_ops rmem_mq_ops = {
  *         
  * 
  */
-int transfer_requet_to_rdma_message( struct request * rq){
+int transfer_requet_to_rdma_message(struct semeru_rdma_queue* rdma_queue, struct request * rq){
 
   int  ret = 0;
+
+  
   int  write_or_not    = (rq_data_dir(rq) == WRITE);
   u64  start_addr      = blk_rq_pos(rq) << RMEM_LOGICAL_SECT_SHIFT;    // request->_sector. Sector start address, change to bytes.
   u64  bytes_len       = blk_rq_bytes(rq);                             // request->_data_len. The sector of request should be contiguous ?
-  struct rdma_session_context  *rdma_session_ptr;
 
+  struct rdma_session_context  *rmda_session = rdma_queue->rdma_session;
   
   struct remote_mapping_chunk   *remote_chunk_ptr;
   u64  start_chunk_index        = start_addr >> CHUNK_SHIFT;    // REGION_SIZE_GB/chunk in default.
@@ -401,13 +396,13 @@ int transfer_requet_to_rdma_message( struct request * rq){
       //goto err;
     }
 
-    //debug
+    // 1+8 Regions. The first Region is reserved for meta data.
     // Change all  the memory access to a specific chunk.
-    // if(start_chunk_index == 7)
-    //   start_chunk_index =1;
-    // start_chunk_index   = 0;
-    // offset_within_chunk = 0x1000;
-    // end of debug
+     if(start_chunk_index >= MAX_REGION_NUM){
+        start_chunk_index =1;
+        offset_within_chunk = 0x1000;
+        printk(KERN_ERR "%s, error. chunk exceed boundary : %llu. reset to chunk[1] \n", __func__, start_chunk_index);
+     }
 
   #endif
 
@@ -421,23 +416,14 @@ int transfer_requet_to_rdma_message( struct request * rq){
   //     2) the rest, Data Regions. Fully mapped. Managed by Swap.
   //     So, we skip the first Region.
   start_chunk_index += 1; 
-  //printk("%s, start_chunk_index 0x%llx, map to memory server %d \n",__func__, start_chunk_index, region_to_mem_server_mapping[start_chunk_index]);
-
-  rdma_session_ptr = &rdma_session_global[ region_to_mem_server_mapping[start_chunk_index] ];
-  //printk("%s, get rdma_session 0x%lx \n", __func__, (size_t)rdma_session_ptr);
-
-  remote_chunk_ptr  = &(rdma_session_ptr->remote_chunk_list.remote_chunk[start_chunk_index]);
-
-
-
+  remote_chunk_ptr  = &(rmda_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
   #ifdef DEBUG_MODE_BRIEF
   
   // printk("%s: TRANSFER TO RDMA MSG:  I/O request start_addr : 0x%llx, byte_length 0x%llx  --> \n ",__func__, start_addr, bytes_len);
 
-  printk("%s: rdma_session[%d], TO RDMA MSG[%llu], remote chunk[%llu], chunk_addr 0x%llx, rkey 0x%x offset 0x%llx, byte_len : 0x%llx  \n",  
+  printk("%s: TO RDMA MSG[%llu], remote chunk[%llu], chunk_addr 0x%llx, rkey 0x%x offset 0x%llx, byte_len : 0x%llx  \n",  
                                                                 __func__ ,
-                                                                rdma_session_ptr->session_index,
                                                                 rmda_ops_count,  
                                                                 start_chunk_index,  
                                                                 remote_chunk_ptr->remote_addr, 
@@ -452,14 +438,12 @@ int transfer_requet_to_rdma_message( struct request * rq){
   // start i/o request timeout counting ?
   blk_mq_start_request(rq);
 
-  //debug
-  //blk_mq_end_request(rq,rq->errors);
 
   // Build the 1-sided RDMA read/write.
   if(write_or_not){
     // post a 1-sided RDMA write, Data-Path
     // Into RDMA section.
-    ret = dp_post_rdma_write(rdma_session_ptr ,rq, remote_chunk_ptr,  offset_within_chunk, bytes_len);
+    ret = dp_post_rdma_write(rmda_session ,rq, rdma_queue, remote_chunk_ptr,  offset_within_chunk, bytes_len);
     #ifdef DEBUG_MODE_BRIEF
     if(unlikely(ret)){
       printk(KERN_ERR "%s, post 1-sided RDMA write failed. \n", __func__);
@@ -469,7 +453,7 @@ int transfer_requet_to_rdma_message( struct request * rq){
 
   }else{
     // post a 1-sided RDMA read, Data-Path
-    ret = dp_post_rdma_read(rdma_session_ptr, rq, remote_chunk_ptr,  offset_within_chunk, bytes_len);
+    ret = dp_post_rdma_read(rmda_session, rq, rdma_queue, remote_chunk_ptr,  offset_within_chunk, bytes_len);
     #ifdef DEBUG_MODE_BRIEF
     if(unlikely(ret)){
       printk(KERN_ERR "%s, post 1-sided RDMA read failed. \n", __func__);
@@ -607,9 +591,9 @@ static int init_blk_mq_queue(struct rmem_device_control* rmem_dev_ctrl){
   page_size = PAGE_SIZE;           // alignment to RMEM_SECT_SIZE
 
   blk_queue_logical_block_size(rmem_dev_ctrl->queue, RMEM_LOGICAL_SECT_SIZE); // logical block size, 4KB. Access granularity generated by Kernel
-    blk_queue_physical_block_size(rmem_dev_ctrl->queue, RMEM_PHY_SECT_SIZE);    // physical block size, 512B. Access granularity generated by Drvier (to handware disk)
-    sector_div(page_size, RMEM_LOGICAL_SECT_SIZE);                              // page_size /=RMEM_SECT_SIZE
-    blk_queue_max_hw_sectors(rmem_dev_ctrl->queue, RMEM_QUEUE_MAX_SECT_SIZE);   // [?] 256kb for current /dev/sda
+  blk_queue_physical_block_size(rmem_dev_ctrl->queue, RMEM_PHY_SECT_SIZE);    // physical block size, 512B. Access granularity generated by Drvier (to handware disk)
+  sector_div(page_size, RMEM_LOGICAL_SECT_SIZE);                              // page_size /=RMEM_SECT_SIZE
+  blk_queue_max_hw_sectors(rmem_dev_ctrl->queue, RMEM_QUEUE_MAX_SECT_SIZE);   // [?] 256kb for current /dev/sda
 
 
   return ret;
@@ -755,26 +739,18 @@ err:
 /**
  *  Allocate and initialize the fields of Driver controller/context.
  * 
- *  [?] What's the necessary fields ?
- * 
  */
 int init_rmem_device_control(char* dev_name, struct rmem_device_control* rmem_dev_ctrl){
   
   int ret = 0;
 
-  // if driver controller is null, create a new driver context.
-  //if(!rmem_dev_ctrl){
 
-    //
-    // [?] Can we don the allocation during kernel booting time ??
-    // 
-    //rmem_dev_ctrl = (struct rmem_device_control *)kzalloc(sizeof(struct rmem_device_control), GFP_KERNEL);  // kzlloc, initialize memory to zero.
-    if(rmem_dev_ctrl == NULL){
-      ret = -1;
-      pr_err("Allocate struct rmem_device_control failed \n");
-      goto out;
-    }
- // }
+  if(rmem_dev_ctrl == NULL){
+    ret = -1;
+    printk(KERN_ERR "%s, Allocate struct rmem_device_control failed \n", __func__);
+    goto err;
+  }
+ 
 
   if(dev_name != NULL ){
     //Use assigned name
@@ -794,7 +770,7 @@ int init_rmem_device_control(char* dev_name, struct rmem_device_control* rmem_de
   // blk_mq_tag_set, request_queue, rmem_rdma_queue are waiting to be initialized later. 
   //
 
-out:
+err:
   return ret;
 }
 

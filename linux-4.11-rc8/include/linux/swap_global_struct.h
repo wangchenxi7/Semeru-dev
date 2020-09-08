@@ -153,15 +153,15 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 
 
 // Number of Memory server
-#define NUM_OF_MEMORY_SERVER	2
+#define NUM_OF_MEMORY_SERVER	1
 
 // Memory server #1, Region[1] to Region[5]
 #define MEMORY_SERVER_0_REGION_START_ID		1
 #define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
 
 // Memory server #2, Region[5] to Region[9]
-#define MEMORY_SERVER_1_REGION_START_ID		5
-//#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
+//#define MEMORY_SERVER_1_REGION_START_ID		5
+#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
 #define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
 
 //
