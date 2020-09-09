@@ -118,11 +118,18 @@
 // //################################## Global variable control ##################################
 
 // Number of Memory server
-#define NUM_OF_MEMORY_SERVER	2
-
+#define NUM_OF_MEMORY_SERVER	1
 #define CUR_MEMORY_SERVER_ID 0
 
-static const char cur_mem_server_ip[]    = "10.0.0.2";
+// Memory server #1, Region[1] to Region[5]
+#define MEMORY_SERVER_0_REGION_START_ID		1
+
+// Memory server #2, Region[5] to Region[9]
+//#define MEMORY_SERVER_1_REGION_START_ID		5
+#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
+
+
+static const char cur_mem_server_ip[]    = "10.10.10.8";
 static const char cur_mem_server_port[]  = "9400";
 
 #define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
@@ -132,6 +139,7 @@ static const char cur_mem_server_port[]  = "9400";
 
 //
 // Debug options
+#define DEBUG_RDMA_SERVER 1
 
 //#define ASSERT 1
 
@@ -201,13 +209,7 @@ static const char cur_mem_server_port[]  = "9400";
 #define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
 
 
-// Memory server #1, Region[1] to Region[5]
-#define MEMORY_SERVER_0_REGION_START_ID		1
 #define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
-
-// Memory server #2, Region[5] to Region[9]
-#define MEMORY_SERVER_1_REGION_START_ID		5
-//#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
 #define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
 
 
