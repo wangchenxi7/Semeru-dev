@@ -12,6 +12,27 @@
 #
 
 
+
+
+
+# obj-[m] means compile this module but not link it into kernel at startup.
+obj-m += semeru_cpu_server.o
+
+semeru_cpu_server-y	:= semeru_cpu.o
+semeru_cpu_server-y	+= frontswap.o
+semeru_cpu_server-y	+= frontswap_rdma.o
+semeru_cpu_server-y	+= local_dram.o
+
+#semeru_cpu-y	:= register_disk.o	# main entry
+#semeru_cpu-y 	+= rdma_client.o	# merged into .so
+#semeru_cpu-y  += local_block_device.o  # merged into .so
+
+
+
+
+
+
+
 #kernel_rdma_module_dir=/lib/modules/$(shell uname -r)/extra/semeru_cpu
 
 
@@ -21,7 +42,27 @@
 
 # If build agianst OFED, enable here && KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)" 
 # The Modules.sysvers listed here will be copy to bulding directory
-#KSYMVERS = /lib/modules/$(shell uname -r)/source/Module.symvers /usr/src/ofa_kernel/default/Module.symvers
+#KSYMVERS := /usr/src/ofa_kernel/default/Module.symvers
+
+
+# Debug
+# Build the module separately
+#all:
+	# -C change to kernel source code, to use its Makefile 
+	#  M is a hythen, return to $(PWD) after reading the Make in /lib/modules/$(shell uname -r)/build
+	# make  -C /lib/modules/$(shell uname -r)/build  M=$(PWD)  KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)"  modules
+	#	make  -C /lib/modules/$(shell uname -r)/build  M=$(PWD)  modules
+#clean:
+#	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
+
+# install:
+# 	mkdir -p $(kernel_rdma_module_dir)
+# 	/usr/bin/install -c -m 644 ./semeru_cpu.ko $(kernel_rdma_module_dir)
+
+# uninstall:
+# 	modprobe -r semeru_cpu
+# 	rm $(kernel_rdma_module_dir)/semeru_cpu.ko
+
 
 
 
@@ -48,33 +89,3 @@ default:
 clean:
 	$(MAKE) -C $(KDIR) M=$$PWD clean
 endif
-
-
-
-
-
-# obj-[m] means compile this module but not link it into kernel at startup.
-obj-m += semeru_cpu.o
-
-semeru_cpu-y	:= register_disk.o	# main entry
-semeru_cpu-y 	+= rdma_client.o	# merged into .so
-semeru_cpu-y  += local_block_device.o  # merged into .so
-
-
-# Debug
-# Build the module separately
-#all:
-	# -C change to kernel source code, to use its Makefile 
-	#  M is a hythen, return to $(PWD) after rading the Make in /lib/modules/$(shell uname -r)/build
-	# make  -C /lib/modules/$(shell uname -r)/build  SUBDIRS=$(PWD)  KBUILD_EXTRA_SYMBOLS="$(KSYMVERS)"  modules
-#	make  -C /lib/modules/$(shell uname -r)/build  M=$(PWD)  modules
-#clean:
-#	make -C /lib/modules/$(shell uname -r)/build M=$(PWD) clean
-
-# install:
-# 	mkdir -p $(kernel_rdma_module_dir)
-# 	/usr/bin/install -c -m 644 ./semeru_cpu.ko $(kernel_rdma_module_dir)
-
-# uninstall:
-# 	modprobe -r semeru_cpu
-# 	rm $(kernel_rdma_module_dir)/semeru_cpu.ko

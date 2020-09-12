@@ -30,11 +30,12 @@
 
 // enable the swp_entry_t to virtual address remap or not
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
-#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+// #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
 // This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT
 
+#define SEMERU_FRONTSWAP_PATH 1
 
 
 //
@@ -62,10 +63,11 @@
 // #define DEBUG_REQUEST_TAG 1
 
 //#define DEBUG_LATENCY_CLIENT 1
-//#define DEBUG_MODE_BRIEF 1 
+#define DEBUG_MODE_BRIEF 1 
 //#define DEBUG_MODE_DETAIL 1
 //#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
+
 
 //#define ASSERT 1		// general debug 
 
