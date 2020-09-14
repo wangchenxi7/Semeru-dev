@@ -23,7 +23,7 @@
 #ifdef SEMERU_FRONTSWAP_PATH
 	#include "frontswap.h"
 #else
-	#include "block_layer_rdma.h"
+	#include "block_path_rdma.h"
 #endif
  
 

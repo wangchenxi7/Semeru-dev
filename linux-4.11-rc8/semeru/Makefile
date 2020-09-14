@@ -19,7 +19,7 @@
 obj-m += semeru_cpu_server.o
 
 semeru_cpu_server-y	:= semeru_cpu.o
-semeru_cpu_server-y	+= frontswap.o
+semeru_cpu_server-y	+= frontswap_ops.o
 semeru_cpu_server-y	+= frontswap_rdma.o
 semeru_cpu_server-y	+= local_dram.o
 

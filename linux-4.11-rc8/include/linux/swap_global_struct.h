@@ -63,11 +63,11 @@
 // #define DEBUG_REQUEST_TAG 1
 
 //#define DEBUG_LATENCY_CLIENT 1
-#define DEBUG_MODE_BRIEF 1 
+//#define DEBUG_MODE_BRIEF 1 
 //#define DEBUG_MODE_DETAIL 1
 //#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY		   1			// Only build and install RDMA modules.
-
+//#define DEBUG_FRONTSWAP_ONLY     // Use the local DRAM, not connect to RDMA
 
 //#define ASSERT 1		// general debug 
 

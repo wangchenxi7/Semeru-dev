@@ -6,7 +6,7 @@
  */
 
 
-#include "block_layer_rdma.h"
+#include "block_path_rdma.h"
 
 
 #define LOGICAL_BLOCK_SIZE 512
