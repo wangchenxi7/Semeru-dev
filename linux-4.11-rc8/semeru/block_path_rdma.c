@@ -27,12 +27,12 @@
  * 
  */
 
-#include "semeru_cpu.h"
+#include "block_path_rdma.h"
 
 // Semeru
 #include <linux/swap_global_struct_mem_layer.h>
 
-MODULE_AUTHOR("Excavator,plsys");
+MODULE_AUTHOR("Semeru,Chenxi Wang");
 MODULE_DESCRIPTION("RMEM, remote memory paging over RDMA");
 MODULE_LICENSE("Dual BSD/GPL");
 MODULE_VERSION("1.0");
@@ -225,9 +225,11 @@ int semeru_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event
 
 
 			// ########### TO BE DONE ###########
-			// Disconnect and free the resource
+			// Disconnect and free the resource of THIS QUEUE.
 
-			semeru_disconenct_and_collect_resource(rdma_queue->rdma_session);  	// Free RDMA resource and exit main function
+
+			// NOT free the resource of the whole session !
+			//semeru_disconenct_and_collect_resource(rdma_queue->rdma_session); 
 			//octopus_free_block_devicce(rdma_session->rmem_dev_ctrl);	// Free block device resource 
 		}
 		break;
@@ -345,6 +347,7 @@ int semeru_create_rdma_queue(struct rdma_session_context *rdma_session, int rdma
 	struct rdma_cm_id *cm_id;
 	struct ib_cq_init_attr init_attr;
 	struct semeru_rdma_queue* rdma_queue;
+	int comp_vector = 0; // used for IB_POLL_DIRECT
 
 
 	rdma_queue = &(rdma_session->rdma_queues[rdma_queue_index]);
@@ -377,13 +380,11 @@ int semeru_create_rdma_queue(struct rdma_session_context *rdma_session, int rdma
 	// 2) Build CQ
 	memset(&init_attr, 0, sizeof(init_attr));
 	init_attr.cqe = rdma_session->send_queue_depth + rdma_session->recv_queue_depth; // [x]The depth of cq. Number of completion queue entries.
-	init_attr.comp_vector = 0;					   // [?] What's the meaning of this ??
+	init_attr.comp_vector = 0;
 	
 	// Set up the completion queues and the cq evnet handler.
-	// [?] this is a softirq CQ ?
-	// 
+	// [?] a softIRQ CQ
 	rdma_queue->cq = ib_create_cq(cm_id->device, semeru_cq_event_handler, NULL, rdma_queue, &init_attr);
-
 	if (IS_ERR(rdma_queue->cq)) {
 		printk(KERN_ERR "%s, ib_create_cq failed\n", __func__);
 		ret = PTR_ERR(rdma_queue->cq);
@@ -2833,7 +2834,15 @@ static int semeru_init_rdma_queue(struct rdma_session_context *rdma_session,  in
 
   rdma_queue->state = IDLE;
   init_waitqueue_head(&rdma_queue->sem); // Initialize the semaphore.
+	spin_lock_init( &(rdma_queue->cq_lock) );		// initialize spin lock
 	atomic_set(&(rdma_queue->rdma_post_counter), 0); // Initialize the counter to 0
+	rdma_queue->fs_rdma_req_cache = kmem_cache_create("fs_rdma_req_cache", sizeof(struct fs_rdma_req), 0,
+                      SLAB_TEMPORARY | SLAB_HWCACHE_ALIGN, NULL);
+	if(unlikely(rdma_queue->fs_rdma_req_cache == NULL)){
+		printk(KERN_ERR "%s, allocate rdma_queue->fs_rdma_req_cache failed.\n", __func__);
+		ret = -1;
+		goto err;
+	}
 
 	//2) Resolve address(ip:port) and route to destination IB. 
   ret = rdma_resolve_ip_to_ib_device(rdma_session, rdma_queue);
@@ -3200,12 +3209,19 @@ int __init octopus_rdma_client_init_module(void)
 
 		// Build both the RDMA and Disk driver
 		ret = rdma_session_connect(&rdma_session_global);
-		if(ret){
+		if(unlikely(ret)){
 			printk(KERN_ERR "%s, octopus_RDMA_connect failed. \n", __func__);
 			goto err;
 		}
 
 
+		// Enable the frontswap path
+		//
+		ret = semeru_init_frontswap();
+		if(unlikely(ret)){
+			printk(KERN_ERR "%s, Enable frontswap path failed. \n", __func__);
+			goto err;
+		}
 
 	// end of DEBUG_BD_ONLY
 	#endif
@@ -3274,7 +3290,13 @@ void __exit octopus_rdma_client_cleanup_module(void)
 		}
 		#endif
 
-		// end ofDEBUG_BD_ONLY
+
+		//
+		// 3) free the frontswap resources
+		//
+		semeru_exit_frontswap();
+
+		// end of DEBUG_BD_ONLY
 	#endif
 	printk(" Remove Module OCTOPUS DONE. \n");
 

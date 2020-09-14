@@ -14,6 +14,7 @@
 #define __LINUX_SWAP_SWAP_GLOBAL_STRUCT_BD_LAYER_H
 
 #include <linux/swap_global_struct.h>
+#include <linux/blkdev.h>
 
 //
 // ###################### MACRO #########################
