@@ -2745,7 +2745,7 @@ void reset_kernel_semeru_rdma_ops(void){
  */
 int init_rdma_sessions(struct rdma_session_context *rdma_session){
 	int ret = 0; 
-	char 	ip[] = "10.10.10.8"; // the memory server ip
+	char 	ip[] = "10.0.10.6"; // the memory server ip
 
 
 	// 1) RDMA queue information

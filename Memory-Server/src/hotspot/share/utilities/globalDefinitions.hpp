@@ -129,7 +129,7 @@
 #define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
 
 
-static const char cur_mem_server_ip[]    = "10.10.10.8";
+static const char cur_mem_server_ip[]    = "10.0.10.6";
 static const char cur_mem_server_port[]  = "9400";
 
 #define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 

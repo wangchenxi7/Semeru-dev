@@ -637,25 +637,25 @@ void G1CollectionSet::finalize_parts(G1SurvivorRegions* survivors) {
     }
     else if(hr->is_old()){
       
-      log_debug(semeru)("Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
-      log_debug(semeru)("Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
-      log_debug(semeru)("Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
+      // log_debug(semeru)("Region %u marked from root: %d\n", i, hr->cross_region_ref_target_queue()->_marked_from_root);
+      // log_debug(semeru)("Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
+      // log_debug(semeru)("Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
 
-      if(cache_ratio_pages(hr) > cache_threshold_in_pages && hr->_mem_to_cpu_gc->_cm_scanned) {
-         /*&& hr->_mem_to_cpu_gc->_alive_ratio < 0.5*/
-        log_debug(semeru)("Candidate Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
-        log_debug(semeru)("Candidate Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
-        //mhr: debug
-        candidates_regions[candidates_length++] = hr;
+      // if(cache_ratio_pages(hr) > cache_threshold_in_pages && hr->_mem_to_cpu_gc->_cm_scanned) {
+      //    /*&& hr->_mem_to_cpu_gc->_alive_ratio < 0.5*/
+      //   log_debug(semeru)("Candidate Region %u scanned?: %d\n", i, hr->_mem_to_cpu_gc->_cm_scanned);
+      //   log_debug(semeru)("Candidate Region %u alive ratio: %lf\n", i, hr->_mem_to_cpu_gc->_alive_ratio);
+      //   //mhr: debug
+      //   candidates_regions[candidates_length++] = hr;
 
-      }
-      else if(!_g1h->_allocator->is_retained_old_region(hr) && !hr->_mem_to_cpu_gc->_cm_scanned && !hr->cross_region_ref_target_queue()->_marked_from_root){
-        rmsc->add(hr->hrm_index());
+      // }
+      // else if(!_g1h->_allocator->is_retained_old_region(hr) && !hr->_mem_to_cpu_gc->_cm_scanned && !hr->cross_region_ref_target_queue()->_marked_from_root){
+      //   rmsc->add(hr->hrm_index());
 
-        // mhr: add as optional
-        _g1h->old_set_remove(hr);
-        add_optional_region(hr);
-      }
+      //   // mhr: add as optional
+      //   _g1h->old_set_remove(hr);
+      //   add_optional_region(hr);
+      // }
     }
     else { // humonguous region fall into this path.
 
