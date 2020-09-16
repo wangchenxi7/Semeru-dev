@@ -42,7 +42,9 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * 
  * Parameters:
- * 		type : 1) 1-sided rdma read;  2) 1-sided rdma write;
+ * 		type 1, 1-sided rdma read;  
+ *    type 2, 1-sided rdma data write;
+ * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal.
  * 		target_server : the id of memory server
  * 		start_addr,
  * 		size, 		4KB alignment
@@ -51,6 +53,7 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  */
 asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user * start_addr, unsigned long size){
 	char* ret;
+	int write_type;
 
 	#ifdef DEBUG_MODE_BRIEF
 	printk("Enter %s. with type 0x%x \n", __func__, type);
@@ -64,19 +67,36 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 			printk("rdma_ops_in_kernel.rdma_read is NULL. Can't execute it. \n");
 		}
 	}else if(type == 2){
-		// rdma write 
+		// rdma data write 
 		if( rdma_ops_in_kernel.rdma_write != NULL){
 			
 			#ifdef DEBUG_MODE_BRIEF
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
 			#endif
-			
-			ret = rdma_ops_in_kernel.rdma_write(target_server, start_addr,size);
+			write_type = 0x0; // data write 
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
 			if(unlikely(ret == NULL) ){
 				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
 				return -1;
 			}
+		}else{
+			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
+		}
 
+	}else if(type == 3){
+		// rdma signal write 
+		if( rdma_ops_in_kernel.rdma_write != NULL){
+			
+			#ifdef DEBUG_MODE_BRIEF
+			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
+			#endif
+			write_type = 0x1; // signal write 
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
+			if(unlikely(ret == NULL) ){
+				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
+				return -1;
+			}
+	
 		}else{
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
 		}

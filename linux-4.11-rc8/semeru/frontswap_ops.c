@@ -9,17 +9,8 @@
 
 
 
-#include "frontswap.h"
+#include "frontswap_path.h"
 #include "local_dram.h"
-
-
-MODULE_AUTHOR("Semeru, Chenxi Wang");
-MODULE_DESCRIPTION("RMEM, remote memory paging over RDMA");
-MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION("1.0");
-
-
-
 
 
 
@@ -48,8 +39,20 @@ void drain_rdma_queue(struct semeru_rdma_queue * rdma_queue){
 
 }
 
+/**
+ * Drain all the outstanding messages for a specific memory server.
+ * [?] TO BE DONE. Multiple memory server 
+ * 
+ */
+void drain_all_rdma_queue(int target_mem_server){
+  int i;
+  struct rdma_session_context *rdma_session = &rdma_session_global;
 
+  for(i=0; i<online_cores; i++){
+    drain_rdma_queue( &(rdma_session->rdma_queues[i]) );
+  }
 
+}
 
 
 
@@ -131,7 +134,7 @@ int fs_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_
 		while(1){
 			test = atomic_inc_return(&rdma_queue->rdma_post_counter);
 			if( test < RDMA_SEND_QUEUE_DEPTH - 16 ){
-				//post the 1-sided RDMA write
+				//post the 1-sided RDMA write 
 				// Use the global RDMA context, rdma_session_global
 				ret = ib_post_send(rdma_queue->qp, (struct ib_send_wr*)&rdma_req->rdma_wr, &bad_wr);
 				if(unlikely(ret)){
@@ -146,8 +149,11 @@ int fs_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_
 			}else{
 				// RDMA send queue is full, wait for next turn.
 				test = atomic_dec_return(&rdma_queue->rdma_post_counter);
-				schedule(); // release the core for a while.
+				//schedule(); // release the core for a while.
         // cpu_relax(); // which one is better ?
+
+        // IB_DIRECT_CQ, poll cqe directly
+        drain_rdma_queue(rdma_queue);
 			}
 
 		}// end of while, try to enqueue read wr.
@@ -519,10 +525,14 @@ void semeru_exit_frontswap(void){
     semeru_remove_local_dram();
   #endif
 
-  // TO BE DONE
+  // * TO BE DONE * - Have to reboot after rmmod 
   // We need remove the frontswap path from kernel. How to do this ??
+  // 1) dec frontswap_enabled_key
+  // 2) Also need to unplug the swap device from kernel.
 
-  pr_info("unloading frontswap module\n");
+  pr_info("unloading frontswap module - * TO BE DONE *\n");
+  pr_info("1) dec frontswap_enabled_key \n");
+  pr_info("2) Also need to unplug the swap device from kernel.\n");
 }
 
 

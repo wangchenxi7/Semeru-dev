@@ -27,7 +27,7 @@
  * 
  */
 
-#include "block_path_rdma.h"
+#include "block_path.h"
 
 // Semeru
 #include <linux/swap_global_struct_mem_layer.h>

@@ -116,9 +116,6 @@ then
 	echo "insmod ~/linux-4.11-rc8/semeru/semeru_cpu_server.ko"
 	sudo insmod ./semeru_cpu_server.ko
 
-	# 4. check Swap partition
-	swapon -s
-
 elif [ "${action}" = "create_swap_file" ]
 then
  create_swap_file 

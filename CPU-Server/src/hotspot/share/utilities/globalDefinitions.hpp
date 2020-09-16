@@ -130,8 +130,7 @@
 
 #define MAX_SIZE_T   (size_t)-1
 
-//mhr: modify
-//mhr: new
+#define RDMA_WRITE_SIGNAL 333,0x3
 #define RDMA_WRITE  333,0x2
 #define RDMA_READ   333,0x1
 

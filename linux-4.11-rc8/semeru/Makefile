@@ -18,14 +18,16 @@
 # obj-[m] means compile this module but not link it into kernel at startup.
 obj-m += semeru_cpu_server.o
 
+# a. the frontswap path
 semeru_cpu_server-y	:= semeru_cpu.o
 semeru_cpu_server-y	+= frontswap_ops.o
 semeru_cpu_server-y	+= frontswap_rdma.o
 semeru_cpu_server-y	+= local_dram.o
 
-#semeru_cpu-y	:= register_disk.o	# main entry
-#semeru_cpu-y 	+= rdma_client.o	# merged into .so
-#semeru_cpu-y  += local_block_device.o  # merged into .so
+# b. the block layer path
+#semeru_cpu_server-y := block_path_register_disk.o	# main entry
+#semeru_cpu_server-y += block_path_rdma.o	# merged into .so
+#semeru_cpu_server-y += local_block_device.o  # merged into .so
 
 
 

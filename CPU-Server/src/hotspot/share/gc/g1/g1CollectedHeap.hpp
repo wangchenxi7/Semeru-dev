@@ -201,7 +201,7 @@ public :
   flags_of_mem_server_state* _mem_server_flags;
 
   received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
-  void update_cset_to_mem_server(size_t mem_id )	{ syscall(RDMA_WRITE, mem_id, _recv_mem_server_cset, MEMORY_SERVER_CSET_SIZE);	 }
+  void update_cset_to_mem_server(size_t mem_id )	{ syscall(RDMA_WRITE_SIGNAL, mem_id, _recv_mem_server_cset, MEMORY_SERVER_CSET_SIZE);	 }
 
   flags_of_cpu_server_state* cpu_server_flags() { return _cpu_server_flags;  }
   void send_cpu_server_flags_to_mem_server()	  { 
