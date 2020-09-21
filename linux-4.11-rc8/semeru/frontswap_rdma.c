@@ -1138,7 +1138,7 @@ void cp_rdma_read_done(struct ib_cq *cq, struct ib_wc *wc){
 	complete(&rdma_cmd_ptr->done); 
 
 	#ifdef DEBUG_MODE_BRIEF
-		printk(KERN_INFO "%s, rdma_queue[%d], rdma_wr[%d] done. <<<< \n", __func__, rdma_queue->q_index, ret);
+		printk(KERN_INFO "%s, rdma_queue[%d], rdma_wr[%d] done. <<<< \n", __func__, rdma_queue->q_index, ret + 1);
 	#endif
 
 out:
@@ -1177,7 +1177,7 @@ void cp_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc){
 	complete(&rdma_cmd_ptr->done); 
 
 	#ifdef DEBUG_MODE_BRIEF
-		printk(KERN_INFO "%s, rdma_queue[%d], rdma_wr[%d] done. <<<< \n", __func__, rdma_queue->q_index, ret);
+		printk(KERN_INFO "%s, rdma_queue[%d], rdma_wr[%d] done. <<<< \n", __func__, rdma_queue->q_index, ret+1);
 	#endif
 
 out:
@@ -1286,13 +1286,12 @@ uint64_t meta_data_map_sg(struct rdma_session_context * rdma_session,  struct sc
 
 	uint64_t entries = 0; // mapped pages
 	size_t	package_page_num_limit = (MAX_REQUEST_SGL -2);  // InfiniBand hardware S/G limits, bytes
-	
 	pte_t* 	pte_ptr;
 	struct page *buf_page;
 
 	// Scan and find several, at most package_len_limit, contiguous pages as RDMA buffer. 
 	while(*addr_scan_ptr < end_addr){
-		pte_ptr = walk_page_table(current->mm, (uint64_t)(*addr_scan_ptr) );
+		pte_ptr = walk_page_table(current->mm, (uint64_t)(*addr_scan_ptr) );  //[?] Will this walking cause any problem ?
 
 		if(pte_ptr == NULL || !pte_present(*pte_ptr) ){ 
 			// 1) not mapped pte, skip it. 
@@ -1302,14 +1301,18 @@ uint64_t meta_data_map_sg(struct rdma_session_context * rdma_session,  struct sc
 			//    Even if the unmapped physical page is in Swap Cache, it's clean.
 			//    All the pages will be written to remote memory server immedialte after being unmapped.
 						
-			// #ifdef DEBUG_MODE_BRIEF
-				
-			// 	if(pte_ptr!= NULL && page_in_swap_cache(*pte_ptr) != NULL){
-			// 		printk(KERN_WARNING"%s, Virt page 0x%llx ->  phys page is in Swap Cache.\n", __func__,  (uint64_t)(*addr_scan_ptr));
-			// 	}else{
-			// 		printk(KERN_WARNING"%s, Virt page 0x%llx  is NOT touched.\n", __func__,  (uint64_t)(*addr_scan_ptr));
-			// 	}
-			// #endif
+			#ifdef DEBUG_MODE_BRIEF
+				if(pte_ptr == NULL){
+					printk(KERN_WARNING"%s, Virt page 0x%llx  is NOT touched.\n", __func__,  (uint64_t)(*addr_scan_ptr));
+				}else if( page_in_swap_cache(*pte_ptr) != NULL){
+					printk(KERN_WARNING"%s, Virt page 0x%llx ->  phys page is in Swap Cache.\n", __func__,  (uint64_t)(*addr_scan_ptr));
+				}else if(!pte_present(*pte_ptr)){
+					// e.g. the page is swapped to swap partition && the swap_cache entry is freed.
+					printk(KERN_WARNING"%s, Virt page 0x%llx  is NOT present.\n", __func__,  (uint64_t)(*addr_scan_ptr));
+				}else{
+					printk(KERN_WARNING"%s, Virt page 0x%llx  is NOT mapped to physical page (unknown mode).\n", __func__,  (uint64_t)(*addr_scan_ptr));
+				}
+			#endif
 
 			
 			// Exit#1, Find a breaking point.
@@ -1330,9 +1333,9 @@ uint64_t meta_data_map_sg(struct rdma_session_context * rdma_session,  struct sc
 		sg_set_page( &(sgl[entries++]), buf_page, PAGE_SIZE, 0); // Assign a page to s/g. entire apge, offset in page is 0x0,.
 
 
-		#ifdef DEBUG_MODE_DETAIL
-			printk(KERN_INFO "%s, pte 0x%lx, page 0x%lx, dma_addr 0x%lx \n", 
-											__func__, (size_t)pte_val(*pte_ptr), (size_t)buf_page, (size_t)sgl[entries -1].dma_address );
+		#ifdef DEBUG_MODE_BRIEF
+			printk(KERN_INFO "%s, Virt page 0x%lx, pte 0x%lx, page 0x%lx, dma_addr 0x%lx \n", 
+											__func__, (size_t)*addr_scan_ptr, (size_t)pte_val(*pte_ptr), (size_t)buf_page, (size_t)sgl[entries -1].dma_address );
 		#endif
 
 
@@ -1370,7 +1373,7 @@ out:
 int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_req_sg *rdma_cmd_ptr, enum dma_data_direction dir,
 									struct remote_mapping_chunk *	remote_chunk_ptr, char ** addr_scan_ptr,  char* end_addr){
 
-	int ret = 0;
+	int mapped_pages = 0;
 	int i;
 	int dma_entry = 0;
 	struct ib_device	*ibdev	=	rdma_session->rdma_dev->dev;  // get the ib_devices
@@ -1387,9 +1390,8 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	rdma_cmd_ptr->seq_type 	= CONTROL_PATH_MEG; // means this is CP path data.
 	if(unlikely(rdma_cmd_ptr->nentry == 0)){
 		// It's ok, the pte are not mapped to any physical pages.
-		printk(KERN_INFO "%s, Find zero mapped pages for range [0x%llu, 0x%llu). Skip this wr. \n", __func__,
-		 																																					(uint64_t)(*addr_scan_ptr - rdma_cmd_ptr->nentry * PAGE_SIZE), 
-		 																																					(uint64_t)end_addr);
+		printk(KERN_INFO "%s, Find zero mapped pages, end at 0x%lx. Skip this wr. \n", __func__,	(size_t)end_addr);
+		mapped_pages = 0;
 		goto err; // return 0.
 	}
 
@@ -1399,13 +1401,12 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	dma_entry	=	ib_dma_map_sg( ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry, dir);  // Inform PCI device the dma address of these scatterlist.
 	if( unlikely(dma_entry == 0) ){
 		printk(KERN_ERR "ERROR in %s Registered 0 entries to rdma scatterlist \n", __func__);
+		mapped_pages = 0;
 		goto err;
 	}
-	ret = dma_entry;  // return the number of pages mapped to RDMA device.
+	mapped_pages = dma_entry;  // return the number of pages mapped to RDMA device.
 
-	#ifdef DEBUG_MODE_BRIEF
-		print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
-	#endif
+
 
 
 	// 3) Register Remote RDMA buffer to WR.
@@ -1425,14 +1426,24 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	}
 	rdma_cmd_ptr->rdma_sq_wr.wr.wr_cqe = &(rdma_cmd_ptr->cqe); // completion function
 
+
 	#ifdef DEBUG_MODE_BRIEF
-		printk(KERN_INFO "%s, access remote data, dir %d, rdma_sq_wr.remote_addr: 0x%llx, rkey: 0x%llx, len: 0x%llx \n",
-																							__func__,
-																							dir,
-																							(uint64_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr,
-																							(uint64_t)rdma_cmd_ptr->rdma_sq_wr.rkey,
-																							(uint64_t)(ret* PAGE_SIZE) );
+		if(rdma_cmd_ptr->nentry != dma_entry){
+			printk(KERN_ERR"%s, rdma_cmd_ptr->nentry 0x%lx NOT equal to dma_entry 0x%x \n",__func__, (size_t)rdma_cmd_ptr->nentry,  dma_entry);
+			mapped_pages = 0; // for current function 0 is error
+			goto err;
+		}
+		
+		printk(KERN_INFO"%s,  Mapped %d entries. From CPU server [0x%lx, 0x%lx) to Memory server[0x%lx, 0x%lx) , in current rdma_wr \n",
+																				__func__, dma_entry, 
+																				(size_t)(*addr_scan_ptr - dma_entry * PAGE_SIZE), (size_t)*addr_scan_ptr, 
+																				(size_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr, (size_t)(rdma_cmd_ptr->rdma_sq_wr.remote_addr + dma_entry*PAGE_SIZE)  );
+
+
+
+		//print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
 	#endif
+
 
 	// 4) Register Local RDMA Buffer to WR.
 	// [Warning] assume all the sectors in this bio is contiguous.
@@ -1464,7 +1475,7 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	rdma_cmd_ptr->rdma_sq_wr.wr.num_sge		= dma_entry;
 		
 err:
-	return ret; 
+	return mapped_pages; 
 }
 
 
@@ -1496,6 +1507,7 @@ int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru
 	char* addr_scan_ptr = start_addr;  // Points to the current scanned addr
 
 	// 1) Calculate the remote address
+	//    The caller has to guarantee the accessd range within one rdma chunk.
   uint64_t  start_chunk_index   	= ((uint64_t)start_addr - SEMERU_START_ADDR) >> CHUNK_SHIFT;    // REGION_SIZE_GB/chunk in default.
   struct remote_mapping_chunk   	*remote_chunk_ptr = &(rdma_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
@@ -1505,7 +1517,7 @@ int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru
 		ret = cp_build_rdma_wr(rdma_session, rdma_req_sg, dir, remote_chunk_ptr, &addr_scan_ptr, end_addr);
 		if(unlikely(ret == 0)){
 			printk(KERN_WARNING "%s, Build rdma wr in Control-Path failed OR Skip empty pte. Skip enqueue WR \n", __func__);
-
+			complete(&rdma_req_sg->done);	// Not enqueue this rdma_queue, mark it complete here.
 			// ret = 0 is good here. But can cause error in the caller.
 	  	goto err;  // Skip the WR enqueue.
 		}
@@ -1522,6 +1534,10 @@ int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru
 		printk("%s,Post a 1-sided RDMA wr , dir %d , start addr 0x%llx done.\n", __func__, dir,
 																					(uint64_t)(addr_scan_ptr - ret*PAGE_SIZE) );
 		#endif
+
+		//debug - drain after inserting any rdma_wr
+		// drain after queue is full
+		//drain_rdma_queue(rdma_queue);
 
 	}// end of for loop, send data.
 
@@ -1676,7 +1692,8 @@ char* semeru_cp_rdma_write(int target_mem_server, int write_type , char __user *
 
 
 	#ifdef DEBUG_MODE_BRIEF
-		printk(KERN_INFO "	aligned start_addr : 0x%lx, aligned size : 0x%lx \n", (unsigned long)start_addr_aligned, size_aligned);
+		printk(KERN_INFO "%s, rdma_queue[%d], aligned start_addr : 0x%lx, aligned size : 0x%lx \n", 
+																__func__, rdma_queue->q_index, (unsigned long)start_addr_aligned, size_aligned);
 	#endif
 
 	// 1) Drain all the outstanding requests for a signal write
@@ -1937,6 +1954,7 @@ int semeru_init_rdma_queue(struct rdma_session_context *rdma_session,  int cpu )
 
 
   rdma_queue->rdma_session = rdma_session;
+	rdma_queue->q_index = cpu;
   rdma_queue->cm_id = rdma_create_id(&init_net, semeru_rdma_cm_event_handler, rdma_queue, RDMA_PS_TCP, IB_QPT_RC);
   if (IS_ERR(rdma_queue->cm_id)) {
     printk(KERN_ERR "failed to create cm id: %ld\n", PTR_ERR(rdma_queue->cm_id));

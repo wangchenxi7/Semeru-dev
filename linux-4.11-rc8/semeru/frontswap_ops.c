@@ -214,6 +214,13 @@ int dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru
   rdma_req->rdma_wr.rkey = remote_chunk_ptr->remote_rkey;
 
 
+  //debug
+  #ifdef DEBUG_MODE_BRIEF
+  if(dir == DMA_FROM_DEVICE){
+    printk(KERN_INFO "%s, read data from remote 0x%lx, size 0x%lx \n", __func__, (size_t)rdma_req->rdma_wr.remote_addr, (size_t)PAGE_SIZE);
+  }
+  #endif
+
 out:
   return ret;
 }
@@ -285,25 +292,27 @@ out:
  *  non-zero : failed.
  * 
  */
-int semeru_frontswap_store(unsigned type, pgoff_t page_offset, struct page *page){
+int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page *page){
   int ret = 0;
   int cpu;
   struct fs_rdma_req *rdma_req;
   struct semeru_rdma_queue *rdma_queue;
   struct rdma_session_context *rdma_session = &rdma_session_global;  // support multiple Memory server later. !!
 
-  struct remote_mapping_chunk   *remote_chunk_ptr;
-  size_t start_addr           = page_offset << PAGE_SHIFT; // calculate the remote addr
+  // page offset, compared start of Data Region
+  // The real virtual address is RDMA_DATA_SPACE_START_ADDR + start_addr.
+  size_t start_addr           = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; // calculate the remote addr
   //size_t bytes_len            = PAGE_SIZE; // single page for now
 
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
   size_t offset_within_chunk  = start_addr & CHUNK_MASK;
+  struct remote_mapping_chunk   *remote_chunk_ptr;
 
 
 
   #ifdef DEBUG_FRONTSWAP_ONLY
     // 1) Local dram path
-    ret = semeru_dram_write(page, page_offset << PAGE_SHIFT);  // only return after copying is done.
+    ret = semeru_dram_write(page, swap_entry_offset << PAGE_SHIFT);  // only return after copying is done.
     if (unlikely(ret)) {
       pr_err("could not read page remotely\n");
       goto out;
@@ -336,7 +345,8 @@ int semeru_frontswap_store(unsigned type, pgoff_t page_offset, struct page *page
     }
 
     #ifdef DEBUG_MODE_DETAIL
-      pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx >>>>> \n",__func__, rdma_queue->q_index, (size_t)page, start_addr);
+      pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
+                          __func__, rdma_queue->q_index, (size_t)page, (szie_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
     #endif
 
     put_cpu(); // enable preeempt. 
@@ -382,7 +392,7 @@ out:
  *  0 : success
  *  non-zero : failed.
  */
-int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page){
+int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page *page){
   int ret = 0;
   int cpu;
   struct fs_rdma_req *rdma_req;
@@ -390,7 +400,9 @@ int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page)
   struct rdma_session_context *rdma_session = &rdma_session_global;  // support multiple Memory server later. !!
 
   struct remote_mapping_chunk   *remote_chunk_ptr;
-  size_t start_addr           = page_offset << PAGE_SHIFT; // calculate the remote addr
+  // page offset, compared start of Data Region
+  // The real virtual address is RDMA_DATA_SPACE_START_ADDR + start_addr.
+  size_t start_addr           = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT;
   //size_t bytes_len            = PAGE_SIZE; // single page for now
 
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
@@ -399,7 +411,7 @@ int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page)
 
 
   #ifdef DEBUG_FRONTSWAP_ONLY
-    ret = semeru_dram_read(page, page_offset << PAGE_SHIFT);
+    ret = semeru_dram_read(page, swap_entry_offset << PAGE_SHIFT);
     if (unlikely(ret)) {
       pr_err("could not read page remotely\n");
       goto out;
@@ -431,7 +443,8 @@ int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page)
     }
 
     #ifdef DEBUG_MODE_DETAIL
-      pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx  >>>>> \n",__func__, rdma_queue->q_index, (size_t)page, start_addr);
+      pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n",
+                        __func__, rdma_queue->q_index, (size_t)page, (szie_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
     #endif
 
     put_cpu(); // enable preeempt. 

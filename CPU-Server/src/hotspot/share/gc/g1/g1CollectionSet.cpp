@@ -893,7 +893,8 @@ size_t G1CollectionSet::cache_ratio_pages(HeapRegion* hr) {
   // The requested range can only be at [SEMERU_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE, to the heap END(32GB max))
   size_t request_so_start_addr = (size_t)hr->bottom();//SEMERU_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE;
   size_t request_so_range = HeapRegion::GrainBytes; // one Region, assume 256 MBytes
-  size_t swapped_out_pages  = syscall(SYS_NUM_SWAP_OUT_PAGES, request_so_start_addr, request_so_range);
+  //size_t swapped_out_pages  = syscall(SYS_NUM_SWAP_OUT_PAGES, request_so_start_addr, request_so_range);
+  size_t swapped_out_pages = 0; //debug
   tty->print("%s, swapped out 0x%lx pages (%f) for range[0x%lx, 0x%lx) \n", 
                 __func__, swapped_out_pages, (double)swapped_out_pages*PAGE_SIZE/HeapRegion::GrainBytes, request_so_start_addr, request_so_start_addr+request_so_range  );
   return HeapRegion::GrainBytes/PAGE_SIZE-swapped_out_pages;

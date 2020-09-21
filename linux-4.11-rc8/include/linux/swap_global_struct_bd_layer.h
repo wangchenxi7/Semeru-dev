@@ -79,8 +79,7 @@ static inline unsigned long retrieve_swap_remmaping_virt_addr(swp_entry_t entry)
 	return swp_entry_to_virtual_remapping[swp_offset(entry)];
 }
 
-
-
+unsigned long retrieve_swap_remmaping_virt_addr_via_offset(pgoff_t offset);
 
 //
 // ###################### Debug functions ######################

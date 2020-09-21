@@ -204,16 +204,6 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	int ret = 0;
 	uint64_t i;
 
-	// debug
-	printk(KERN_WARNING "GC 0x%llx \n",len);
-
-
-	return 0;
-
-	//debug end
-
-
-
 
 	char* kernel_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	
@@ -233,7 +223,7 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	// void *to, const void __user *from, unsigned long n
   ret = copy_from_user(kernel_buf, buff, len);
 	if(ret!=0){
-		printk(KERN_ERR "%s, %d bytes not copied in copy_from_user. \n", __func__, ret);
+		printk(KERN_ERR "%s, %d bytes are not copied in copy_from_user. \n", __func__, ret);
 		goto err;
 	}
 
@@ -251,7 +241,7 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	// void __user *to, const void *from, unsigned long n
 	ret = copy_to_user(buff, kernel_buf, len);
 	if(ret!=0){
-		printk(KERN_ERR "%s, %d bytes not copied in copy_to_user. \n", __func__, ret);
+		printk(KERN_ERR "%s, %d bytes are not copied in copy_to_user. \n", __func__, ret);
 		goto err;
 	}
 
