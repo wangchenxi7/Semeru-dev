@@ -3259,7 +3259,6 @@ G1CollectedHeap::do_collection_pause_at_safepoint(double target_pause_time_ms) {
             }
             if((size_t)pair_array[i].st > send_end + 0x4000) {
               //log_debug(semeru, rdma)("Write metadata 0x%lx , size 0x%lx to Memory Server", (size_t)send_base , ((send_end - (size_t)send_base -1)/0x1000 + 1)*0x1000 );
-              //syscall(RDMA_WRITE, send_base, ((send_end - (size_t)send_base -1)/0x1000 + 1)*0x1000);
               for(int mem_id =0; mem_id < NUM_OF_MEMORY_SERVER; mem_id++){
                 syscall(RDMA_WRITE, mem_id, send_base, (send_end - (size_t)send_base));  // flush the klass to each memory servers
                 log_debug(semeru, rdma)("Write metadata 0x%lx , size 0x%lx to all Memory Server[%d]", (size_t)send_base , (send_end - (size_t)send_base), mem_id );
@@ -4903,6 +4902,11 @@ void G1CollectedHeap::evacuate_optional_collection_set(G1ParScanThreadStateSet* 
   phase_times->record_optional_evacuation((os::elapsedTime() - start_time_sec) * 1000.0);
 }
 
+
+/**
+ * [?] What's the purpose ?
+ *  
+ */
 void G1CollectedHeap::post_evacuate_collection_set(EvacuationInfo& evacuation_info, G1ParScanThreadStateSet* per_thread_states) {
   // Also cleans the card table from temporary duplicate detection information used
   // during UpdateRS/ScanRS.

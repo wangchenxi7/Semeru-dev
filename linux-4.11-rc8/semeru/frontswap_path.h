@@ -133,6 +133,13 @@ struct message {
 
 
 
+// The semeru_rdma_req_sg type
+enum rdma_seq_type{
+	CONTROL_PATH_MEG, //0
+	DATA_PATH_MEG,			
+	END_TYPE					// end flag
+};
+
 
 /**
  * Need to update to Region status.
@@ -187,7 +194,7 @@ struct remote_mapping_chunk_list {
  * 1-sided RDMA (read/write) message.
  * Both Semeru Control Path(CP) and Data Path(DP) use this rdma command structu.
  * 
- * Reserve a rmem_rdma_command for each I/O requst.
+ * Reserve a kcache for semeru_rdma_req_sg allocation.
  * Allocate during the building of the I/O request.
  * 		i.e. Have registered RDMA buffer, used to send a wr to the QP.
  * 			[?] Can we optimize here ?? use the data in bio as DMA buffer directly.
@@ -206,42 +213,15 @@ struct remote_mapping_chunk_list {
  *	Build a seperate WR for each I/O request and sent them to remote memory pool via  RDMA read/write.
  * 
  */
-struct rmem_rdma_command{
+struct semeru_rdma_req_sg{
  
-	struct semeru_rdma_queue * rdma_queue;
+	struct semeru_rdma_queue *rdma_queue;
 
-	// RDMA wr for 1-sdied RDMA read/write.
-	struct ib_rdma_wr 	rdma_sq_wr;			// wr for 1-sided RDMA write/send.
-	
-	// Related block I/O requset.
-	// This is dedicated for data path.
-	struct request 			*io_rq;					// Pointer to the I/O requset. [!!] Contain Real Offload [!!]
-
-	struct ib_sge sge_list[MAX_REQUEST_SGL]; 	// scatter-gather entry for 1-sided RDMA read/write WR. 
-
-	#ifdef DEBUG_MODE_BRIEF
-		// Debug fields
-	// Control-Path, virtual address of source
-	// used for rdma read, write back data.
-	// The 1-sided RDMA communication is asynchronous. 
-	// When the RDMA read finish ack comes back, the caller already exits the syscall.
-	// The waken up process is another process which doesn't know the meaning of the user space virtual address.
-	// char __user * start_addr; 
-		char* kmapped_addr;			// For debug, the kmapped kernel address for the user space address.
-		uint64_t bytes_len;			// the length of the user space request.
-	
-	// Data-Path
-	// 0 : (Default) read data page
-	// 1 : write data page
-	// 2 : write tag
-	// 3 : read
-	//
-	// Control-Path
-	// 10 : read
-	// 11 : write
-		int message_type;
-
-	#endif
+	enum rdma_seq_type seq_type;
+	struct ib_cqe			cqe;						// used for completion function
+	struct ib_sge 		sge_list[MAX_REQUEST_SGL]; 	// scatter-gather entry for 1-sided RDMA read/write WR. 
+	struct ib_rdma_wr	rdma_sq_wr;			// wr for 1-sided RDMA write/send.
+	struct completion	done; 		// spinlock. caller wait on it.
 
 
 	// Scatter-Gather 
@@ -249,9 +229,7 @@ struct rmem_rdma_command{
 	// [!!] The scatterlist is temporaty data, we can put it in the behind of i/o request and not send them to remote server.
 	// points to the physical pages of i/o requset. 
 	u64  								nentry;		// number of the segments, usually one pysical page per segment
-	struct scatterlist	sgl[];		// Just keep a pointer. The memory is reserved behind the i/o request. 
-	// scatterlist should be at the end of this structure : Variable/Flexible array in structure.
-	// Then it can points to reserved space in i/o requst  after sizeof(struct rmem_rdma_command).
+	struct scatterlist	sgl[MAX_REQUEST_SGL];		// store the dma address
 };
 
 
@@ -323,8 +301,8 @@ struct semeru_rdma_queue {
 	struct rdma_session_context		*rdma_session;			// Record the RDMA session this queue belongs to.
 
 	// cache for fs_rdma_request. One for each rdma_queue
-	struct kmem_cache *fs_rdma_req_cache;
-
+	struct kmem_cache *fs_rdma_req_cache;		// only for fs_rdma_req ?
+	struct kmem_cache	*rdma_req_sg_cache;		// used for rdma request with scatter/gather
 };
 
 
@@ -378,9 +356,9 @@ struct rdma_session_context {
 	// 3.1) Data-Path, used for swaping mechanism
 
 
-	// 3.2) Control-Path, used for user-space invocation.
-	struct rmem_rdma_command				*cp_rmem_rdma_read_cmd;
-	struct rmem_rdma_command				*cp_rmem_rdma_write_cmd;
+	// 3.2) Control-Path, used for user-space invocation.  --> integrated into rdma_queue
+	//struct semeru_rdma_req_sg				*cp_rmem_rdma_read_cmd;
+	//struct semeru_rdma_req_sg				*cp_rmem_rdma_write_cmd;
 	// Move into the rdma_queue
 	//atomic_t rdma_post_counter; // Control the outstanding wr number. Less than RDMA_SEND_QUEUE_DEPTH.
 
@@ -395,15 +373,7 @@ struct rdma_session_context {
 	// The flag is 4 bytes and allocated in native space.
 	uint32_t* write_tag;
 	uint64_t	write_tag_dma_addr;  			 // corresponding dma address, just the physical address.
-	struct rmem_rdma_command *write_tag_rdma_cmd;
-
-
-	// 5) The block deivce
-	// Points to the Disk Driver Controller/Context.
-	// RDMA part is initialized first, 
-	// then invoke "RMEM_init_disk_driver(void)" to get the Disk Driver controller.
-	//
-	struct rmem_device_control		*rmem_dev_ctrl;
+	struct semeru_rdma_req_sg *write_tag_rdma_cmd;
 
 };
 
@@ -427,58 +397,67 @@ struct rdma_session_context {
 
 // functions for RDMA connection
 
-int semeru_fs_rdma_client_init(void);
+int 	semeru_fs_rdma_client_init(void);
 void  semeru_fs_rdma_client_exit(void);
-int rdma_session_connect(struct rdma_session_context *rdma_session);
-int semeru_init_rdma_queue(struct rdma_session_context *rdma_session,  int cpu );
-int semeru_create_rdma_queue(struct rdma_session_context *rdma_session, int rdma_queue_index );
-int semeru_connect_remote_memory_server(struct rdma_session_context *rdma_session, int rdma_queue_inx );
-int semeru_query_available_memory(struct rdma_session_context* rdma_session);
-int setup_rdma_session_commu_buffer(struct rdma_session_context * rdma_session);
-int semeru_setup_buffers(struct rdma_session_context *rdma_session);
+int 	rdma_session_connect(struct rdma_session_context *rdma_session);
+int 	semeru_init_rdma_queue(struct rdma_session_context *rdma_session,  int cpu );
+int 	semeru_create_rdma_queue(struct rdma_session_context *rdma_session, int rdma_queue_index );
+int 	semeru_connect_remote_memory_server(struct rdma_session_context *rdma_session, int rdma_queue_inx );
+int 	semeru_query_available_memory(struct rdma_session_context* rdma_session);
+int 	setup_rdma_session_commu_buffer(struct rdma_session_context * rdma_session);
+int 	semeru_setup_buffers(struct rdma_session_context *rdma_session);
 
-int init_remote_chunk_list(struct rdma_session_context *rdma_session );
-void bind_remote_memory_chunks(struct rdma_session_context *rdma_session );
-void reset_rmem_rdma_cmd(struct rmem_rdma_command* rmem_rdma_cmd_ptr);
+int 	init_remote_chunk_list(struct rdma_session_context *rdma_session );
+void 	bind_remote_memory_chunks(struct rdma_session_context *rdma_session );
 
-int semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_session);
-void semeru_free_buffers(struct rdma_session_context *rdma_session);
-void semeru_free_rdma_structure(struct rdma_session_context *rdma_session);
+int 	semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_session);
+void 	semeru_free_buffers(struct rdma_session_context *rdma_session);
+void 	semeru_free_rdma_structure(struct rdma_session_context *rdma_session);
 
 // functions for 2-sided RDMA.
-void two_sided_message_done(struct ib_cq *cq, struct ib_wc *wc);
-int  handle_recv_wr(struct semeru_rdma_queue *rdma_queue, struct ib_wc *wc);
-int  send_message_to_remote(struct rdma_session_context *rdma_session, int rdma_queue_ind, int messge_type, int chunk_num);
+void 	two_sided_message_done(struct ib_cq *cq, struct ib_wc *wc);
+int  	handle_recv_wr(struct semeru_rdma_queue *rdma_queue, struct ib_wc *wc);
+int  	send_message_to_remote(struct rdma_session_context *rdma_session, int rdma_queue_ind, int messge_type, int chunk_num);
 
 // functions for 1-sided RDMA
-int init_write_tag_rdma_command(struct rdma_session_context *rdma_session);
+int 	init_write_tag_rdma_command(struct rdma_session_context *rdma_session);
 
 
 // functions for frontswap
 int   semeru_init_frontswap(void);
 void  semeru_exit_frontswap(void);
-int semeru_frontswap_store(unsigned type, pgoff_t page_offset, struct page *page);
-int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page);
+int 	semeru_frontswap_store(unsigned type, pgoff_t page_offset, struct page *page);
+int 	semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page);
 
-int semeru_fs_rdma_send(struct rdma_session_context *rdma_session, struct semeru_rdma_queue *rdma_queue, struct fs_rdma_req *rdma_req, 
-    struct remote_mapping_chunk *remote_chunk_ptr, size_t offset_within_chunk, struct page *page, enum dma_data_direction dir );
+int 	semeru_fs_rdma_send(struct rdma_session_context *rdma_session, struct semeru_rdma_queue *rdma_queue, struct fs_rdma_req *rdma_req, 
+    				struct remote_mapping_chunk *remote_chunk_ptr, size_t offset_within_chunk, struct page *page, enum dma_data_direction dir );
 
-int dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue *rdma_queue, struct fs_rdma_req *rdma_req,
-    struct remote_mapping_chunk  *remote_chunk_ptr, size_t offset_within_chunk, struct page *page, enum dma_data_direction dir);
+int 	dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue *rdma_queue, struct fs_rdma_req *rdma_req,
+    				struct remote_mapping_chunk  *remote_chunk_ptr, size_t offset_within_chunk, struct page *page, enum dma_data_direction dir);
 
-int fs_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct fs_rdma_req *rdma_req);
-void fs_rdma_read_done(struct ib_cq *cq, struct ib_wc *wc);
-void fs_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc);
+int 	fs_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct fs_rdma_req *rdma_req);
+void 	fs_rdma_read_done(struct ib_cq *cq, struct ib_wc *wc);
+void 	fs_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc);
 
-void drain_rdma_queue(struct semeru_rdma_queue * rdma_queue);
-
+void 	drain_rdma_queue(struct semeru_rdma_queue * rdma_queue);
+void 	drain_all_rdma_queue(int target_mem_server);
 
 //
 // control path
 
-char* semeru_rdma_read(int target_mem_server, char __user * start_addr, unsigned long size);
-char* semeru_rdma_write(int target_mem_server, char __user * start_addr, unsigned long size);
+char* semeru_cp_rdma_read(int target_mem_server, char __user * start_addr, unsigned long size);
+char* semeru_cp_rdma_write(int target_mem_server, int write_type, char __user * start_addr, unsigned long size);
 
+int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru_rdma_queue *rdma_queue, struct semeru_rdma_req_sg *rdma_req_sg,
+							char __user * start_addr, uint64_t bytes_len, enum dma_data_direction dir );
+int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_req_sg *rdma_cmd_ptr, enum dma_data_direction dir,
+									struct remote_mapping_chunk *	remote_chunk_ptr, char ** addr_scan_ptr,  char* end_addr);
+uint64_t meta_data_map_sg(struct rdma_session_context * rdma_session,  struct scatterlist* sgl, 
+													char ** addr_scan_ptr, char * end_addr);
+int cp_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct semeru_rdma_req_sg *rdma_req);
+void cp_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc);
+void cp_rdma_read_done(struct ib_cq *cq, struct ib_wc *wc);
+void reset_semeru_rdma_req_sg(struct semeru_rdma_req_sg* rmem_rdma_cmd_ptr);
 // Get the pte_t value  of the user space virtual address.
 // For the kernel space virtual address, allocated by kmalloc or kzalloc, user the virt_to_phys is good.
 // 2) The scope for static functions in c is limited to the .cpp including it.
@@ -488,7 +467,7 @@ char* semeru_rdma_write(int target_mem_server, char __user * start_addr, unsigne
 // the strucute assigned to kernel.
 struct semeru_rdma_ops{
 	char* (*rdma_read)(int, char __user *, unsigned long);   // a function pointer, to  return value char*,  parameter(char*, unsigned long)
-	char* (*rdma_write)(int, char __user *, unsigned long);
+	char* (*rdma_write)(int, int, char __user *, unsigned long); // (2nd int -> message type. 0 for data, 1 for signal )
 };
 
 
@@ -518,7 +497,7 @@ char* rdma_session_context_state_print(int id);
 char* rdma_cm_message_print(int cm_message_id);
 char* rdma_wc_status_name(int wc_status_id);
 
-
+void  print_scatterlist_info(struct scatterlist* sl_ptr , int nents );
 
 /** 
  * ########## Declare some global varibles ##########

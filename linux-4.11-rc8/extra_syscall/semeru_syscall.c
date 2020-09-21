@@ -42,7 +42,9 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * 
  * Parameters:
- * 		type : 1) 1-sided rdma read;  2) 1-sided rdma write;
+ * 		type 1, 1-sided rdma read;  
+ *    type 2, 1-sided rdma data write;
+ * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal.
  * 		target_server : the id of memory server
  * 		start_addr,
  * 		size, 		4KB alignment
@@ -51,6 +53,7 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  */
 asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user * start_addr, unsigned long size){
 	char* ret;
+	int write_type;
 
 	#ifdef DEBUG_MODE_BRIEF
 	printk("Enter %s. with type 0x%x \n", __func__, type);
@@ -64,19 +67,36 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 			printk("rdma_ops_in_kernel.rdma_read is NULL. Can't execute it. \n");
 		}
 	}else if(type == 2){
-		// rdma write 
+		// rdma data write 
 		if( rdma_ops_in_kernel.rdma_write != NULL){
 			
 			#ifdef DEBUG_MODE_BRIEF
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
 			#endif
-			
-			ret = rdma_ops_in_kernel.rdma_write(target_server, start_addr,size);
+			write_type = 0x0; // data write 
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
 			if(unlikely(ret == NULL) ){
 				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
 				return -1;
 			}
+		}else{
+			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
+		}
 
+	}else if(type == 3){
+		// rdma signal write 
+		if( rdma_ops_in_kernel.rdma_write != NULL){
+			
+			#ifdef DEBUG_MODE_BRIEF
+			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
+			#endif
+			write_type = 0x1; // signal write 
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
+			if(unlikely(ret == NULL) ){
+				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
+				return -1;
+			}
+	
 		}else{
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
 		}
@@ -184,16 +204,6 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	int ret = 0;
 	uint64_t i;
 
-	// debug
-	printk(KERN_WARNING "GC 0x%llx \n",len);
-
-
-	return 0;
-
-	//debug end
-
-
-
 
 	char* kernel_buf = kzalloc(PAGE_SIZE, GFP_KERNEL);
 	
@@ -213,7 +223,7 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	// void *to, const void __user *from, unsigned long n
   ret = copy_from_user(kernel_buf, buff, len);
 	if(ret!=0){
-		printk(KERN_ERR "%s, %d bytes not copied in copy_from_user. \n", __func__, ret);
+		printk(KERN_ERR "%s, %d bytes are not copied in copy_from_user. \n", __func__, ret);
 		goto err;
 	}
 
@@ -231,7 +241,7 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	// void __user *to, const void *from, unsigned long n
 	ret = copy_to_user(buff, kernel_buf, len);
 	if(ret!=0){
-		printk(KERN_ERR "%s, %d bytes not copied in copy_to_user. \n", __func__, ret);
+		printk(KERN_ERR "%s, %d bytes are not copied in copy_to_user. \n", __func__, ret);
 		goto err;
 	}
 

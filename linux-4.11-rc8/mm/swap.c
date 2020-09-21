@@ -165,6 +165,12 @@ void insert_swp_entry( struct page *page  , unsigned long virt_addr  ){
 // }
 
 
+// To be used by kernel module.
+unsigned long retrieve_swap_remmaping_virt_addr_via_offset(pgoff_t offset){
+	return swp_entry_to_virtual_remapping[offset];
+}
+EXPORT_SYMBOL(retrieve_swap_remmaping_virt_addr_via_offset);
+
 
 
 

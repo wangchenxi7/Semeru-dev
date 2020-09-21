@@ -21,9 +21,9 @@
 #include <linux/swap_global_struct_bd_layer.h>
 
 #ifdef SEMERU_FRONTSWAP_PATH
-	#include "frontswap.h"
+	#include "frontswap_path.h"
 #else
-	#include "block_path_rdma.h"
+	#include "block_path.h"
 #endif
  
 
