@@ -301,7 +301,13 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 
   // page offset, compared start of Data Region
   // The real virtual address is RDMA_DATA_SPACE_START_ADDR + start_addr.
-  size_t start_addr           = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; // calculate the remote addr
+  #ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+    size_t start_addr = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; // calculate the remote addr
+  #else
+    // For the default kernel, no need to do the swp_offset -> virt translation
+    size_t start_addr = swap_entry_offset << PAGE_SHIFT;
+  #endif
+
   //size_t bytes_len            = PAGE_SIZE; // single page for now
 
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
@@ -402,7 +408,13 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
   struct remote_mapping_chunk   *remote_chunk_ptr;
   // page offset, compared start of Data Region
   // The real virtual address is RDMA_DATA_SPACE_START_ADDR + start_addr.
-  size_t start_addr           = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT;
+  #ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+    size_t start_addr = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; // calculate the remote addr
+  #else
+    // For the default kernel, no need to do the swp_offset -> virt translation
+    size_t start_addr = swap_entry_offset << PAGE_SHIFT;
+  #endif
+
   //size_t bytes_len            = PAGE_SIZE; // single page for now
 
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
