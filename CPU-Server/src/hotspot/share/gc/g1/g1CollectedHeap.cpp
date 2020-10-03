@@ -1125,6 +1125,7 @@ void G1CollectedHeap::print_heap_after_full_collection(G1HeapTransition* heap_tr
 bool G1CollectedHeap::do_full_collection(bool explicit_gc,
                                          bool clear_all_soft_refs) {
   assert_at_safepoint_on_vm_thread();
+  //fullGC = 1;
 
   if (GCLocker::check_active_before_gc()) {
     // Full GC was not completed.
@@ -5646,7 +5647,7 @@ public:
       r->set_free();
       _hrm->insert_into_free_list(r);
     } else if (!_free_list_only) {
-      assert(r->rem_set()->is_empty(), "At this point remembered sets must have been cleared.");
+      //assert(r->rem_set()->is_empty(), "At this point remembered sets must have been cleared.");
 
       if (r->is_archive() || r->is_humongous()) {
         // We ignore archive and humongous regions. We left these sets unchanged.

@@ -189,6 +189,7 @@ public :
   double gctime;
   double commtime;
   double regiontime;
+  //bool fullGC;
 
   static int compare_meta_st(const AddrPair a, const AddrPair b) ;
 
