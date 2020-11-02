@@ -1879,8 +1879,15 @@ void reset_kernel_semeru_rdma_ops(void){
  */
 int init_rdma_sessions(struct rdma_session_context *rdma_session){
 	int ret = 0; 
-	char 	ip[] = "10.10.10.8"; // the memory server ip
+	char *ip;
 
+	// [Debug] Only support 1 memory server now.
+
+	if(NUM_OF_MEMORY_SERVER != 1){
+		printk(KERN_ERR "%s, debug mode for frontswap path. Only support 1 memory server.\n",__func__);
+	}
+
+	ip = mem_server_ip;
 
 	// 1) RDMA queue information
   // The number of outstanding wr the QP's send queue and recv queue.
@@ -1894,8 +1901,8 @@ int init_rdma_sessions(struct rdma_session_context *rdma_session){
 
 	// 2) Setup socket information
 	// Debug : for test, write the ip:port as 10.0.0.2:9400
-  rdma_session->port = htons((uint16_t)9400);  // After transffer to big endian, the decimal value is 47140
-  ret= in4_pton(ip, strlen(ip), rdma_session->addr, -1, NULL);   // char* to ipv4 address ?
+  rdma_session->port = htons((uint16_t)mem_server_port);  				// transffer to big endian
+  ret= in4_pton(ip, strlen(ip), rdma_session->addr, -1, NULL);   // char* to ipv4 address
   if(ret == 0){  		// kernel 4.11.0 , success 1; failed 0.
 		printk(KERN_ERR"Assign ip %s to  rdma_session->addr : %s failed.\n",ip, rdma_session->addr );
 		goto err;

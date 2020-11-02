@@ -61,7 +61,7 @@ unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH];
 // Record the swap out ratio for the JVM Heap Region
 // 1) Reset it to 0 before using by a process.
 // 2) Can only be used by one process at one time. 
-u32 jvm_region_swap_out_counter[SWAP_OUT_MONITOR_ARRAY_LEN];
+atomic_t jvm_region_swap_out_counter[SWAP_OUT_MONITOR_ARRAY_LEN];
 
 atomic_t on_demand_swapin_number;
 atomic_t hit_on_swap_cache_number;
@@ -222,9 +222,9 @@ bool within_range(u64 val){
 
 	// 2) madvise  [1GB, 2GB)
 	// Debug mode.
-	if( val >= (u64)0x40000000 && val < (u64)0x80000000  ){
-		return 1;
-	}
+	//if( val >= (u64)0x40000000 && val < (u64)0x80000000  ){
+	//	return 1;
+	//}
 
 	return 0;
 }

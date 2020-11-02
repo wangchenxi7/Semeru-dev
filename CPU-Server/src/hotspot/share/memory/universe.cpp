@@ -1418,8 +1418,7 @@ ReservedSpace Universe::reserve_semeru_memory_pool(size_t heap_size, size_t alig
 
     // Swap out monitor
     size_t data_heap_start = (size_t)heap_start_addr + RDMA_STRUCTURE_SPACE_SIZE;
-    //int ret = syscall(SYS_SWAP_STAT_RESET, data_heap_start, heap_size - RDMA_STRUCTURE_SPACE_SIZE);
-    int ret =0; //debug
+    int ret = syscall(SYS_SWAP_STAT_RESET, data_heap_start, heap_size - RDMA_STRUCTURE_SPACE_SIZE);
     if(!ret){
       log_info(semeru)("%s, Reset swap out array for range [0x%lx, 0x%lx)\n",
                       __func__, data_heap_start, (size_t)(data_heap_start + heap_size - RDMA_STRUCTURE_SPACE_SIZE) );

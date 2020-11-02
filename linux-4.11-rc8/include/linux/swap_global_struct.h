@@ -28,14 +28,50 @@
 //  ###################### Module control option  ######################
 //
 
-// enable the swp_entry_t to virtual address remap or not
+// #1 enable the swp_entry_t to virtual address remap or not
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
-//#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
-// This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
+// #2 This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT
 
+// #3 Using frontswap path. The frontswap path bypassed the block layer.
+//    frontswap path only supports one memory server now. We will add the supports of multiple memory servers later.
 #define SEMERU_FRONTSWAP_PATH 1
+
+
+//
+// ##################### Parameters configuration  ######################
+//
+
+
+// Structures of the Regions
+// | -- Meta Region -- | -- Data Regsons --|
+//  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
+#define REGION_SIZE_GB    						((size_t)4)   	// RDMA manage granularity, not the Heap Region.
+#define RDMA_DATA_REGION_NUM     			8
+#define SEMERU_START_ADDR   ((size_t)0x400000000000)
+
+// Number of Memory servers
+#define NUM_OF_MEMORY_SERVER	1
+
+// Memory server #1, Region[1] to Region[5]
+#define MEMORY_SERVER_0_REGION_START_ID		1
+#define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
+
+// Memory server #2, Region[5] to Region[9]
+//#define MEMORY_SERVER_1_REGION_START_ID		5
+#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
+#define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
+
+// Define the ip of each memory servers.
+//char* mem_server_ip[][] = {"10.0.0.2"};
+static char mem_server_ip[]= "10.0.0.2";
+static uint16_t mem_server_port = 9400;
+
+
+
+
 
 
 //
@@ -83,22 +119,14 @@
 #define ONE_MB    ((size_t)1048576)				// 1024 x 2014 bytes
 #define ONE_GB    ((size_t)1073741824)   	// 1024 x 1024 x 1024 bytes
 
-
-//
-// RDMA Related
-//
-
-// Already defined in kernel.
-
 #ifndef PAGE_SIZE
 	#define PAGE_SIZE		      						((size_t)4096)	// bytes, use the define of kernel.
 #endif
 
-//#define PAGE_SHIFT
-//#define PAGE_MASK
 
-#define REGION_SIZE_GB    						((size_t)4)   	// RDMA manage granularity, not the Heap Region.
-#define RDMA_DATA_REGION_NUM     			8
+//
+// RDMA Related
+//
 
 
 // 1) Limit the outstanding rdma wr.
@@ -143,28 +171,14 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 //################################## Address information ##################################
 
 
-#define SEMERU_START_ADDR   ((size_t)0x400000000000)
-
 #define RDMA_ALIGNMENT_BYTES    64  // cache line.
 
 // RDMA structure space
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
 #define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
-
 #define RDMA_DATA_SPACE_START_ADDR (size_t)(SEMERU_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE)
 
 
-// Number of Memory server
-#define NUM_OF_MEMORY_SERVER	1
-
-// Memory server #1, Region[1] to Region[5]
-#define MEMORY_SERVER_0_REGION_START_ID		1
-#define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
-
-// Memory server #2, Region[5] to Region[9]
-//#define MEMORY_SERVER_1_REGION_START_ID		5
-#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
-#define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
 
 //
 // Offset for each Part

@@ -4385,11 +4385,11 @@ void G1CollectedHeap::evacuate_collection_set(G1ParScanThreadStateSet* per_threa
       // Update cset to memory server, if non-empty
       if(num_mem_cset){
         update_cset_to_mem_server(mem_id);
-        log_info(semeru,rdma)("%s, write %lx regions cset to memory server[%lx] ",__func__, num_mem_cset, mem_id);
+        log_info(semeru,rdma)("%s, write %lx regions cset to memory server[%lu] ",__func__, num_mem_cset, mem_id);
       }
 
     }// end of mem_id, each memory server
-    log_info(semeru,rdma)("%s, Update CSet to all memory servers. \n", __func__);
+    log_info(semeru,rdma)("%s, Send information to all memory servers done.\n", __func__);
 
 
     close_stw_window();

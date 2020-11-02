@@ -308,8 +308,6 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
     size_t start_addr = swap_entry_offset << PAGE_SHIFT;
   #endif
 
-  //size_t bytes_len            = PAGE_SIZE; // single page for now
-
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
   size_t offset_within_chunk  = start_addr & CHUNK_MASK;
   struct remote_mapping_chunk   *remote_chunk_ptr;
@@ -352,7 +350,7 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 
     #ifdef DEBUG_MODE_DETAIL
       pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
-                          __func__, rdma_queue->q_index, (size_t)page, (szie_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
+                          __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
     #endif
 
     put_cpu(); // enable preeempt. 
@@ -415,8 +413,6 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
     size_t start_addr = swap_entry_offset << PAGE_SHIFT;
   #endif
 
-  //size_t bytes_len            = PAGE_SIZE; // single page for now
-
   size_t start_chunk_index    = start_addr >> CHUNK_SHIFT;
   size_t offset_within_chunk  = start_addr & CHUNK_MASK;
 
@@ -456,7 +452,7 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
 
     #ifdef DEBUG_MODE_DETAIL
       pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n",
-                        __func__, rdma_queue->q_index, (size_t)page, (szie_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
+                        __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
     #endif
 
     put_cpu(); // enable preeempt. 
@@ -505,7 +501,7 @@ static void semeru_invalidate_page(unsigned type, pgoff_t offset)
 
 
 /**
- * What's the purpose ?
+ * Remove the stale pages
  * 
  */
 static void semeru_invalidate_area(unsigned type)

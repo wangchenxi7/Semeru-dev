@@ -1094,7 +1094,7 @@ void HeapRegion::read_info_at_gc(){
 	syscall(RDMA_READ, 0, _sync_mem_cpu, sizeof(SyncBetweenMemoryAndCPU));
 
 
-  //#2, read cross_region_ref queue
+  //#2, read cross_region_ref queue -- useless now
 	// log_debug(semeru,rdma)("Read CrossRegionRegQueue 0x%lx , size 0x%lx to Memory Server", 
 	// 																(size_t)_sync_mem_cpu->_cross_region_ref_update_queue , (size_t)(align_up(sizeof(HashQueue), PAGE_SIZE)+CROSS_REGION_REF_UPDATE_Q_LEN*24) );
   //TargetObjQueue* tq = _cpu_to_mem_gc->_target_obj_queue;
@@ -1131,7 +1131,7 @@ void HeapRegion::flush_data(){
   int ret = 0;
   int target_mem_id = region_to_memory_server_mapping();
 
-	log_debug(semeru,rdma)("Write Region[0x%x] , addr 0x%lx, sent size 0x%lx to Memory Server[%d]", 
+	log_debug(semeru,rdma)("Write Region[%u] , addr 0x%lx, sent size 0x%lx to Memory Server[%d]", 
                         this->hrm_index(),  (size_t)bottom() , (size_t)GrainBytes, target_mem_id );
   
   //debug
@@ -1140,7 +1140,7 @@ void HeapRegion::flush_data(){
   //    And multiple QP can lead to a much higher posibility ??
   ret = syscall(RDMA_WRITE, target_mem_id, bottom(), GrainBytes);  
   if(ret){
-    tty->print("%s, RDMA write for region[0x%x] to memory server[%d] failed. Crash here. \n", __func__, this->hrm_index(),target_mem_id);
+    tty->print("%s, RDMA write for region[%u] to memory server[%d] failed. Crash here. \n", __func__, this->hrm_index(),target_mem_id);
     guarantee(false," RDMA write failed." );
   }
 

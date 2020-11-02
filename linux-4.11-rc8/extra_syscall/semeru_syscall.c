@@ -129,9 +129,6 @@ asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len){
 
 	// 1) reset on-demand swapin counter.
 	reset_swap_info();
-
-	return 0; // [!!! DEBUG !!!]
-
 	printk(KERN_INFO"%s, ater reset, on_demand_swapin_number 0x%x \n",__func__,  get_on_demand_swapin_number());
 
 
@@ -141,7 +138,8 @@ asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len){
 	if(within_range(start_vaddr)){
 		
 		for(i=0; i<SWAP_OUT_MONITOR_ARRAY_LEN; i++ ){
-			jvm_region_swap_out_counter[i] = 0;
+			//jvm_region_swap_out_counter[i] = 0;
+			atomic_set(&jvm_region_swap_out_counter[i], 0);
 		}
 
 		return 0;
@@ -150,13 +148,15 @@ asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len){
 	if( (u64)start_vaddr >= SWAP_OUT_MONITOR_VADDR_START  &&  bytes_len <=  (u64)(SWAP_OUT_MONITOR_ARRAY_LEN *(1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG)) ){
 		
 		for(i=0; i<SWAP_OUT_MONITOR_ARRAY_LEN; i++ ){
-			jvm_region_swap_out_counter[i] = 0;
+			//jvm_region_swap_out_counter[i] = 0;
+			atomic_set(&jvm_region_swap_out_counter[i], 0);
 		}
+
+		printk(KERN_INFO"%s, Region monitoring, reset jvm_region_swap_out_counter[] to 0 \n",__func__);
 
 		return 0;
 	}// end of if.
 	#endif
-
 
 
   printk(KERN_ERR "%s, [0x%llx, 0x%llx) exceed the swap out array range [0x%llx, 0x%llx),  ", __func__, 
@@ -170,8 +170,9 @@ asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len){
 
 /**
  * Semeru CPU : get the swapped out pages number.
- * 
  * Because we can't use any FPU in kernel, return the number of swapped pages. 
+ * 
+ * Warning : For a not-full Region. Using swapped-out pages to calculate cached-paged ratio is not that accurate.
  * 
  */
 asmlinkage u64 sys_num_of_swap_out_pages(u64 start_vaddr, u64 bytes_len){
@@ -185,6 +186,8 @@ asmlinkage u64 sys_num_of_swap_out_pages(u64 start_vaddr, u64 bytes_len){
  * 						For each on-demand swapin operation, it may load multiple pages into Swap Cache.
  * Syscall id, 337
  *  
+ * Warning : Some pages are prefetched into CPU DRAM. However, we can't count them accurately right now.
+ * 
  */
 asmlinkage int sys_num_of_on_demand_swapin(void){
 
