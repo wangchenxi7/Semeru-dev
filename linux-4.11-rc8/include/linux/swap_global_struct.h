@@ -65,7 +65,6 @@
 #define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * RDMA_STRUCTURE_SPACE_SIZE)
 
 // Define the ip of each memory servers.
-//char* mem_server_ip[][] = {"10.0.0.2"};
 static char mem_server_ip[]= "10.0.0.2";
 static uint16_t mem_server_port = 9400;
 
