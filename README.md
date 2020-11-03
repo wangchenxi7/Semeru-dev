@@ -44,8 +44,12 @@ We ﬁrst discuss how to build and install the kernel.
 
 - Modify *grub* and set transparent_hugepage to *madvise*:
 
+<<<<<<< HEAD
   <pre><code>sudo vim /etc/default/grub 
   + transparent_hugepage=madvise </code></pre>
+=======
+  <code>sudo vim /etc/default/grub <br />+ transparent_hugepage=madvise </code>
+>>>>>>> d24f82d158b479378c5f41d840f89e57cbe1bf20
 
 - Install the kernel and restart the machine:
 
