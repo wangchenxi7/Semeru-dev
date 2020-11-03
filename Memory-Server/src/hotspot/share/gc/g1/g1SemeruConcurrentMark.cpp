@@ -1542,7 +1542,6 @@ void G1SemeruConcurrentMark::mark_from_roots() {
  */ 
 void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 
-	//debug
 	log_debug(semeru, mem_trace)("%s, Runnting Thread, %s, gc_id %u ,  0x%lx \n", __func__, 
 																									((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
 																									((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
