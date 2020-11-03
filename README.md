@@ -1,6 +1,6 @@
 # 1. Summary of Semeru
 
-*Semeru* is a managed runtime built for a memory disaggregated cluster where each managed application uses one CPU server and multiple memory servers. When launched on *Semeru*, the process runs its application code (mutator) on the CPU server, and the garbage collector on both the CPU server and memory servers in a coordinated manner. Due to task ofﬂoading and moving computation close to data, *Semeru* signiﬁcantly improves the locality for both the mutator and GC and, hence, the end-to-end performance of the application.
+*Semeru* is a managed runtime built for a memory disaggregated cluster where each managed application uses one CPU server and multiple memory servers. When launched on *Semeru*, the process runs its application code (mutator) on the CPU server, and the garbage collector on both the CPU server and memory servers in a coordinated manner. Due to task ofﬂoading and moving computation close to data, *Semeru* signiﬁcantly improves the locality for both the mutator and GC and, hence, the end-to-end performance of the application. Please refere our paper **[Semeru: A Memory-Disaggregated Managed Runtime](https://www.usenix.org/system/files/osdi20-wang.pdf)** for more details.
 
 # 2. Setup environments
 
