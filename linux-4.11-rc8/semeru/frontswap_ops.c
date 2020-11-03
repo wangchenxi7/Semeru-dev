@@ -177,6 +177,9 @@ int dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru
   struct ib_device * dev = rdma_session->rdma_dev->dev;
 
 
+  //debug
+  //printk(KERN_INFO"%s, build wr for remote_mapping_chunk 0x%lx, offset_within_chunk 0x%lx \n", __func__, (size_t)remote_chunk_ptr->remote_addr, offset_within_chunk);
+
   // 1) Map a single page as RDMA buffer
   rdma_req->page = page;
   init_completion( &(rdma_req->done) );
@@ -337,9 +340,26 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
     }
 
     // get the rdma queue
-    start_chunk_index += 1; // Skip the Meta Region.
+    //start_chunk_index += 1; // Skip the Meta Region.
+    //
+    // Warning : The data in Meta Region can be swapped out. 
+    // We keep some useless data in the Meta Region. 
+    // Swap out them to memory server can save the CPU server local cache.
+    
     remote_chunk_ptr  = &(rdma_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
+
+    //debug - swap into meta region
+    // if( start_addr + SEMERU_START_ADDR <  RDMA_DATA_SPACE_START_ADDR ){
+    //   printk(KERN_INFO"%s, meta region start_addr 0x%lx, offset_within_chunk 0x%lx. start_chunk_index 0x%lx, remote_chunk_ptr 0x%lx\n", 
+    //         __func__, start_addr + SEMERU_START_ADDR, offset_within_chunk, start_chunk_index, (size_t)remote_chunk_ptr );
+    // }
+    // if( start_addr + SEMERU_START_ADDR <  SEMERU_START_ADDR + ALIVE_BITMAP_SIZE  ){ // start_addr is an offset.
+    //   printk(KERN_ERR"%s, alive_bitmap zone, start_addr 0x%lx, offset_within_chunk 0x%lx. start_chunk_index 0x%lx, remote_chunk_ptr 0x%lx\n", 
+    //         __func__, start_addr + SEMERU_START_ADDR, offset_within_chunk, start_chunk_index, (size_t)remote_chunk_ptr );
+    // }
+
+    // end of debug
 
     // 2.2 enqueue RDMA request 
     ret = semeru_fs_rdma_send(rdma_session, rdma_queue, rdma_req, remote_chunk_ptr, offset_within_chunk, page, DMA_TO_DEVICE );
@@ -349,8 +369,12 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
     }
 
     #ifdef DEBUG_MODE_DETAIL
+      //pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
+      //                    __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
+
+      // Enable swap-out of Meta Region
       pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
-                          __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
+                          __func__, rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset );
     #endif
 
     put_cpu(); // enable preeempt. 
@@ -439,7 +463,12 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
     }
 
     // get the rdma queue
-    start_chunk_index += 1; // Skip the Meta Region.
+    //start_chunk_index += 1; // Skip the Meta Region.
+    //
+    // Warning : The data in Meta Region can be swapped out. 
+    // We keep some useless data in the Meta Region. 
+    // Swap out them to memory server can save the CPU server local cache.
+
     remote_chunk_ptr  = &(rdma_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
 
@@ -451,8 +480,12 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
     }
 
     #ifdef DEBUG_MODE_DETAIL
+      //pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n",
+      //                  __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
+
+      // enable swap out of Meta Region
       pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n",
-                        __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
+                        __func__, rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
     #endif
 
     put_cpu(); // enable preeempt. 

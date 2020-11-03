@@ -1094,7 +1094,7 @@ void HeapRegion::read_info_at_gc(){
 	syscall(RDMA_READ, 0, _sync_mem_cpu, sizeof(SyncBetweenMemoryAndCPU));
 
 
-  //#2, read cross_region_ref queue -- useless now
+  //#2, read cross_region_ref queue -- useless now. For Memory server compation.
 	// log_debug(semeru,rdma)("Read CrossRegionRegQueue 0x%lx , size 0x%lx to Memory Server", 
 	// 																(size_t)_sync_mem_cpu->_cross_region_ref_update_queue , (size_t)(align_up(sizeof(HashQueue), PAGE_SIZE)+CROSS_REGION_REF_UPDATE_Q_LEN*24) );
   //TargetObjQueue* tq = _cpu_to_mem_gc->_target_obj_queue;
