@@ -1,6 +1,6 @@
 # 1. Summary of Semeru
 
-*Semeru* is a managed runtime built for a memory disaggregated cluster where each managed application uses one CPU server and multiple memory servers. When launched on *Semeru*, the process runs its application code (mutator) on the CPU server, and the garbage collector on both the CPU server and memory servers in a coordinated manner. Due to task ofﬂoading and moving computation close to data, *Semeru* signiﬁcantly improves the locality for both the mutator and GC and, hence, the end-to-end performance of the application. Please refere our paper **[Semeru: A Memory-Disaggregated Managed Runtime](https://www.usenix.org/system/files/osdi20-wang.pdf)** for more details.
+*Semeru* is a managed runtime built for a memory disaggregated cluster where each managed application uses one CPU server and multiple memory servers. When launched on *Semeru*, the process runs its application code (mutator) on the CPU server, and the garbage collector on both the CPU server and memory servers in a coordinated manner. Due to task ofﬂoading and moving computation close to data, *Semeru* signiﬁcantly improves the locality for both the mutator and GC and, hence, the end-to-end performance of the application. Please refer to our OSDI'20 paper **[Semeru: A Memory-Disaggregated Managed Runtime](https://www.usenix.org/system/files/osdi20-wang.pdf)** for more details.
 
 # 2. Setup environments
 
@@ -24,7 +24,7 @@
   
   
 
- <img src="figures/semeru_ae_overview.png" alt="Alt " title="Overview of *Semeru*'s codebase" style="zoom:70%;" />
+ <img src="figures/semeru_ae_overview.png" alt="Alt " title="Overview of *Semeru*'s codebase" width="600" height="400" />
 
  
 
@@ -57,7 +57,7 @@ We ﬁrst discuss how to build and install the kernel.
 - Install the MLNX-OFED driver. We download the MLNX_OFED_LINUX-4.5-1.0.1.0-rhel7.6-x86_64, and install it against our newly built kernel:
 
   <pre><code># Install the same MLNX_OFED driver on both the CPU server and memory servers
-  # Please refer the Mellanox website for more details.
+  # Please refer to the Mellanox website for more details.
   cd MLNX_OFED_LINUX-4.5-1.0.1.0-rhel7.6-x86_64
   sudo mlnxofedinstall --add-kernel-support</code></pre>
 
@@ -157,7 +157,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # in Semeru/ShellScript/install_semeru_module.sh :
   # SWAP_PARTITION_SIZE="32G"
   # We don't recommend to change the Java heap size right now.
-  # Please refer the Known Issues chapter for more details.
+  # Please refer to the Known Issues chapter for more details.
   cd Semeru/ShellScript/
   install_semeru_module.sh semeru
   # To close the swap partition, do the following:
@@ -173,7 +173,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   <pre><code># E.g., Create a cgroup with 10GB memory limitation.
   # The shellscript will create a cgroup, named as memctl.
   # When setting the CPU server local cache, please leave enough size for the native memory.
-  # Refere the Known Issues chapter for more ditals.
+  # Refer to the Known Issues chapter for more ditals.
   # @CPU server
   cd Semeru/ShellScript
   cgroupv1_manage.sh create 10g
@@ -189,7 +189,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # @CPU server
   cgexec -sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
   # We also recommend that only run the executor on the CPU-Server JVM.
-  # Please refere the FAQ chapter for more details.
+  # Please refer to the FAQ chapter for more details.
   # In order to achive this, specify the executor JVM in Spark/conf/spark-defaults.conf :
   spark.executorEnv.JAVA_HOME=${semeru_cpu_server_jvm_dir}/jdk</code></pre>
 
