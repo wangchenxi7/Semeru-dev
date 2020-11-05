@@ -95,6 +95,11 @@ public:
   inline bool par_mark(HeapWord* addr);
   inline bool par_mark(oop obj);
 
+  // semeru
+  size_t covered_start()  { return (size_t)_covered.start(); };
+  size_t covered_end()    { return (size_t)_covered.end(); }
+
+
   // Clear bitmap.
   void clear()                         { do_clear(_covered, true); }
   void clear_range(MemRegion mr)       { do_clear(mr, false);      }

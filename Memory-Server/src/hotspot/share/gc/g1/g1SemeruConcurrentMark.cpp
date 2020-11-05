@@ -71,10 +71,6 @@
 #include "gc/g1/SemeruHeapRegion.inline.hpp"
 #include "gc/g1/SemeruHeapRegionSet.inline.hpp"
 
-//debug
-#include <time.h>
-
-
 
 
 G1SemeruCMMarkStack::G1SemeruCMMarkStack() :
@@ -462,7 +458,7 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 		claimed_region = _freshly_evicted_regions[claimed_index%_max_regions];
 		if(claimed_region->write_check_tag_dirty()){
 			// Path#1 dirty_tag = 1, skip this region.
-			log_debug(semeru,rdma)("%s, Region[0x%x] is under transferring (tag 0x%x), skip it(add it back to CSet.).", 
+			log_debug(semeru,rdma)("%s, Region[%d] is under transferring (tag 0x%x), skip it(add it back to CSet.).", 
 																		__func__, claimed_region->hrm_index(),  claimed_region->_version_tag );
 			add_freshly_evicted_regions(claimed_region);	// add this region back.
 			// return null directly.
@@ -471,7 +467,7 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 			// Path#2, claimed a Region successfully
 			claimed_region->store_write_verion_tag(); // store current version_tag
 
-			log_debug(semeru,mem_trace)("%s, claimed Region[0x%x], _claimed_freshly_evicted_regions 0x%lx, _num_freshly_evicted_regions 0x%lx", __func__,
+			log_debug(semeru,mem_trace)("%s, claimed Region[%d], _claimed_freshly_evicted_regions 0x%lx, _num_freshly_evicted_regions 0x%lx", __func__,
 																								claimed_region->hrm_index(), _claimed_freshly_evicted_regions, _num_freshly_evicted_regions);
 
 			return claimed_region;
@@ -480,48 +476,6 @@ SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next() {
 	}
 	return NULL;
 }
-
-
-
-/**
- * Debug function : Claim Region without considering thee Region write state.
- *  
- */
-SemeruHeapRegion* G1SemeruCMCSetRegions::claim_freshly_evicted_next_without_consider_data_path_write() {
-
-	SemeruHeapRegion* claimed_region;
-
-	if (_should_abort_scan  ) {
-		// If someone has set the should_abort flag, we return NULL to
-		// force the caller to bail out of their loop.
-		return NULL;
-	}
-
-	// _bottom == _top, means empty.
-	if (_claimed_freshly_evicted_regions == _num_freshly_evicted_regions) {
-		return NULL;
-	}
-
-	size_t claimed_index = Atomic::add((size_t)1, &_claimed_freshly_evicted_regions) - 1;
-	if (claimed_index < _num_freshly_evicted_regions) {
-		claimed_region = _freshly_evicted_regions[claimed_index%_max_regions];
-
-		log_debug(semeru,mem_trace)("%s, claimed Region[0x%x], _claimed_freshly_evicted_regions 0x%lx, _num_freshly_evicted_regions 0x%lx", __func__,
-																								claimed_region->hrm_index(), _claimed_freshly_evicted_regions, _num_freshly_evicted_regions);
-
-		return claimed_region;
-	}
-	return NULL;
-}
-
-
-
-
-
-
-
-
-
 
 
 size_t G1SemeruCMCSetRegions::num_cm_scanned_regions() const {
@@ -1297,7 +1251,7 @@ public:
 			// Join the multiple mark workers,
 			// Only one can exit the block.
 			SuspendibleThreadSetJoiner sts_join;		// [?] gdb Concurrent marking threads always get stuck here ??
-			log_debug(semeru, mem_trace)("%s, Schedule worker[0x%x] to do Concurrent Mark.", __func__, worker_id );
+			log_info(semeru, mem_trace)("%s, Schedule worker[0x%x] to do Concurrent Mark.", __func__, worker_id );
 
 			assert(worker_id < _semeru_cm->active_tasks(), "invariant");
 
@@ -1588,7 +1542,6 @@ void G1SemeruConcurrentMark::mark_from_roots() {
  */ 
 void G1SemeruConcurrentMark::semeru_concurrent_marking() {
 
-	//debug
 	log_debug(semeru, mem_trace)("%s, Runnting Thread, %s, gc_id %u ,  0x%lx \n", __func__, 
 																									((G1SemeruConcurrentMarkThread*)Thread::current())->name(),
 																									((G1SemeruConcurrentMarkThread*)Thread::current())->gc_id(),
@@ -2551,9 +2504,6 @@ public:
 		//		b. The Remark is STW. why not use serial marking ??
 		//			  Or  the serial marking doesn't mean STW parallel marking ??
 		do {
-			// task->do_marking_step(1000000000.0 /* something very large */,
-			// 											true         /* do_termination       */,
-			// 											false        /* is_serial            */);
 
 				 task->do_semeru_marking_step(1000000000.0 /* something very large */,
 														true         /* do_termination       */,
@@ -3220,7 +3170,7 @@ void G1SemeruCMTask::move_entries_to_global_stack() {
 	G1SemeruTaskQueueEntry task_entry;
 	while (n < G1SemeruCMMarkStack::EntriesPerChunk && _semeru_task_queue->pop_local(task_entry)) {
 		buffer[n] = task_entry;		// Assign the poped entry to the newly created buffer[].
-		assert(_curr_region->is_in_reserved(task_entry.holder_addr()), "All the entries of one Chunk should belong to same Region[0x%x]", _curr_region->hrm_index() );
+		assert(_curr_region->is_in_reserved(task_entry.holder_addr()), "All the entries of one Chunk should belong to same Region[%d]", _curr_region->hrm_index() );
 		++n;
 	}
 
@@ -3261,6 +3211,13 @@ bool G1SemeruCMTask::get_entries_from_global_stack() {
 	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
 	if(buffer[0].is_null() == false){
 		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
+		
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}
+
 		if(target_region != _curr_region){
 
 			log_debug(semeru,mem_trace)("%s, Current global_mark_stack chunk doesn't pushed by worker[0x%x], who is processing region[0x%x]. push it back.", 
@@ -3303,7 +3260,7 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 	// from the global stack.
 	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
 
-	if (!_semeru_cm->mark_stack_pop(buffer)) {
+	if (!_semeru_cm->mark_stack_pop(buffer)) {  // [?] Is it possible that the buffer contains oops pushed by different tasks ?
 		return false;
 	}
 
@@ -3312,7 +3269,14 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
 	if(buffer[0].is_null() == false){
 		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
-		if(_curr_region == NULL || target_region != _curr_region){
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}
+
+		// switch scanned regions
+		if(_curr_region == NULL || target_region != _curr_region  ){
 
 			log_debug(semeru,mem_trace)("%s, Current global_mark_stack chunk doesn't pushed by worker[0x%x], who is processing region[0x%x]. switch to region[0x%x].", 
 																				__func__, worker_id(), _curr_region->hrm_index(),target_region->hrm_index()  );
@@ -3342,7 +3306,38 @@ bool G1SemeruCMTask::get_entries_from_global_stack_may_switch_region() {
 
 
 
+/**
+ * delete entries belong to Region with scan_failure falg setted. 
+ */
+bool G1SemeruCMTask::delete_entries_from_global_stack() {
+	// Local array where we'll store the entries that will be popped
+	// from the global stack.
+	G1SemeruTaskQueueEntry buffer[G1SemeruCMMarkStack::EntriesPerChunk];
 
+	if (!_semeru_cm->mark_stack_pop(buffer)) {
+		return false;
+	}
+
+	// 1) Only process the Chunk belong to current scanning Region. Do not switch the scanning region here.
+	//    The entries will be on claimed by the G1SemeruCMTask who cause the overflow.
+	// 2) The G1SemeruCMTask can steal work from other worker's local queue.
+	if(buffer[0].is_null() == false){
+		SemeruHeapRegion* 	target_region = _semeru_h->hrm()->addr_to_region((HeapWord*)buffer[0].holder_addr());
+		
+		// abandon the entries belonging to a region with scan_failure flag setted.
+		if(target_region->scan_failure){
+			log_debug(semeru, mem_trace)("%s, find entries belonging to region[0x%x] with scan_failure setted, skip it.",__func__, target_region->hrm_index() );
+			return true;	// skip the scanning of this buffer and continue.
+		}else{
+			// get a normal buffer, push it back and stop.
+			// Sure, we may not find all the entries belong the region with scan_failure setted, process them later.
+			_semeru_cm->mark_stack_push(buffer);
+		}
+
+	}// get a non-null buffer
+
+	return false;
+}
 
 
 
@@ -3380,6 +3375,27 @@ void G1SemeruCMTask::drain_local_queue(bool partially) {
 		}
 	} // end of if
 }
+
+/**
+ * Fault tolerance
+ * Drain the task_queue cause of concurrent tracing failure.
+ * Pop all the objects but not processing them.
+ */
+void G1SemeruCMTask::fault_tolerance_drain_local_queue() {
+	size_t	target_size = 0;  // Drain all the items.
+
+	if (_semeru_task_queue->size() > target_size) {
+		G1SemeruTaskQueueEntry entry;
+		bool ret = _semeru_task_queue->pop_local(entry);
+		while (ret) {
+			ret = _semeru_task_queue->pop_local(entry);	// pop all the enqueued objects directly.
+		}
+
+	} // end of if
+}
+
+
+
 
 /**
  * Semeru : Drain the overflow entries pushed by current thread.
@@ -3459,8 +3475,29 @@ void G1SemeruCMTask::drain_global_stack_may_switch_region(bool partially) {
 			drain_local_queue(partially);
 		}
 	}
+
 }
 
+
+
+/**
+ * Try to delete the entries belong to region with scan_failure flag setted.
+ *  
+ */
+void G1SemeruCMTask::falut_tolerance_drain_global_stack() {
+	if (has_aborted()) {
+		return;
+	}
+
+	// We have a policy to drain the local queue before we attempt to
+	// drain the global stack.
+	assert(_semeru_task_queue->size() == 0, "invariant");
+
+	while (!has_aborted() && delete_entries_from_global_stack()) {
+		// just delete entries/buffers, nothing need to be done.
+	}
+	
+}
 
 
 
@@ -3518,21 +3555,30 @@ void G1SemeruCMTask::restore_region_mark_stats() {
 	uint region_index = _curr_region->hrm_index();
 	size_t alive_words;
 	double alive_ratio;
+	double ratio_before_update; // debug
 
 	// Transfer the alive words from Worker local cache to Region's global stat . MT safe.
 	// And then clear the local cache entry.
-	alive_words = _mark_stats_cache.evict_region(region_index);	
+	alive_words = _mark_stats_cache.evict_region(region_index);	 // [!!] Work stealing thread can cause error here ???
+	ratio_before_update = _curr_region->alive_ratio();
 
 	// After adding more alive words, update the alive ratio.
 	// 1) Maybe updated by MT threads. [Fix ME]
 	// 2) Need to add the objects above _top_at_mark_start
 	alive_ratio = ((double)alive_words)/((double)SemeruHeapRegion::SemeruGrainWords); 
-	if(alive_ratio >_curr_region->alive_ratio() ){ 
+	if(alive_ratio > ratio_before_update && _curr_region->scan_failure == false ){ 
 		_curr_region->set_alive_ratio(alive_ratio);
-		
-		log_debug(semeru,mem_trace)("%s, wroker[0x%x] update Region[0x%x] alive_ratio to %f", __func__, worker_id(), region_index, alive_ratio);
+		log_info(semeru,mem_trace)("%s, wroker[0x%x] update Region[%d] alive_ratio from %f to %f", 
+																		__func__, worker_id(), region_index, ratio_before_update, _curr_region->alive_ratio() );
 	}
 
+	// Memory server concurrent tracing for this region falied 
+	// Update its alive ratio to 1.0.
+	// [?] This may cause some performance overhead ?
+	if(_curr_region->scan_failure){
+		_curr_region->set_alive_ratio(1.0);
+		log_info(semeru,mem_trace)("%s, wroker[0x%x] scan Region[%d] falied. Update alive_ratio to 1.0", __func__, worker_id(), region_index);
+	}
 
 }
 
@@ -3716,10 +3762,6 @@ void G1SemeruCMTask::do_marking_step(double time_target_ms,
 void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 															 bool do_termination,
 															 bool is_serial) {
-
-	//debug
-	clock_t start, end;
-
 	assert(time_target_ms >= 1.0, "minimum granularity is 1ms");
 
 	log_debug(semeru, mem_trace)("%s, start.",__func__);
@@ -3731,6 +3773,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 	// enable stealing when the termination protocol is enabled
 	// and do_marking_step() is not being called serially.
 	bool do_stealing = do_termination && !is_serial;
+
 	flags_of_cpu_server_state* cpu_srever_flags = _semeru_h->cpu_server_flags();
 	double diff_prediction_ms = _semeru_h->g1_policy()->predictor().get_new_prediction(&_marking_step_diffs_ms);
 
@@ -3829,29 +3872,30 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 				// 1.2) Process a Normal Region.
 
 				// The source queue for the Region.
-				HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
+				//HashQueue* cross_region_ref_queue =  _curr_region->cross_region_ref_update_queue();
+				G1CMBitMap *target_oop_bitmap_ptr = _curr_region->target_obj_queue();
 
-			
-
-				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s cross_region_ref_queue[0x%lx]: 0x%lx. item length 0x%lx \n",__func__,
+				log_debug(semeru,mem_trace)("%s, worker[0x%x] get Region[0x%lx]'s target_oop_bitmap[0x%lx]: bitmap start at 0x%lx. \n",__func__,
 																																					worker_id(),
 																																					(size_t)_curr_region->hrm_index(), 
-																																					(size_t)cross_region_ref_queue->_region_index, 
-																																					(size_t)cross_region_ref_queue,
-																																					(size_t)cross_region_ref_queue->length() );
+																																					(size_t)_curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_region_index,
+																																					(size_t)_curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap );
 
-				assert(_curr_region->hrm_index() == cross_region_ref_queue->_region_index, "TargetObjQueue and Region aren't match.");
+				assert(_curr_region->hrm_index() == _curr_region->_sync_mem_cpu->_cross_region_ref_target_queue->_region_index, "Target oop bitmap and Region aren't match.");
+				
+				// Scan the Region by using target_oop_bitmap as root.
+				SemeruScanTargetOopClosure scan_target_bipmap(this);
+				_curr_region->semeru_apply_to_marked_objects(target_oop_bitmap_ptr, &scan_target_bipmap);
 
-
-				// debug
-				// add a timer here
-				start = clock();
-
-				scan_cross_region_ref_queue(cross_region_ref_queue);
-
-				// Reset the cross_region reference queue after scanning it immediately
-				// Because CPU server only send the content and  we traverse the whole queue to find alive content.
-				cross_region_ref_queue->reset();
+				// reset the value on bitmap after scaning.
+				target_oop_bitmap_ptr->clear();
+				if(_curr_region->scan_failure){
+					log_debug(semeru,mem_trace)("%s, concurrent tracing for Region[%d] failed. skip it.\n",__func__, _curr_region->hrm_index());
+					// Clear the object already pushed into task_queue and stack
+					fault_tolerance_drain_local_queue(); 	// drain the local task_queue
+					falut_tolerance_drain_global_stack();
+					goto scan_done;
+				}
 			}
 
 			// 1.2） At this point we have either completed iterating over the
@@ -3860,19 +3904,14 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// The purpose is to limit the tracing memory footprint to reduce the CM conflict with mutators.
 			// if already aborted, leave the enqueued items to the rest procedures.
 
-			//log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[0x%x]",__func__, worker_id(), _curr_region->hrm_index() );
+			log_debug(semeru,mem_trace)("%s, worker[0x%x]  Drain reference queue for Region[%d]",__func__, worker_id(), _curr_region->hrm_index() );
 			drain_local_queue(false);		// Current G1SemeruCMTask->_semeru_task_queue
 			drain_global_stack(false);  // Get a Chunk from global/overflow _global_mark_stack, ONLY process objects pushed by this G1SemeruCMTask.
 
-			//debug
-			// timer
-			end = clock();
-			log_debug(semeru,mem_trace)(" Time %f s for Region[0x%lx] \n", ((double) (end - start)) / CLOCKS_PER_SEC,  (size_t)_curr_region->hrm_index() );
+		scan_done:
 
 			// Transfer the marking statistics to Region.
 			restore_region_mark_stats();
-
-
 
 			// End Check #1, Cehck if the Region is written during the concurrent marking.
 			// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
@@ -3881,7 +3920,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			// if(_curr_region->is_override_during_tracing() ){
 			// 	// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
 			// 	// But the keep the garbage ratio.
-			// 	log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
+			// 	log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[%d], it's written during tracing.", __func__,
 			// 																																													worker_id(), _curr_region->hrm_index() );
 				
 			// 	// [Fix Me] The add procedure is NOT MT safe !!!
@@ -3928,14 +3967,15 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 			//assert(_curr_region  == NULL, "invariant");
 			assert(_finger       == NULL, "invariant");
 			//assert(_region_limit == NULL, "invariant");  // [?] We don't use this value. Sometimes it's not NULL.
-			//SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
-			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next_without_consider_data_path_write();
+			//SemeruHeapRegion* claimed_region = _semeru_cm->claim_region(_worker_id);  // Claim a Region to concurrently mark.
+			SemeruHeapRegion* claimed_region = _semeru_cm->mem_server_cset()->claim_freshly_evicted_next();  // Claim a freshly evicted Region directly.
 			if (claimed_region != NULL) {
 				// Yes, we managed to claim one
 				// #1 Reset the fields of claimed Region.
 				claimed_region->_mem_to_cpu_gc->reset();
 				_semeru_cm->clear_statistics(claimed_region);
 				claimed_region->_alive_bitmap.clear_region(claimed_region); // the bitmap only cover itself.
+				claimed_region->scan_failure = false;
 		
 				// #2 set current G1SemeruCMTask's context to claimed Region.
 				setup_for_region(claimed_region);
@@ -3943,7 +3983,7 @@ void G1SemeruCMTask::do_semeru_marking_step(double time_target_ms,
 
 
 				assert(_curr_region == claimed_region, "invariant");
-				log_debug(semeru,mem_trace)("%s, worker[0x%x]  get Region[0x%x] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
+				log_info(semeru,mem_trace)("%s, worker[0x%x]  get Region[%d] to scan. \n",__func__, worker_id(), claimed_region->hrm_index() );
 
 				break; // break out of while loop.
 			}
@@ -4006,11 +4046,12 @@ out_tracing:
 	if (do_stealing && !has_aborted() ) {
 		// We have not aborted. This means that we have finished all that
 		// we could. Let's try to do some stealing...
-		log_debug(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
+		log_info(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
 
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
-		assert( cpu_srever_flags->_is_cpu_server_in_stw == true || _semeru_task_queue->size() == 0,
+		// 
+		assert( cpu_srever_flags->_is_cpu_server_in_stw == true || _semeru_task_queue->size() == 0 ,
 					 "only way to reach here");
 
 		while (!has_aborted()) {
@@ -4019,7 +4060,7 @@ out_tracing:
 
 				log_trace(semeru,mem_trace)("%s, worker[0x%x] steal work, entry 0x%lx , from other threads ", __func__, worker_id(), (size_t)entry.holder_addr() );
 				// switch processing Region.
-				// Don't care entry is oop or array slice, only want its address.
+				// Not care about if the entry is an oop or an array slice, we only want its address.
 				// _curr_region should be NULL.
 				if(_curr_region == NULL || !_curr_region->is_in_reserved(entry.holder_addr()) ){
 					_curr_region = _semeru_h->hrm()->addr_to_region((HeapWord*)entry.holder_addr());
@@ -4046,7 +4087,7 @@ out_tracing:
 		// It's an adding procedure, will not cause MT problem.
 		// If we didn' steal any work,  the _curr_region should be NULL. We will skip the restore procedure.
 		restore_region_mark_stats();
-		log_debug(semeru,mem_trace)("%s, Restored tracing information for work_strealing..",__func__);
+		log_info(semeru,mem_trace)("%s, Restored tracing information for work_strealing..",__func__);
 					
 		// End Check #1, Cehck if the Region is written during the concurrent marking.
 		// If it's written, we remark it as Freshly Evicted. But its garbage ratio is also useful for CPU server.
@@ -4055,7 +4096,7 @@ out_tracing:
 		if(_curr_region != NULL && _curr_region->is_override_during_tracing() ){
 			// Abandon current concurrent tracing and add it back to Freshly Evicted region CSet.
 			// But the keep the garbage ratio.
-			log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[0x%x], it's written during tracing.", __func__,
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] abandon current tracing for Region[%d], it's written during tracing.", __func__,
 																																																worker_id(), _curr_region->hrm_index() );
 			_curr_region->reset_region_cm_scanned(); // Clear the scanned bit.
 			_semeru_cm->mem_server_cset()->add_freshly_evicted_regions(_curr_region);
@@ -4111,10 +4152,11 @@ out_tracing:
 			// that, if a condition is false, we can immediately find out
 			// which one.
 
-			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx \n",
+			log_debug(semeru,mem_trace)("%s, worker[0x%x] finished: is_cm_scan_finished %d, _is_cpu_server_in_stw %d, mark_stack_empty %d , _semeru_task_queue->size() 0x%lx, _semeru_cm->mark_stack_size() 0x%lx \n",
 													__func__, worker_id(), 
 													_semeru_cm->mem_server_cset()->is_cm_scan_finished(), cpu_srever_flags->_is_cpu_server_in_stw ,
-													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size() );
+													_semeru_cm->mark_stack_empty(), (size_t)_semeru_task_queue->size(),
+													_semeru_cm->mark_stack_size() );
 
 			//guarantee(_semeru_cm->mem_server_cset()->is_cm_scan_finished() || cpu_srever_flags->_is_cpu_server_in_stw == true  , "only way to reach here");
 			guarantee(_semeru_cm->mark_stack_empty(), "only way to reach here");

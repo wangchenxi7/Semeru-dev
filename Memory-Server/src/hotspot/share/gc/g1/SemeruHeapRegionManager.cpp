@@ -247,11 +247,19 @@ void SemeruHeapRegionManager::make_regions_available(uint start, uint num_region
 
 		hr->initialize(mr, (size_t)i);		// 2) initialzie more fileds for each SemeruHeapRegion.
 
-		// RDMA : Allocate the SemeruHeapRegion->_target_obj_q here.
-		//hr->allocate_init_target_oop_queue(hr->hrm_index()); 
 
 		// RDMA : allocate cross region reference update queue
-		hr->allocate_init_cross_region_ref_update_queue(hr->hrm_index());
+		//hr->allocate_init_cross_region_ref_update_queue(hr->hrm_index());
+
+
+		// RDMA : Allocate the SemeruHeapRegion->_target_obj_q here.
+		hr->allocate_init_target_oop_bitmap(hr->hrm_index());
+
+		// Use SemeruHeapRegion->SyncBetweenMemoryAndCPU->_cross_region_ref_target_queue to initialize SemeruHeapRegion->_target_oop_bitmap
+		// memory server bitmap#2, target_oop bitmap
+  	// Temporary Design: Get its bitmap array from SemeruHeapRegion->_cross_region_ref_target_queue for now.
+  	G1RegionToSpaceMapper* cur_region_target_oop_bitmap	= hr->create_target_oop_bitmap_storage(hr->hrm_index());
+  	hr->_target_oop_bitmap.initialize(mr, cur_region_target_oop_bitmap );
 		
 		insert_into_free_list(at(i));
 	}
@@ -360,9 +368,9 @@ uint SemeruHeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* 
 	}
 
 	// 3) Padding for the unused Cross Region reference update queue
-	//
-	start_addr_to_padding	=	CHeapRDMAObj<ElemPair, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr ;
-	size_to_be_padded	=	(size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT) -	(size_t)start_addr_to_padding;
+	//		The BitQueue is defined in rdmaStructure.hpp as : CHeapRDMAObj<size_t, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>
+	start_addr_to_padding	=	CHeapRDMAObj<size_t, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr ;
+	size_to_be_padded	=	(size_t)(SEMERU_START_ADDR + CROSS_REGION_REF_TARGET_Q_OFFSET + CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT) -	(size_t)start_addr_to_padding;
 	if(size_to_be_padded> 0){
 		G1SemeruCollectedHeap::heap()->_debug_rdma_padding_cross_region_ref_update_queue = new(size_to_be_padded, start_addr_to_padding) rdma_padding();
 		tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for cross_region_ref_update_queue. \n",__func__,

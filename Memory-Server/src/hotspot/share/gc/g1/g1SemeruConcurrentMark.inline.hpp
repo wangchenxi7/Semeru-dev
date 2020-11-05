@@ -46,6 +46,7 @@
 #include "gc/g1/g1SemeruConcurrentMarkObjArrayProcessor.inline.hpp"
 #include "gc/g1/SemeruHeapRegion.hpp"
 #include "gc/g1/g1SemeruRemSetTrackingPolicy.hpp"
+#include "oops/oop.inline.hpp"
 
 
 // inline bool G1CMIsAliveClosure::do_object_b(oop obj) {
@@ -313,10 +314,15 @@ inline bool G1SemeruCMTask::is_below_finger(oop obj, HeapWord* global_finger) co
  * Use G1SemeruCMOopClosure to handle each fields.
  *  Like a BFS order.  
  * 
- * [?] Until here, the grey object should be already marked in alive_bitmap ?
+ * [1] Until here, the grey object should be already marked in alive_bitmap ?
  *      => Yes. the grey objects are poped up from G1SemeruCMTask->_semeru_task_queue.
  *         The objects have to be marked alive in alive_bitmap before enqueuing the _semeru_task_queue.
  *      => task_entry's field will be traced and marked alive in alive_bitmap by _semeru_cm_oop_closure.
+ * 
+ * [2] The filed may point to a invalid target object:
+ *    a. object in another Region.
+ *    b. object is not transfered to memory server correctly due to bug#8, bug#9.
+ *    We have to catch these exceptions and hanle them.
  * 
  */
 template<bool scan>
@@ -444,7 +450,7 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
     return false;
   }
 
-	log_trace(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[0x%x]'s alive_bitmap", __func__, (size_t)(HeapWord*)obj ,_curr_region->hrm_index() );
+	log_trace(semeru,mem_trace)("%s, mark obj 0x%lx alive in Region[%d]'s alive_bitmap", __func__, (size_t)(HeapWord*)obj ,_curr_region->hrm_index() );
 
   // No OrderAccess:store_load() is needed. It is implicit in the
   // CAS done in G1CMBitMap::parMark() call in the routine above.
@@ -474,11 +480,6 @@ inline bool G1SemeruCMTask::make_reference_alive(oop obj) {
 
 
 
-
-
-
-
-
 // template <class T>
 // inline bool G1SemeruCMTask::deal_with_reference(T* p) {
 //   increment_refs_reached();
@@ -499,24 +500,30 @@ template <class T>
 inline bool G1SemeruCMTask::deal_with_reference(T* p) {
   // increment_refs_reached();  // [?] Purpose for this counting ? count the incoming cross-region reference.
 
+  // 1) Confirm this is a valid object
   oop const obj = RawAccess<MO_VOLATILE>::oop_load(p);   // [?] how to confirm this is a valid oop, not a evacuated Region ?
   if (obj == NULL) {
     return false;
   }
 
-	log_trace(semeru,mem_trace)("%s, find an alive object 0x%lx", __func__, (size_t)(HeapWord*)obj);
-  
+
   // Check if this object is in current Region, if not, skip it.
   // Assume 1) Write Barrier has captured all the cross-region reference caused by mutator
   // 2) GC can update the cross-region referenced caused by alive object evacuation.
   if(_curr_region->is_in_reserved(obj) == false ){
-
 		log_trace(semeru,mem_trace)("%s, Referenced obj 0x%lx is Not in _curr_region[0x%x]  _bottom(0x%lx), _end(0x%lx). SKIP", __func__, 
 																			(size_t)(HeapWord*)obj, _curr_region->hrm_index(), (size_t)_curr_region->bottom(), (size_t)_curr_region->end());
-
     return false;
   }
 
+  // 3) Check for bug#8, bug#9
+  if( !obj->is_klass_valid(obj->klass()) ){
+    log_warning(semeru,mem_trace)("%s, obj 0x%lx is not accessible for now. klass value: 0x%lx skip it. \n", __func__, 
+                                                                  (size_t)(HeapWord*)obj, (size_t)obj->_metadata._klass);
+    return false;
+  }
+
+  
   //return make_reference_grey(obj);
   // Mark the object alive and push it into the task_queue to scan its field.
   return make_reference_alive(obj);
@@ -576,6 +583,9 @@ inline void G1SemeruCMTask::trim_target_object_queue_to_threshold(TargetObjQueue
 }
 
 
+/**
+ * Process each fields of the alive obejct. 
+ */
 inline void G1SemeruCMTask::dispatch_reference(StarTask ref) {
 	
   //debug
@@ -631,6 +641,23 @@ inline void G1SemeruCMTask::scan_cross_region_ref_queue(HashQueue* cross_region_
 }
 
 
+
+
+//
+// Closure for do_heap_region(G1CMBitMap*, Closure*)
+// Process each alive object find in the target_oop_bitmap
+
+inline size_t SemeruScanTargetOopClosure::apply(oop obj){
+  //size_t obj_size = obj->size();
+  
+  // Try to avoid inline functions
+  size_t obj_size = obj->size_given_klass(obj->_metadata._klass);  // we are NOT using Compressed Pointers 
+  if(obj_size == 0)
+    return 0;
+
+  _semeru_cm_scan_task->make_reference_alive(obj);
+  return obj_size;
+}
 
 
 

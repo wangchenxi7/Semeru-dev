@@ -262,6 +262,7 @@ public:
 
   // Cross Region reference update queue
   HashQueue* _cross_region_ref_update_queue; 
+  BitQueue* _cross_region_ref_target_queue;    // the target oop bitmap
 
 
   SyncBetweenMemoryAndCPU(uint hrm_index, G1SemeruBlockOffsetTable* bot, SemeruHeapRegion* gsp) :
@@ -457,8 +458,9 @@ public:
   // [??] Change it to a pointer based instance.
   //      Because the CPU server doesn't need this field for all the Regions.
   //
-  G1CMBitMap    _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
-
+  G1CMBitMap  _alive_bitmap;        // pointed by G1SemeruCMTask->_alive_bitmap.
+  G1CMBitMap  _target_oop_bitmap;   // Points to _sync_mem_cpu->_cross_region_ref_target_queue->_target_bitmap
+  bool        scan_failure;     // identify if the concurrent tracing is failed.
 
   // 1-sied RDMA write check flags
   // Points to FLAGS_OF_CPU_WRITE_CHECK_OFFSET, 4KB
@@ -738,7 +740,7 @@ public:
   // End of fields override.
   //
 
-  //void allocate_init_target_oop_queue(uint hrm_index);
+  void allocate_init_target_oop_bitmap(uint hrm_index);
   void allocate_init_cross_region_ref_update_queue(uint hrm_index);
 
   static int    SemeruLogOfHRGrainBytes;
@@ -755,6 +757,7 @@ public:
 
   // allocate space for the alive/dest bitmap.
   G1RegionToSpaceMapper* create_alive_bitmap_storage(size_t region_idnex);
+  G1RegionToSpaceMapper* create_target_oop_bitmap_storage(size_t region_idnex);
 
 
   static size_t align_up_to_region_byte_size(size_t sz) {
@@ -799,6 +802,12 @@ public:
   // objects to call size_t ApplyToMarkedClosure::apply(oop) for.
   template<typename ApplyToMarkedClosure>
   inline void apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
+
+  // Semeru memory server tracing
+  // fault tolerance
+  template<typename ApplyToMarkedClosure>
+  inline void semeru_apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarkedClosure* closure);
+
   // Override for scan_and_forward support.
   void prepare_for_compaction(CompactPoint* cp);
   // Update heap region to be consistent after compaction.
@@ -919,9 +928,11 @@ public:
     return _rem_set;
   }
 
-  // TargetObjQueue* target_obj_queue() const {
-  //   return _cpu_to_mem_gc->_target_obj_queue;
-  // }
+
+  // points to _sync_mem_cpu->_cross_region_ref_target_oop_queue
+  G1CMBitMap* target_obj_queue() {
+     return &_target_oop_bitmap;    
+  }
 
   HashQueue* cross_region_ref_update_queue() const{
     return _sync_mem_cpu->_cross_region_ref_update_queue;

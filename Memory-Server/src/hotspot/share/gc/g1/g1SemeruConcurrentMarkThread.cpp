@@ -619,8 +619,8 @@ void G1SemeruConcurrentMarkThread::run_service() {
 
     //#ifdef ASSERT
       // Infinite loop. 
-      // Sleep and wake up to check CSet.
-      os::sleep(this, 3000, false); // sleep a while to wait for CSet..
+      // Debug - Sleep and wake up to check CSet.
+      os::sleep(this, 600, false); // sleep a while to wait for CSet..
     //#endif
     //set_semeru_ms_gc_terminated();
     //this->_should_terminate = true;
@@ -681,33 +681,33 @@ void G1SemeruConcurrentMarkThread::dispatch_received_regions(received_memory_ser
 
   G1SemeruCollectedHeap* semeru_heap = G1SemeruCollectedHeap::heap();
   //size_t* received_num = mem_server_cset->num_received_regions();
-  volatile int received_region_ind = recv_mem_server_cset->pop();  // can be negative 
+  volatile int received_region_ind = recv_mem_server_cset->pop(CUR_MEMORY_SERVER_ID);  // can be negative 
    SemeruHeapRegion* region_received = NULL;
 
   while(received_region_ind != -1){
 
 		// Debug
-		log_debug(semeru,mem_trace)("%s, Receive an Evicted Region[%d] \n", __func__,received_region_ind);
+		log_info(semeru,mem_trace)("%s, Receive an Evicted Region[%d] \n", __func__,received_region_ind);
 
     region_received = semeru_heap->hrm()->at(received_region_ind);
     //region_received->reset_fields_after_transfer();  // reset some fields, whose value are differenct between CPU and Memory server.
     assert(region_received != NULL, "%s, received Region is invalid.", __func__);   // [?] how to confirm if this region is available ?
 
     if(region_received->is_region_cm_scanned()){
-			log_debug(semeru,mem_trace)(" Region[%d] is already scanned. \n", received_region_ind);
+			log_info(semeru,mem_trace)(" Region[%d] is already scanned. \n", received_region_ind);
 
       // add region into _cm_scanned_regions[] queue
       // The add operation may add one Region mutiple times. 
       semeru_cm()->mem_server_cset()->add_cm_scanned_regions(region_received);
     }else{
-			log_debug(semeru,mem_trace)(" Region[%d] is fresh. \n", received_region_ind);
+			log_info(semeru,mem_trace)(" Region[%d] is fresh. \n", received_region_ind);
 
       // add region into _freshly_evicted_regions[] queue
       semeru_cm()->mem_server_cset()->add_freshly_evicted_regions(region_received);
     }
 
     // process next region_id
-		received_region_ind = recv_mem_server_cset->pop();
+		received_region_ind = recv_mem_server_cset->pop(CUR_MEMORY_SERVER_ID);
 
   }// Received CSet isn't emtpy.
 

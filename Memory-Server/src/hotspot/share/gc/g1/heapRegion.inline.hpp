@@ -249,7 +249,7 @@ inline void HeapRegion::apply_to_marked_objects(G1CMBitMap* bitmap, ApplyToMarke
 		// This explicit is_marked check is a way to avoid
 		// some extra work done by get_next_marked_addr for
 		// the case where next_addr is marked.
-		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing ?
+		if (bitmap->is_marked(next_addr)) {  // oop is marked, means this object is alive during the tracing 
 			oop current = oop(next_addr);
 			next_addr += closure->apply(current);		// the apply() function is defiend by the parameter, closure.
 		} else {

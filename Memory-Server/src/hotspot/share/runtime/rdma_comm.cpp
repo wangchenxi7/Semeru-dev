@@ -39,8 +39,8 @@ void* Build_rdma_to_cpu_server(void* _args ){
   uint16_t 	port = 0;
 	char* heap_start	= NULL;
 	size_t heap_size	=	0;
-  const char* port_str  = "9400";
-  const char* ip_str    = "10.0.0.2";
+  const char* port_str  = cur_mem_server_port;
+  const char* ip_str    = cur_mem_server_ip;
 
 	// Parse the paramters
 	struct rdma_main_thread_args *args = (struct rdma_main_thread_args *) _args;

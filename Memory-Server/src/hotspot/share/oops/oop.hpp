@@ -55,14 +55,16 @@ class ParCompactionManager;
 class oopDesc {
   friend class VMStructs;
   friend class JVMCIVMStructs;
- private:
-  volatile markOop _mark;     // first 8 bytes, 
-  union _metadata {
+  
+// private:
+public:  
+  volatile  markOop _mark;     // first 8 bytes, 
+  volatile union _metadata {
     Klass*      _klass;
     narrowKlass _compressed_klass;
   } _metadata;                // second 8 bytes,
 
- public:
+public:
   inline markOop  mark()          const;
   inline markOop  mark_raw()      const;
   inline markOop* mark_addr_raw() const;
@@ -124,15 +126,16 @@ class oopDesc {
   bool is_objArray_noinline()          const;
   bool is_typeArray_noinline()         const;
 
- protected:
+protected:
   inline oop        as_oop() const { return const_cast<oopDesc*>(this); }
 
- public:
+public:
 
 	// Semeru
 	//
 	inline int semeru_oop_size(oop obj, Klass* klass);
 
+  inline bool is_klass_valid(Klass* klass);
 	//
 	// End of Semeru
 

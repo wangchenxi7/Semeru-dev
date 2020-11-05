@@ -499,33 +499,36 @@ public:
     char* ret;
     switch(Alloc_type)  // based on the instantiation of Template
     {
-      // case ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE :
-      //   requested_addr = (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET + index * commit_size) ;
+       case ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE :
+        requested_addr = (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_TARGET_Q_OFFSET + index * commit_size) ;
 
-      //   assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + TARGET_OBJ_OFFSET +TARGET_OBJ_SIZE_BYTE), 
-      //                                                   "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
-        
-      //   // [?] How to handle the failure ?
-      //   //     The _alloc_ptr is useless here.
-      //   old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr;
-      //   ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
-      //   assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
-        
-      //   break;
-
-
-
-    case CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE :
-        requested_addr = (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + index * commit_size) ;
-
-        assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET +CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT), 
+        assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_TARGET_Q_OFFSET +CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT), 
                                                         "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
         
         // [?] How to handle the failure ?
         //     The _alloc_ptr is useless here.
-        old_val = CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr;
-        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
+        old_val = CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr;
+        ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, ALLOC_TARGET_OBJ_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
         assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
+        
+        break;
+
+
+
+    case CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE :
+        
+        assert(false, "Not implement.");
+        
+        // requested_addr = (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET + index * commit_size) ;
+
+        // assert(requested_addr + commit_size < (char*)(SEMERU_START_ADDR + CROSS_REGION_REF_UPDATE_Q_OFFSET +CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT), 
+        //                                                 "%s, Exceed the TARGET_OBJ_QUEUE's space range. \n", __func__ );
+        
+        // // [?] How to handle the failure ?
+        // //     The _alloc_ptr is useless here.
+        // old_val = CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr;
+        // ret = Atomic::cmpxchg(requested_addr + commit_size, &(CHeapRDMAObj<E, CROSS_REGION_REF_UPDATE_QUEUE_ALLOCTYPE>::_alloc_ptr), old_val);
+        // assert(ret == old_val, "%s, Not MT Safe. \n",__func__);
         
         break;
 
