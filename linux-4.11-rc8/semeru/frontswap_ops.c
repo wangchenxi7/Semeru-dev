@@ -340,8 +340,13 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
     }
 
     // get the rdma queue
-    //start_chunk_index += 1; // Skip the Meta Region.
-    //
+    
+		#ifndef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+		// Forbid CPU server write any data to the Meta region during far-memory mode.
+		// Skip the Meta Region.
+			start_chunk_index += 1;
+		#endif
+    
     // Warning : The data in Meta Region can be swapped out. 
     // We keep some useless data in the Meta Region. 
     // Swap out them to memory server can save the CPU server local cache.
@@ -462,13 +467,15 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
       goto out;
     }
 
-    // get the rdma queue
-    //start_chunk_index += 1; // Skip the Meta Region.
-    //
+		#ifndef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+		// Forbid CPU server write any data to the Meta region during far-memory mode.
+		// Skip the Meta Region.
+			start_chunk_index += 1;
+		#endif
+
     // Warning : The data in Meta Region can be swapped out. 
     // We keep some useless data in the Meta Region. 
     // Swap out them to memory server can save the CPU server local cache.
-
     remote_chunk_ptr  = &(rdma_session->remote_chunk_list.remote_chunk[start_chunk_index]);
 
 
