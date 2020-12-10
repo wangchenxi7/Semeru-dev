@@ -35,7 +35,9 @@
 // ###################### Functions ######################
 //
 extern atomic_t on_demand_swapin_number;
+extern atomic_t prefetch_swapin_number;
 extern atomic_t hit_on_swap_cache_number;
+
 
 extern atomic_t jvm_region_swap_out_counter[]; // 4 bytes for each counter is good enough.
 
@@ -44,6 +46,7 @@ extern atomic_t jvm_region_swap_out_counter[]; // 4 bytes for each counter is go
 // Invoked in syscall sys_swap_stat_reset_and_check
 static inline void reset_swap_info(void){
 	atomic_set(&on_demand_swapin_number,0);
+	atomic_set(&prefetch_swapin_number, 0);
 	atomic_set(&hit_on_swap_cache_number,0);
 }
 
@@ -52,12 +55,21 @@ static void on_demand_swapin_inc(void){
 	atomic_inc(&on_demand_swapin_number);
 }
 
+static void prefetch_swapin_inc(void){
+	atomic_inc(&prefetch_swapin_number);
+}
+
+
 static void hit_on_swap_cache_inc(void){
 	atomic_inc(&hit_on_swap_cache_number);
 }
 
 static int get_on_demand_swapin_number(void){
 	return (int)atomic_read(&on_demand_swapin_number);
+}
+
+static int get_prefetch_swapin_number(void){
+	return (int)atomic_read(&prefetch_swapin_number);
 }
 
 static int get_hit_on_swap_cache_number(void){

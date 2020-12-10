@@ -192,6 +192,7 @@ asmlinkage u64 sys_num_of_swap_out_pages(u64 start_vaddr, u64 bytes_len){
 asmlinkage int sys_num_of_on_demand_swapin(void){
 
 	printk(KERN_INFO"%s, on-demand swapin page number : %d \n", __func__, get_on_demand_swapin_number());
+	printk(KERN_INFO"%s, prefetch swapin page number : %d \n", __func__, get_prefetch_swapin_number());
 	printk(KERN_INFO"%s, hit on swap cache page number : %d \n\n", __func__, get_hit_on_swap_cache_number());
 	
 	return get_on_demand_swapin_number();

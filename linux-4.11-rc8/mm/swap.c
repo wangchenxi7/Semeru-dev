@@ -64,6 +64,7 @@ unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH];
 atomic_t jvm_region_swap_out_counter[SWAP_OUT_MONITOR_ARRAY_LEN];
 
 atomic_t on_demand_swapin_number;
+atomic_t prefetch_swapin_number;
 atomic_t hit_on_swap_cache_number;
 
 //
