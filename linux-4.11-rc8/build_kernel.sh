@@ -4,7 +4,11 @@
 ### Parameters
 
 version="4.11.0-rc8"
+#LocalVersion="Semeru"
+# Or remove the suffix
+LocalVersion=
 
+num_cores=`nproc --all`
 
 ### Operations
 
@@ -23,12 +27,29 @@ echo "Do the action ${op}"
 
 
 
+# Detect Linux releases
+OS_DISTRO=$( awk -F= '/^NAME/{print $2}' /etc/os-release | sed -e 's/^"//' -e 's/"$//' )
+if [[ $OS_DISTRO == "CentOS Linux" ]]
+then
+	echo "Running on CentOS..."
+elif [ $OS_DISTRO == "Ubuntu" ]
+then
+	echo "Running on Ubuntu..."
+fi
 
 ## Functions
 delete_old_kernel_contents () {
-	echo "sudo rm /boot/initramfs-${version}*   /boot/System.map-${version}*  /boot/vmlinuz-${version}* "
-	sleep 1
-	sudo rm /boot/initramfs-${version}*   /boot/System.map-${version}*  /boot/vmlinuz-${version}*
+	if [[ $OS_DISTRO == "CentOS Linux" ]]
+	then
+		echo "sudo rm /boot/initramfs-${version}${LocalVersion}.img   /boot/System.map-${version}${LocalVersion}  /boot/vmlinuz-${version}${LocalVersion} "
+		sleep 1
+		sudo rm /boot/initramfs-${version}${LocalVersion}.img   /boot/System.map-${version}${LocalVersion}  /boot/vmlinuz-${version}${LocalVersion}
+	elif [ $OS_DISTRO == "Ubuntu" ]
+	then
+		echo "sudo rm /boot/initrd.img-${version}*   /boot/System.map-${version}*  /boot/vmlinuz-${version}* "
+		sleep 1
+		sudo rm /boot/initrd.img-${version}*   /boot/System.map-${version}*  /boot/vmlinuz-${version}*
+	fi
 }
 
 
@@ -40,44 +61,66 @@ install_new_kernel_contents () {
 	echo "install kernel image"
 	sleep 1
 	sudo make install
+
+	echo "Install uapi kernel headers to /usr/include/linux/"
+	sudo make headers_install INSTALL_HDR_PATH=/usr
+
 }
 
 
 
-# For CentOS, there maybe 2 grab entries
-efi_grab="/boot/efi/EFI/centos/grub.cfg"
-
 update_grub_entries () {
-	echo "(MUST run with sudo)Delete old grub entry:"
+  
+  # The kernel boot version
+  grub_boot_verion=4
 
-	if [ -e /boot/efi/EFI/centos/grub.cfg ]
+	if [[ $OS_DISTRO == "CentOS Linux" ]]
 	then
-		echo " Delete EFI grab : sudo rm ${efi_grab}"
-		sleep 1
-		sudo rm ${efi_grab}
+		# For CentOS, there maybe 2 grub entries
+		echo "(MUST run with sudo)Delete old grub entry:"
 
-		echo " Rebuild EFI grab : sudo grub2-mkconfig -o ${efi_grab}"
-		sleep 1
-		sudo grub2-mkconfig -o ${efi_grab}	
+		efi_grub="/boot/efi/EFI/centos/grub.cfg"
+		if [[ -e /boot/efi/EFI/centos/grub.cfg ]]
+		then
+			echo " Delete EFI grub : sudo rm ${efi_grub}"
+			sleep 1
+			sudo rm ${efi_grub}
 
-	else
-	
-		echo "Delete /boot/grub2/grub.cfg"
-		sleep 1
-		sudo rm /boot/grub2/grub.cfg	
+			echo " Rebuild EFI grub : sudo grub-mkconfig -o ${efi_grub}"
+			sleep 1
+			sudo grub2-mkconfig -o ${efi_grub}
 
-		echo "Rebuild the grub.cfg"
-		echo "grub2-mkconfig -o /boot/grub2/grub.cfg"
-		sleep 1
-		sudo grub2-mkconfig -o /boot/grub2/grub.cfg	
+		else
+			echo "Delete /boot/grub/grub.cfg"
+			sleep 1
+			sudo rm /boot/grub/grub.cfg
+
+			echo "Rebuild the grub.cfg"
+			echo "grub-mkconfig -o /boot/grub/grub.cfg"
+			sleep 1
+			sudo grub2-mkconfig -o /boot/grub/grub.cfg
+		fi
+  
+    echo "Set bootable kernel verion to ${version}"
+	  echo "Set default entry to Item ${grub_boot_verion} (Please check if this is the expected ${version})"
+	  sudo grub-set-default ${grub_boot_verion}
+
+	  echo "Current grub entry"
+	  sleep 1
+	  sudo grub-editenv list
+
+	elif [ $OS_DISTRO == "Ubuntu" ]
+	then
+		# # Ubuntu: to list grub entries
+		# awk -F\' '/menuentry / {print $2}' /boot/grub/grub.cfg
+		echo " Rebuild grub"
+		sudo update-grub2
+
+    echo "Warning : For Ubuntu, please edit /etc/default/grub to specify the right boot kernel verion"
+    echo "Example : GRUB_DEFAULT='Advanced options for Ubuntu>Ubuntu, with Linux 4.11.0-rc8'"  
+
 	fi
-
-	echo "Set default entry to Item 0"
-	sudo grub2-set-default 0
-
-	echo "Current grub entry"
-	sleep 1
-	sudo grub2-editenv list
+    
 }
 
 
@@ -88,15 +131,15 @@ if [ "${op}" = "build" ]
 then
 	echo "make oldconfig"
 	sleep 1
-	make oldconfig
+#	make oldconfig
 
-	echo "make -j16"
+	echo "make LOCALVERSION=${localVersion}  -j${num_cores}"
 	sleep 1
-	make -j16
+	make LOCALVERSION="${localVersion}"  -j${num_cores}
 
 elif [ "${op}" = "install" ]
 then
-	delete_old_kernel_contents	
+	delete_old_kernel_contents
 	sleep 1
 
 	install_new_kernel_contents
@@ -123,8 +166,3 @@ then
 else
 	echo "!! Wrong Operation - ${op} !!"
 fi
-
-
-
-
-
