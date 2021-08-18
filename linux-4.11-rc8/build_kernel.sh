@@ -17,7 +17,7 @@ op=$1
 
 if [ -z "${op}"  ]
 then
-	echo "Please select the operation, e.g. build, install, replace, update_grub"
+	echo "Please select the operation, e.g. build, install, replace, headers-install, update_grub"
 	read op
 fi
 
@@ -61,9 +61,6 @@ install_new_kernel_contents () {
 	echo "install kernel image"
 	sleep 1
 	sudo make install
-
-	echo "Install uapi kernel headers to /usr/include/linux/"
-	sudo make headers_install INSTALL_HDR_PATH=/usr
 
 }
 
@@ -157,6 +154,25 @@ then
 	sleep 1
 
 	update_grub_entries
+
+elif [ "${op}" = "headers-install" ]
+then
+  echo "Warning - the kernel headers install may overwirite" 
+  echo "the original headers installed by other libraries !!"
+  echo "Must backup the headers first !!"
+  echo "STOP the installation if you didn't back up the /usr/include !!"
+  echo "3"
+  sleep 1
+
+  echo "2"
+  sleep 1
+
+  echo "1"  
+  sleep
+	echo "Install uapi kernel headers to /usr/include/linux/"
+	sudo make headers_install INSTALL_HDR_PATH=/usr
+
+
 
 elif [ "${op}" = "update_grub"  ]
 then
