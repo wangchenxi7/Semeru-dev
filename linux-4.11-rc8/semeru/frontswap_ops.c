@@ -122,7 +122,7 @@ void fs_rdma_read_done(struct ib_cq *cq, struct ib_wc *wc){
  */
 int fs_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct fs_rdma_req *rdma_req){
 	int ret = 0;
-	struct ib_send_wr 	*bad_wr;
+	const struct ib_send_wr 	*bad_wr;
 	int test;
 
 	rdma_req->rdma_queue = rdma_queue;	// points to the rdma_queue to be enqueued.

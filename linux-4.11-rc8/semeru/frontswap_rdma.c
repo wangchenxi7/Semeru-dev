@@ -186,8 +186,8 @@ out:
 int send_message_to_remote(struct rdma_session_context *rdma_session, int rdma_queue_ind , int messge_type  , int chunk_num)
 {
 	int ret = 0;
-	struct ib_recv_wr * recv_bad_wr;
-	struct ib_send_wr * send_bad_wr;
+	const struct ib_recv_wr * recv_bad_wr;
+	const struct ib_send_wr * send_bad_wr;
 	struct semeru_rdma_queue *rdma_queue;
 
 	rdma_queue = &(rdma_session->rdma_queues[rdma_queue_ind]);
@@ -805,7 +805,7 @@ int semeru_connect_remote_memory_server(struct rdma_session_context *rdma_sessio
 	struct rdma_conn_param conn_param;
 	int ret;
 	struct semeru_rdma_queue * rdma_queue;
-	struct ib_recv_wr *bad_wr;
+	const struct ib_recv_wr *bad_wr;
 
 	
 	rdma_queue = &(rdma_session->rdma_queues[rdma_queue_inx]);
@@ -1211,7 +1211,7 @@ out:
  */
 int cp_enqueue_send_wr(struct rdma_session_context *rdma_session, struct semeru_rdma_queue * rdma_queue, struct semeru_rdma_req_sg *rdma_req){
 	int ret = 0;
-	struct ib_send_wr 	*bad_wr;
+	const struct ib_send_wr 	*bad_wr;
 	int test;
 
 	rdma_req->rdma_queue = rdma_queue;	// points to the rdma_queue to be enqueued.
