@@ -5,7 +5,9 @@
 # 2. Setup environments
 
 - **Hardware: Intel servers with InﬁniBand**
-- **Run-time environment: OpenJDK 12.02, Linux-4.11-rc8, CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5)**
+- **Kernel environments:  Linux-4.11-rc8, CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5), Ubuntu 18.04 with MLNX 4.7**
+- **Run-time environments: OpenJDK 12.02, Linux-4.11-rc8, CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5)**
+- **GNU environments: GCC 4.8 to GCC 5.5, GLIBC 2.27 **
 - **Code licenses: The GNU General Public License (GPL)**
 
 # 3. Description
