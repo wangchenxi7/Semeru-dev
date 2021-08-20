@@ -35,8 +35,8 @@
 #include <linux/init.h>
 
 
-
-
+//#define DEBUG_MODE_BRIEF 1
+#define DEBUG_MODE_DETAIL 1
 
 
 

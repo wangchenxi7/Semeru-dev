@@ -47,7 +47,7 @@ void forwardee_local_bd_end_io(struct bio *bio, int err){
 
   struct request *rq;
 
-    #ifdef DEBUG_MODE_BRIEF
+    #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	printk("%s, bio 0x%llx end, goto mark request end. \n", __func__, (u64)bio );
     #endif
 	
@@ -55,7 +55,7 @@ void forwardee_local_bd_end_io(struct bio *bio, int err){
 
 	blk_mq_end_request(rq, err);
 
-    #ifdef DEBUG_MODE_BRIEF   
+    #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)   
 	printk("%s: End requset->tag : %d <<<<<  \n\n",__func__, rq->tag);
     #endif
 
@@ -140,7 +140,7 @@ void forward_request_to_local_bd(struct request_queue *q, struct request *req){
 
 			bio_copy = bio_clone(bio_ptr, GFP_ATOMIC);
 			bio_list_add(&local_bd.bio_list, bio_copy);
-			#ifdef DEBUG_MODE_BRIEF
+			#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 				printk(KERN_INFO "%s, request 0x%llx, clone  bio[%d] 0x%llx to bio_copy 0x%llx \n", 
 													__func__, (uint64_t)req, i, (uint64_t)bio_ptr, (uint64_t)bio_copy );
 				if(bio_ptr == NULL){
@@ -156,7 +156,7 @@ void forward_request_to_local_bd(struct request_queue *q, struct request *req){
 				bio_copy->bi_end_io = (bio_end_io_t*)forwardee_local_bd_end_io;  // Register the i/o end function.
 				bio_copy->bi_private = (void*) uint64_from_ptr(req);   // store the original i/o request's pointer into each bio's reserved space.
 				
-				#ifdef DEBUG_MODE_BRIEF
+				#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 					//printk(KERN_INFO "%s, request 0x%llx, clone LAST bio[%d] 0x%llx \n", __func__, (uint64_t)req, i, (uint64_t)bio_ptr );
 					check_bio_basic_info(bio_copy, "Last bio_copy");
 				#endif

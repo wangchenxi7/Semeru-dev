@@ -43,7 +43,7 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * Parameters:
  * 		type 1, 1-sided rdma read;  
- *    type 2, 1-sided rdma data write;
+ *    		type 2, 1-sided rdma data write;
  * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal.
  * 		target_server : the id of memory server
  * 		start_addr,
@@ -55,7 +55,7 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 	char* ret;
 	int write_type;
 
-	#ifdef DEBUG_MODE_BRIEF
+	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	printk("Enter %s. with type 0x%x \n", __func__, type);
 	#endif
 
@@ -70,7 +70,7 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 		// rdma data write 
 		if( rdma_ops_in_kernel.rdma_write != NULL){
 			
-			#ifdef DEBUG_MODE_BRIEF
+			#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
 			#endif
 			write_type = 0x0; // data write 
@@ -87,7 +87,7 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 		// rdma signal write 
 		if( rdma_ops_in_kernel.rdma_write != NULL){
 			
-			#ifdef DEBUG_MODE_BRIEF
+			#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
 			#endif
 			write_type = 0x1; // signal write 

@@ -119,7 +119,7 @@ static inline u64 swap_out_pages_for_range(u64 start_vaddr, u64 end_vaddr){
 	u64 swap_out_total = 0;
 	u32 i;
 
-	#ifdef DEBUG_MODE_BRIEF
+	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	printk("%s, Get the swapped out pages for addr[0x%llx, 0x%llx), entry[0x%llx, 0x%llx] \n", __func__, 
 																															(u64)start_vaddr, (u64)end_vaddr,
 																															entry_start, entry_end);

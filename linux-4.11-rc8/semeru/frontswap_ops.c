@@ -218,7 +218,7 @@ int dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru
 
 
   //debug
-  #ifdef DEBUG_MODE_BRIEF
+  #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
   if(dir == DMA_FROM_DEVICE){
     printk(KERN_INFO "%s, read data from remote 0x%lx, size 0x%lx \n", __func__, (size_t)rdma_req->rdma_wr.remote_addr, (size_t)PAGE_SIZE);
   }
@@ -591,9 +591,11 @@ void semeru_exit_frontswap(void){
   // 1) dec frontswap_enabled_key
   // 2) Also need to unplug the swap device from kernel.
 
-  pr_info("unloading frontswap module - * TO BE DONE *\n");
-  pr_info("1) dec frontswap_enabled_key \n");
-  pr_info("2) Also need to unplug the swap device from kernel.\n");
+  pr_info("unloading frontswap module\n");
+  pr_info("1) decrease frontswap_enabled_key to 0. \n");
+  pr_info("2) Remove all registered frontswap_ops from the link list.\n");
+
+  frontswap_deregister_ops();
 }
 
 
