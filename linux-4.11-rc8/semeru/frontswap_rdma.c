@@ -504,36 +504,33 @@ int semeru_rdma_cm_event_handler(struct rdma_cm_id *cma_id, struct rdma_cm_event
 		}else{	
 			// freed ==0,
 			// Remote server requests for disconnection.
-
-			// !! DEAD PATH NOW --> CAN NOT FREE CM_ID !!
-			// wait for RDMA_CM_EVENT_TIMEWAIT_EXIT ??
-			//			TO BE DONE
-
+			// e.g., the memory server is crashed.
 			printk("%s, rdma_queue[%d] RDMA disconnect event, requested by memory server. \n",
 					__func__, rdma_queue->q_index);
-					
-			//do we need to inform the client, the connect is broken ?
-			rdma_disconnect(rdma_queue->cm_id);
+			
+			// Because the QP is crashed, no need to send the disconnect request anymore
+			// Just wait for the RDMA_CM_EVENT_TIMEWAIT_EXIT signal
+			// When receive the RDMA_CM_EVENT_DISCONNECTED signal, 
+			// All the QP are disconnected already.
 
-
-			// ########### TO BE DONE ###########
-			// Disconnect and free the resource of THIS QUEUE.
-
-
-			// NOT free the resource of the whole session !
-			//semeru_disconenct_and_collect_resource(rdma_queue->rdma_session); 
-			//octopus_free_block_devicce(rdma_session->rmem_dev_ctrl);	// Free block device resource 
+			rdma_queue->freed = 255; // one of memory servers crashed
 		}
 		break;
 
 	case RDMA_CM_EVENT_TIMEWAIT_EXIT:
 		// After the received DISCONNECTED_EVENT, need to wait the on-the-fly RDMA message
+		// When receive the RDMA_CM_EVENT_TIMEWAIT_EXIT signal, it means all the on-the-fly messages are flushed.
 		// https://linux.die.net/man/3/rdma_get_cm_event
 
-		printk("%s, Wait for in-the-fly RDMA message finished. \n",__func__);
+		pr_warn("%s, Wait for on-the-fly RDMA message finished. \n",__func__);
 		rdma_queue->state = CM_DISCONNECT;
 
 		//Wakeup caller
+		if(rdma_queue->freed == 255){
+			pr_warn("%s, rdma_queue[%d] one of memory servers crashed. nothing to wakeup.", 
+					__func__, rdma_queue->q_index );
+			break;
+		}
 		wake_up_interruptible(&rdma_queue->sem);
 
 		break;
@@ -1592,12 +1589,12 @@ char* semeru_cp_rdma_read(int target_mem_server, char __user * start_addr, unsig
 	cpu = get_cpu(); // disable core preempt
 
 	rdma_queue = &(rdma_session->rdma_queues[cpu]);
-  rdma_req_sg = (struct semeru_rdma_req_sg*)kmem_cache_alloc(rdma_queue->rdma_req_sg_cache, GFP_ATOMIC);
-  if(unlikely(rdma_req_sg == NULL)){
-    pr_err("%s, get reserved rdma_req_sg failed. \n", __func__);
-    ret = -1;
-    goto out;
-  }
+ 	 rdma_req_sg = (struct semeru_rdma_req_sg*)kmem_cache_alloc(rdma_queue->rdma_req_sg_cache, GFP_ATOMIC);
+  	if(unlikely(rdma_req_sg == NULL)){
+    		pr_err("%s, get reserved rdma_req_sg failed. \n", __func__);
+    		ret = -1;
+    		goto out;
+  	}
 	//reset_semeru_rdma_req_sg(rdma_req_sg);
 	memset(rdma_req_sg, 0, sizeof(struct semeru_rdma_req_sg));
 
@@ -2243,7 +2240,8 @@ int semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_ses
 		if(unlikely(rdma_queue->freed != 0)){
 			// already called by some thread,
 			// just return and wait.
-			printk(KERN_WARNING "%s, rdma_queue[%d] already freed. \n",__func__, i);
+			printk(KERN_WARNING "%s, rdma_queue[%d] already disconnected, no need to send disconnet request. \n"
+					,__func__, i);
 			continue;
 		}
 
@@ -2251,7 +2249,7 @@ int semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_ses
 		// This means clien proactively request for disconnection.
 		rdma_queue->freed++; 
 
-		// The RDMA connection maybe already disconnected.
+		// Send disconnection request to memory server.
 		if(rdma_queue->state != CM_DISCONNECT){
 			ret = rdma_disconnect(rdma_queue->cm_id);
 			if(ret){
@@ -2264,13 +2262,18 @@ int semeru_disconenct_and_collect_resource(struct rdma_session_context *rdma_ses
 			//wait_event_interruptible(rdma_queue->sem, rdma_queue->state == CM_DISCONNECT); 
 		}
 
-		printk("%s, RDMA queue[%d] request for disconnection => \n", __func__, i);
+		printk("%s, RDMA queue[%d], disconnection request sent to memory server => \n", __func__, i);
 	}
 
 
 	// 2) wait for the receiving all the disconnection signals
 	for(i=0; i< online_cores; i++){
 		rdma_queue = &(rdma_session->rdma_queues[i]);
+
+		if(rdma_queue->freed == 255){
+			pr_warn("%s, rdma_queue[%d] one of memory servers crashed, skip wait on lock.", __func__, i);
+			continue;
+		}
 
 		wait_event_interruptible(rdma_queue->sem, rdma_queue->state == CM_DISCONNECT); 
 		pr_warn("%s, RDMA queue[%d] disconnected. \n", __func__, i);

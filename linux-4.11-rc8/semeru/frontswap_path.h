@@ -269,7 +269,7 @@ struct two_sided_rdma_recv {
  	struct ib_recv_wr rq_wr;			// receive queue wr
 	struct ib_sge 		recv_sgl;		// recv single SGE entry
   struct message		*recv_buf;
-	u64								recv_dma_addr;	
+	u64			recv_dma_addr;	
 
   struct semeru_rdma_queue *rdma_queue; // which rdma_queue is enqueued.
 };
@@ -283,17 +283,22 @@ struct two_sided_rdma_recv {
  * 
  */
 struct semeru_rdma_queue {
-  // RDMA client ID, one for per QP.
-	struct rdma_cm_id *cm_id;		//  ? bind to QP
+  	// RDMA client ID, one for per QP.
+	struct rdma_cm_id 	*cm_id;		//  ? bind to QP
 
 	// ib events 
-    struct ib_cq *cq;			// Completion queue
-	struct ib_qp *qp;			// Queue Pair
+    	struct ib_cq 		*cq;		// Completion queue
+	struct ib_qp 		*qp;		// Queue Pair
 
-	enum rdma_queue_state state;  	// the current status of the QP.
-	wait_queue_head_t 		sem;    	// semaphore for wait/wakeup
-	spinlock_t            cq_lock;	// used for CQ
-	uint8_t  		freed;			// some function can only be called once, this is the flag to record this.
+	enum rdma_queue_state 	state;  	// the current status of the QP.
+	wait_queue_head_t 	sem;    	// semaphore for wait/wakeup
+	spinlock_t            	cq_lock;	// used for CQ
+
+	// some function can only be called once, this is the flag to record this.
+	// 0 : not freed
+	// 1 : client requests for disconnection
+	// 255 : One of memory server crashed, start disconnecting from all memory servers.
+	uint8_t  		freed;			// are resource freed
 	atomic_t 		rdma_post_counter;
 
 
@@ -301,7 +306,7 @@ struct semeru_rdma_queue {
 	struct rdma_session_context		*rdma_session;			// Record the RDMA session this queue belongs to.
 
 	// cache for fs_rdma_request. One for each rdma_queue
-	struct kmem_cache *fs_rdma_req_cache;		// only for fs_rdma_req ?
+	struct kmem_cache 	*fs_rdma_req_cache;		// only for fs_rdma_req ?
 	struct kmem_cache	*rdma_req_sg_cache;		// used for rdma request with scatter/gather
 };
 
