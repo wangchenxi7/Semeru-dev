@@ -1731,26 +1731,18 @@ out :
 
 }
 
-
-
-
-
 /**
  * Reset all the fields 
  */
-void reset_semeru_rdma_req_sg(struct semeru_rdma_req_sg* rmem_rdma_cmd_ptr){
-
-	rmem_rdma_cmd_ptr->seq_type = END_TYPE; 
-	memset(rmem_rdma_cmd_ptr->sge_list, 0,  MAX_REQUEST_SGL*sizeof(rmem_rdma_cmd_ptr->sge_list));  // works for stack array
+void reset_semeru_rdma_req_sg(struct semeru_rdma_req_sg *rmem_rdma_cmd_ptr)
+{
+	rmem_rdma_cmd_ptr->seq_type = END_TYPE;
+	memset(rmem_rdma_cmd_ptr->sge_list, 0, MAX_REQUEST_SGL * sizeof(rmem_rdma_cmd_ptr->sge_list)); // works for stack array
 
 	rmem_rdma_cmd_ptr->nentry = 0;
-	memset(rmem_rdma_cmd_ptr->sgl, 0, MAX_REQUEST_SGL*sizeof(struct scatterlist)); // heap array
+	memset(rmem_rdma_cmd_ptr->sgl, 0,
+	       MAX_REQUEST_SGL * sizeof(struct scatterlist)); // heap array
 }
-
-
-
-
-
 
 /**
  * Semeru CS - RDMA Control-Path initialization
@@ -1817,26 +1809,20 @@ out:
 	return ret;
 }
 
-
-
-
-
-
-
-
 /**
  * Register module defined functions into kernel.
  *  
  */
-void init_kernel_semeru_rdma_ops(void){
-	
-	#ifndef DEBUG_BD_ONLY // For block device only mode, no need to register the RDMA function
-		struct semeru_rdma_ops module_rdma_ops;					 // temporary var
-		module_rdma_ops.rdma_read 	= &semeru_cp_rdma_read;   // the address of function is fixed.
-		module_rdma_ops.rdma_write 	= &semeru_cp_rdma_write;
+void init_kernel_semeru_rdma_ops(void)
+{
+#ifndef DEBUG_BD_ONLY // For block device only mode, no need to register the RDMA function
+	struct semeru_rdma_ops module_rdma_ops; // temporary var
+	module_rdma_ops.rdma_read =
+		&semeru_cp_rdma_read; // the address of function is fixed.
+	module_rdma_ops.rdma_write = &semeru_cp_rdma_write;
 
-		rdma_ops_wrapper(&module_rdma_ops);							 // exported kernel call
-	#endif
+	rdma_ops_wrapper(&module_rdma_ops); // exported kernel call
+#endif
 
 	return;
 }
@@ -1846,19 +1832,18 @@ void init_kernel_semeru_rdma_ops(void){
  * Safely removed the registered rdma operations.
  *  
  */
-void reset_kernel_semeru_rdma_ops(void){
-	
-	#ifndef DEBUG_BD_ONLY
-		struct semeru_rdma_ops module_rdma_ops;		// temporary var
-		module_rdma_ops.rdma_read 	= NULL;   		// reset to NULL
-		module_rdma_ops.rdma_write 	= NULL;
+void reset_kernel_semeru_rdma_ops(void)
+{
+#ifndef DEBUG_BD_ONLY
+	struct semeru_rdma_ops module_rdma_ops; // temporary var
+	module_rdma_ops.rdma_read = NULL; // reset to NULL
+	module_rdma_ops.rdma_write = NULL;
 
-		rdma_ops_wrapper(&module_rdma_ops);				// exported kernel call
-	#endif
-	
+	rdma_ops_wrapper(&module_rdma_ops); // exported kernel call
+#endif
+
 	return;
 }
-
 
 //
 // <<<<<<<<<<<<<<<<<<<<<  End of RDMA Control Path <<<<<<<<<<<<<<<<<<<<<
@@ -2322,7 +2307,6 @@ err:
 int  semeru_fs_rdma_client_init(void){
 
 	int ret = 0;
-	//printk("Do nothing for now. \n");
 	printk(KERN_INFO "%s, start \n",__func__);
 
 	// Initialize the RDMA control path, provided by the RDMA driver.
