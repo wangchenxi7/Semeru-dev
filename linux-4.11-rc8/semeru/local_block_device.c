@@ -43,34 +43,27 @@ struct local_block_device	local_bd;
  * Only assign this function to the last bio disassembled from the original i/o request. 
  * 
  */
-void forwardee_local_bd_end_io(struct bio *bio, int err){
+void forwardee_local_bd_end_io(struct bio *bio, int err)
+{
+	struct request *rq;
 
-  struct request *rq;
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+	printk("%s, bio 0x%llx end, goto mark request end. \n", __func__, (u64)bio);
+#endif
 
-    #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-	printk("%s, bio 0x%llx end, goto mark request end. \n", __func__, (u64)bio );
-    #endif
-	
-    rq = (struct request *)ptr_from_uint64(bio->bi_private);  // Get the original i/o request, before forwarding.
+	rq = (struct request *)ptr_from_uint64(bio->bi_private); // Get the original i/o request, before forwarding.
 
 	blk_mq_end_request(rq, err);
 
-    #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)   
-	printk("%s: End requset->tag : %d <<<<<  \n\n",__func__, rq->tag);
-    #endif
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+	printk("%s: End requset->tag : %d <<<<<  \n\n", __func__, rq->tag);
+#endif
 
-	#ifdef DEBUG_SWAP_PATH
-		check_io_request_basic_info(rq, "forwardee_local_bd_end_io");
-		check_bio_basic_info(bio, "forwardee_local_bd_end_io");
-	#endif
+#ifdef DEBUG_SWAP_PATH
+	check_io_request_basic_info(rq, "forwardee_local_bd_end_io");
+	check_bio_basic_info(bio, "forwardee_local_bd_end_io");
+#endif
 }
-
-
-
-
-
-
-
 
 /**
  *  Direct add bio to local_bd.

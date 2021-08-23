@@ -1,7 +1,7 @@
 /**
  * The main header of Semeru cpu header.
  * It contains 2 separate parts for now:
- * 	1) the remote memory pool go through swap-block layer-RDMA
+ * 1) the remote memory pool go through swap-block layer-RDMA
  * 		inlcude files: 
  * 		block_layer_rdma.h
  *		block_layer_rdma.c
@@ -9,8 +9,8 @@
  * 
  *  2) Remote memory go through frontswap-RDMA
  * 		include files:
- * 		frontswap.h
- * 		frontswap.c
+ * 		frontswap_path.h
+ * 		frontswap_ops.c
  * 		frontswap_rdma.c
  * 
  */
@@ -35,10 +35,25 @@
 #include <linux/init.h>
 
 
-//#define DEBUG_MODE_BRIEF 1
-#define DEBUG_MODE_DETAIL 1
+
+// ############# Multiple Memory Configurations #############
 
 
+
+// ############# profiling counter #############
+
+
+//#define RDMA_MESSAGE_PROFILING 1
+
+extern atomic_t rdma_read_to_mem_server[];
+extern atomic_t rdma_write_to_mem_server[];
+
+void reset_rdma_message_info(void);
+void rdma_read_from_mem_server_inc(int mem_server_id);
+void rdma_write_to_mem_server_inc(int mem_server_id);
+
+#define PRINT_LIMIT (1024 * 256)
+void periodically_print_info(const char* message);
 
 
 #endif // End of SEMERU_CPU

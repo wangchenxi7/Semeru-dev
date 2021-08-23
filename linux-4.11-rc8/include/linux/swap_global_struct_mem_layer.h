@@ -21,10 +21,10 @@
 
 
 //#define SWAP_OUT_MONITOR_VADDR_START		(size_t)(SEMERU_START_ADDR+ RDMA_STRUCTURE_SPACE_SIZE)  // Start of Data Regions, 0x400,100,000,000
-#define SWAP_OUT_MONITOR_VADDR_START		(size_t)SEMERU_START_ADDR		// Start of Meta Region, 0x400,000,000,000
-#define SWAP_OUT_MONITOR_UNIT_LEN_LOG		26		 						 // 1<<26, recording granulairy is 64M per entry. The query can span multiple entries.
+#define SWAP_OUT_MONITOR_VADDR_START		(size_t)SEMERU_START_ADDR // Start of Meta Region, 0x400,000,000,000
+#define SWAP_OUT_MONITOR_UNIT_LEN_LOG		26 // 1<<26, recording granulairy is 64M per entry. The query can span multiple entries.
 #define SWAP_OUT_MONITOR_OFFSET_MASK		(u64)(~((1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG) -1))		//0xfffffffff0000000
-#define SWAP_OUT_MONITOR_ARRAY_LEN			(u64)2*1024*1024	 //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
+#define SWAP_OUT_MONITOR_ARRAY_LEN			(u64)2*1024*1024 //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
 
 
 
