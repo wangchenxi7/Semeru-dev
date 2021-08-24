@@ -291,6 +291,19 @@ static inline int get_memory_server_id(size_t chunk_index)
  * Examples of Memory region
  * 	// | -- Meta Region -- | -- Data Regsons --|
  * 
+ * 	There are 2 translation path
+ * 	1) via the swap_entry_t, 
+ * 	CPU server virtual addr -> swap_entry_t => memory server virtual addr.
+ * 	Data on both meta regions and data regions can be swapped out to memory servers.
+ * 	In theory, no need to reserve the meta Regions in memory server.
+ * 	We skip the meta regions here only to prevent writing irrelevant signals to crash the memory servers.
+ * 	
+ * 	2) via the  swap_remmaping table,
+ * 	CPU server virtual addr -> swap_entry_t -> CPU server_virtual addr => memory server virtual addr.
+ * 	Because Only data on data regions can be swapped out. 
+ * 	The  swap_remmaping table count start from the first page in Data region.
+ * 	So, we also need to add the RDMA_META_REGION_NUM back when calcualting the region index.
+ * 
  * @param mem_addr 
  * @param swap_entry_offset 
  */
@@ -300,20 +313,26 @@ void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swa
 	// page offset, compared start of Data Region
 	// The real virtual address is RDMA_DATA_SPACE_START_ADDR + start_addr.
 #ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
-	size_t start_addr = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset)
-					<< PAGE_SHIFT; // calculate the remote addr
+	// byte address offset to the RDMA_DATA_SPACE_START_ADDR 
+	size_t start_addr = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; 
 #else
 	// For the default kernel, no need to do the swp_offset -> virt translation
 	size_t start_addr = swap_entry_offset << PAGE_SHIFT;
 #endif
 
-	size_t start_chunk_index = start_addr >> CHUNK_SHIFT; // absolute chunk index
+	size_t start_chunk_index = start_addr >> CHUNK_SHIFT; // absolute data chunk index
 	size_t offset_within_chunk = start_addr & CHUNK_MASK;
+
+	//debug
+	//pr_warn("%s, for swap_entry 0x%lx , start_addr 0x%lx, start_chunk_index %lu, offset 0x%lx \n",
+	//	__func__, swap_entry_offset, start_addr, start_chunk_index, offset_within_chunk);
 
 	// Calculate the target memory server
 	mem_addr->mem_server_id = get_memory_server_id(start_chunk_index);
+	// calculate chunk index within the memory server
 	mem_addr->mem_server_chunk_index = start_chunk_index - (mem_addr->mem_server_id * DATA_REGION_PER_MEM_SERVER);
-	mem_addr->mem_server_chunk_index += RDMA_META_REGION_NUM; // skip the meta regions 
+	// skip the meta regions for both translation paths.
+	mem_addr->mem_server_chunk_index += RDMA_META_REGION_NUM;
 	mem_addr->mem_server_offset_within_chunk = offset_within_chunk;
 
 }
@@ -348,9 +367,16 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	struct remote_mapping_chunk *remote_chunk_ptr;
 	struct mem_server_addr mem_addr;
 
+	//debug - before translation
+	//pr_warn("%s, store page 0x%lx, swap_entry 0x%lx \n", __func__, (size_t)page,  swap_entry_offset);
+
 	// 1) Translate swap index to memory server address
 	// page offset, compared start of Data Region
 	translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
+
+	// debug - after translation
+	//pr_warn("%s, for swap_entry 0x%lx mem_server_id %d, chunk index %lu, offset 0x%lx \n", 
+	//	__func__, swap_entry_offset, mem_addr.mem_server_id,  mem_addr.mem_server_chunk_index, mem_addr.mem_server_offset_within_chunk);
 
 	
 #ifdef RDMA_MESSAGE_PROFILING
@@ -467,7 +493,6 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
 {
 	int ret = 0;
 	int cpu;
-	int mem_server_id;
 	struct fs_rdma_req *rdma_req;
 	struct semeru_rdma_queue *rdma_queue;
 	//struct rdma_session_context *rdma_session = &rdma_session_global_ptr[0];

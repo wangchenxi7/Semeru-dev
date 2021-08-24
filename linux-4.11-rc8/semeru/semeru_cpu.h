@@ -34,9 +34,23 @@
 #include <linux/types.h> 
 #include <linux/init.h>
 
+// ############# Control Path #####################
+
+#define control_path_fixed_qp 0
 
 
 // ############# Multiple Memory Configurations #############
+
+// moved to include/linux/swap_global_struct.h
+// This information can be used by JDK
+
+
+// Decelare the ip of each memory servers.
+// !! defined in semeru_cpu.c
+extern char *mem_server_ip[];
+extern uint16_t mem_server_port;
+
+
 
 
 

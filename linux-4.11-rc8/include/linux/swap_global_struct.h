@@ -28,9 +28,12 @@
 //  ###################### Module control option  ######################
 //
 
+// Some functions are under developtment, disable them when releasing the code.
+// #define UNDER_DEVELOPEMENT 1
+
 // #1 enable the swp_entry_t to virtual address remap or not
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
-//#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
 // #2 This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT
@@ -58,34 +61,24 @@
 
 //
 // Meta space
-#define RDMA_STRUCTURE_SPACE_SIZE 		(RDMA_META_REGION_NUM * REGION_SIZE_GB * ONE_GB)
-
+#define RDMA_META_SPACE_START_ADDR (SEMERU_START_ADDR)
+#define RDMA_STRUCTURE_SPACE_SIZE (RDMA_META_REGION_NUM * REGION_SIZE_GB * ONE_GB)
 
 //
 // Data space
-
-#define DATA_REGION_PER_MEM_SERVER 		(RDMA_DATA_REGION_NUM/NUM_OF_MEMORY_SERVER)
+#define RDMA_DATA_SPACE_START_ADDR (RDMA_META_SPACE_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE)
+#define DATA_REGION_PER_MEM_SERVER (RDMA_DATA_REGION_NUM / NUM_OF_MEMORY_SERVER)
 
 // Memory server #1, Data Region[1] to Region[5]
-// Only being used for correctness checks, 
+// Only being used for correctness checks,
 // Plase calculated this derived information.
-#define MEMORY_SERVER_0_REGION_START_ID		RDMA_META_REGION_NUM
-#define MEMORY_SERVER_0_START_ADDR   		(SEMERU_START_ADDR +  RDMA_STRUCTURE_SPACE_SIZE)
+#define MEMORY_SERVER_0_REGION_START_ID (RDMA_META_REGION_NUM)
+#define MEMORY_SERVER_0_START_ADDR (RDMA_DATA_SPACE_START_ADDR)
 
 // Memory server #2, Data Region[5] to Region[9]
-#define MEMORY_SERVER_1_REGION_START_ID		(MEMORY_SERVER_0_REGION_START_ID + DATA_REGION_PER_MEM_SERVER)
+#define MEMORY_SERVER_1_REGION_START_ID (MEMORY_SERVER_0_REGION_START_ID + DATA_REGION_PER_MEM_SERVER)
 //#define MEMORY_SERVER_1_REGION_START_ID 9 //debug, single server
-#define MEMORY_SERVER_1_START_ADDR		(MEMORY_SERVER_0_START_ADDR + DATA_REGION_PER_MEM_SERVER * REGION_SIZE_GB * ONE_GB)
-
-// Define the ip of each memory servers.
-static char* mem_server_ip[] = {"10.0.0.2", "10.0.0.14"};
-static uint16_t mem_server_port = 9400;
-
-
-
-
-
-
+#define MEMORY_SERVER_1_START_ADDR (MEMORY_SERVER_0_START_ADDR + DATA_REGION_PER_MEM_SERVER * REGION_SIZE_GB * ONE_GB)
 
 
 //
@@ -305,7 +298,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 //    range [1GB, 1GB+256MB). The usage is based on application.
 //    [?] Pre commit tall the space ?
 #define KLASS_INSTANCE_OFFSET               (size_t)(RDMA_META_REGION_SWAP_PART_OSSFET)    // +512MB, 0x400,020,000,000
-#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)(256*ONE_MB)                                 //       0x400,030,000,000
+#define KLASS_INSTANCE_OFFSET_SIZE_LIMIT    (size_t)(256*ONE_MB)                           //       0x400,030,000,000
 
 
 

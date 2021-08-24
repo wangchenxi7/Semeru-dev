@@ -114,7 +114,6 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
 // Functions for swap ratio monitor
 //
 
-
 /**
  * Semeru CPU, reset array initial value to 0.
  * 
@@ -122,51 +121,46 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user 
  * 				-1 , error. 
  * 
  */
-asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len){
+asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len)
+{
 	u32 i;
 
 	//printk(KERN_INFO"%s, reset swap out monitor information. \n", __func__);
 
 	// 1) reset on-demand swapin counter.
 	reset_swap_info();
-	printk(KERN_INFO"%s, ater reset, on_demand_swapin_number 0x%x \n",__func__,  get_on_demand_swapin_number());
+	printk(KERN_INFO "%s, ater reset, on_demand_swapin_number 0x%x \n", __func__, get_on_demand_swapin_number());
 
-
-	// 2) the [buff, buff+ bytes_len) must fall into the cover of the array.
-	// 
-	#ifdef DEBUG_SERVER_HOME
-	if(within_range(start_vaddr)){
-		
-		for(i=0; i<SWAP_OUT_MONITOR_ARRAY_LEN; i++ ){
+// 2) the [buff, buff+ bytes_len) must fall into the cover of the array.
+//
+#ifdef DEBUG_SERVER_HOME
+	if (within_range(start_vaddr)) {
+		for (i = 0; i < SWAP_OUT_MONITOR_ARRAY_LEN; i++) {
 			//jvm_region_swap_out_counter[i] = 0;
 			atomic_set(&jvm_region_swap_out_counter[i], 0);
 		}
 
 		return 0;
-	}// end of if.
-	#else
-	if( (u64)start_vaddr >= SWAP_OUT_MONITOR_VADDR_START  &&  bytes_len <=  (u64)(SWAP_OUT_MONITOR_ARRAY_LEN *(1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG)) ){
-		
-		for(i=0; i<SWAP_OUT_MONITOR_ARRAY_LEN; i++ ){
+	} // end of if.
+#else
+	if ((u64)start_vaddr >= SWAP_OUT_MONITOR_VADDR_START &&
+	    bytes_len <= (u64)(SWAP_OUT_MONITOR_ARRAY_LEN * (1 << SWAP_OUT_MONITOR_UNIT_LEN_LOG))) {
+		for (i = 0; i < SWAP_OUT_MONITOR_ARRAY_LEN; i++) {
 			//jvm_region_swap_out_counter[i] = 0;
 			atomic_set(&jvm_region_swap_out_counter[i], 0);
 		}
 
-		printk(KERN_INFO"%s, Region monitoring, reset jvm_region_swap_out_counter[] to 0 \n",__func__);
+		printk(KERN_INFO "%s, Region monitoring, reset jvm_region_swap_out_counter[] to 0 \n", __func__);
 
 		return 0;
-	}// end of if.
-	#endif
+	} // end of if.
+#endif
 
-
-  printk(KERN_ERR "%s, [0x%llx, 0x%llx) exceed the swap out array range [0x%llx, 0x%llx),  ", __func__, 
-																													(u64)start_vaddr, 
-																													(u64)(start_vaddr+bytes_len),
-																													(u64)SWAP_OUT_MONITOR_VADDR_START,  
-																													(u64)(SWAP_OUT_MONITOR_VADDR_START+ SWAP_OUT_MONITOR_ARRAY_LEN *(1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG) ));
+	printk(KERN_ERR "%s, [0x%llx, 0x%llx) exceed the swap out array range [0x%llx, 0x%llx),  ", __func__,
+	       (u64)start_vaddr, (u64)(start_vaddr + bytes_len), (u64)SWAP_OUT_MONITOR_VADDR_START,
+	       (u64)(SWAP_OUT_MONITOR_VADDR_START + SWAP_OUT_MONITOR_ARRAY_LEN * (1 << SWAP_OUT_MONITOR_UNIT_LEN_LOG)));
 	return -1;
 }
-
 
 /**
  * Semeru CPU : get the swapped out pages number.

@@ -24,7 +24,7 @@
 #define SWAP_OUT_MONITOR_VADDR_START		(size_t)SEMERU_START_ADDR // Start of Meta Region, 0x400,000,000,000
 #define SWAP_OUT_MONITOR_UNIT_LEN_LOG		26 // 1<<26, recording granulairy is 64M per entry. The query can span multiple entries.
 #define SWAP_OUT_MONITOR_OFFSET_MASK		(u64)(~((1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG) -1))		//0xfffffffff0000000
-#define SWAP_OUT_MONITOR_ARRAY_LEN			(u64)2*1024*1024 //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
+#define SWAP_OUT_MONITOR_ARRAY_LEN		(u64)2*1024*1024 //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
 
 
 
@@ -51,28 +51,28 @@ static inline void reset_swap_info(void){
 }
 
 // Multiple thread safe.
-static void on_demand_swapin_inc(void){
+static inline void on_demand_swapin_inc(void){
 	atomic_inc(&on_demand_swapin_number);
 }
 
-static void prefetch_swapin_inc(void){
+static inline void prefetch_swapin_inc(void){
 	atomic_inc(&prefetch_swapin_number);
 }
 
 
-static void hit_on_swap_cache_inc(void){
+static inline void hit_on_swap_cache_inc(void){
 	atomic_inc(&hit_on_swap_cache_number);
 }
 
-static int get_on_demand_swapin_number(void){
+static inline int get_on_demand_swapin_number(void){
 	return (int)atomic_read(&on_demand_swapin_number);
 }
 
-static int get_prefetch_swapin_number(void){
+static inline int get_prefetch_swapin_number(void){
 	return (int)atomic_read(&prefetch_swapin_number);
 }
 
-static int get_hit_on_swap_cache_number(void){
+static inline int get_hit_on_swap_cache_number(void){
 	return (int)atomic_read(&hit_on_swap_cache_number);
 }
 

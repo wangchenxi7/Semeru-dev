@@ -4714,6 +4714,8 @@ void G1CollectedHeap::evacuate_collection_set(G1ParScanThreadStateSet* per_threa
 
       // Update cset to memory server, if non-empty
       if(num_mem_cset){
+        
+        //Comment this to disable memory server CT
         update_cset_to_mem_server(mem_id);
         log_info(semeru,rdma)("%s, write %lx regions cset to memory server[%lu] ",__func__, num_mem_cset, mem_id);
       }
