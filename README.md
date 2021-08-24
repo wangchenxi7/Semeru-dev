@@ -322,7 +322,7 @@ In our design, only part of the Meta space and the Data space (Java heap) can be
 
 #### 2. Some meta data in CPU server JVM can be freed. 
 
-In order to do concurrent tracing, G1 GC maintains some large data structures, e.g., the bitmap. Its size can reach up to 1/32 of the Java heap size. *Semeru* moved all the concurrent tracing to memory servers. There is no need to keep these meta data structures on the CPU server JVM. Removing them can save both time and space overhead.
+In order to do concurrent tracing, G1 GC maintains some large data structures, e.g., the bitmap. Its size can reach up to 1/32 of the Java heap size. *Semeru* moved all the concurrent tracing to memory servers. There is no need to keep these meta data structures on the CPU server JVM. Removing them can save both time and space overhead. Warning : Please reserve 4GB CPU server memory for the meta regions when create the cgroup. We will fix this problem later.
 
 #### 3. Java heap size is fixed at 32GB, Start at 0x400,100,000,000.
 
