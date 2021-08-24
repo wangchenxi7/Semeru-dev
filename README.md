@@ -5,9 +5,10 @@
 # 2. Setup environments
 
 - **Hardware: Intel servers with InﬁniBand**
-- **Kernel environments:  Linux-4.11-rc8, CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5), Ubuntu 18.04 with MLNX 4.7**
-- **Run-time environments: OpenJDK 12.02, Linux-4.11-rc8, CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5)**
-- **GNU environments: GCC 4.8 to GCC 5.5, GLIBC 2.27 **
+- **Kernel environments:  Linux-4.11-rc8**
+- **OS versions: CentOS 7.5(7.6) with MLNX-OFED 4.3(4.5),  Ubuntu 18.04 with MLNX 4.7**
+- **Run-time environments: OpenJDK 12.02**
+- **GNU environments: GCC 4.8 to GCC 5.5, GLIBC 2.27**
 - **Code licenses: The GNU General Public License (GPL)**
 
 # 3. Description
@@ -79,11 +80,26 @@ We ﬁrst discuss how to build and install the kernel.
 - Build and install *Semeru* RDMA module
 
   ```bash
+  # Configure the number and memory resources of memory servers
+  # Take 2 memory servers as example
+  # Set the MACRO variables in Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h
+  # Adjust the number of memory servers and the Regions will be divided into each memory server evenly
+
+  #define NUM_OF_MEMORY_SERVER 2UL
+  
+  # And then, each memory server contains 1 Meta Region and 4 Data Regions.
+  ````
+
+
+  ```bash
   # Add the IP of each memory server into
-  # Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h
+  # Semeru/linux-4.11-rc8/semeru/semeru_cpu.c
   # e.g., the Inﬁniband IPs of the 2 memory servers are 10.0.0.2 and 10.0.0.4
   char * mem_server_ip[] = {"10.0.0.2","10.0.0.4"};
   uint16_t mem_server_port = 9400;
+  ````
+  
+  ````bash
   # Then build the Semeru RDMA module
   cd ~/Semeru/linux-4.11-rc8/semeru
   make
@@ -209,9 +225,10 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # @CPU server
   cd ~/Semeru/ShellScript/
   install_semeru_module.sh close_semeru
-  # However, caused of the limit of frontswap,
-  # We can't remove the registered frontswap device clearly by doing this.
-  # We have to restart the cpu server and re-connct the CPU server with memory servers.
+  # If the memory servers are crashed, the CPU server should disconnect 
+  # with the memory servers automatically.
+  # In this case, we recommend to restart the CPU server for performance test.
+  # Because the crash of memory servers may cause kernel memory leak of CPU server.
   ```
 
 - Set a CPU server cache size limit for an application
@@ -223,9 +240,11 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # Refer to the Known Issues chapter for more ditals.
   # @CPU server
   cd ~/Semeru/ShellScript
-  ./cgroupv1_manage.sh create 9g
+  
+  # parameters <create/delete>  <cgroup_name> <memory size>
+  ./cgroupv1_manage.sh create spark 9g
   # Or delete the cgroup
-  ./cgroupv1_manage.sh delete
+  ./cgroupv1_manage.sh delete spark
   ```
 
 - Add a Spark executor into the created *cgroup*
@@ -241,6 +260,17 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # Please refer to the FAQ chapter for more details.
   # In order to achive this, specify the executor JVM in Spark/conf/spark-defaults.conf :
   spark.executorEnv.JAVA_HOME=${semeru_cpu_server_jvm_dir}/jdk
+  
+  # More explanation
+  # 1) We recommend to only add a single process into the cgroup.
+  # E.g., Only add the Spark Executor into process, but not adding the worker process.
+  # 1.1) Keep the Spark/sbin/start-slave.sh unmodified
+  # 1.2) Run the sh Semeru/ShellScript/cgroupv1_add_executor.sh before launch the Spark app.
+  
+  # 2) We recommend to reserve core#0 for Control Path 
+  # E.g., modify the spark/sbin/start-slave.sh to use core #1 to #15 only:
+  taskset -c 1-15  "${SPARK_HOME}/sbin"/spark-daemon.sh start $CLASS $WORKER_NUM \
+       --webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
   ```
 
 - Launch a Spark application
