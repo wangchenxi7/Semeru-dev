@@ -1611,8 +1611,8 @@ char *semeru_cp_rdma_write(int mem_server_id, int write_type, char __user *start
 	struct semeru_rdma_req_sg *rdma_req_sg;
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-	printk(KERN_INFO " %s, write_type 0x%x, start_addr : 0x%lx, size : 0x%lx \n", __func__, write_type,
-	       (unsigned long)start_addr, size);
+	printk(KERN_INFO " %s, mem_server[%d] write_type 0x%x, start_addr : 0x%lx, size : 0x%lx \n", 
+		__func__, mem_server_id, write_type, (unsigned long)start_addr, size);
 #endif
 
 	// #1 Do page alignmetn,
@@ -1637,8 +1637,8 @@ char *semeru_cp_rdma_write(int mem_server_id, int write_type, char __user *start
 	memset(rdma_req_sg, 0, sizeof(struct semeru_rdma_req_sg));
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-	printk(KERN_INFO "%s, rdma_queue[%d], aligned start_addr : 0x%lx, aligned size : 0x%lx \n", __func__,
-	       rdma_queue->q_index, (unsigned long)start_addr_aligned, size_aligned);
+	printk(KERN_INFO "%s, mem_server[%d] rdma_queue[%d], aligned start_addr : 0x%lx, aligned size : 0x%lx \n", __func__,
+	       mem_server_id, rdma_queue->q_index, (unsigned long)start_addr_aligned, size_aligned);
 #endif
 
 	// 1) Drain all the outstanding requests for a signal write
@@ -1766,8 +1766,8 @@ void init_kernel_semeru_rdma_ops(void)
 {
 #ifndef DEBUG_BD_ONLY // For block device only mode, no need to register the RDMA function
 	struct semeru_rdma_ops module_rdma_ops; // temporary var
-	module_rdma_ops.rdma_read =
-		&semeru_cp_rdma_read; // the address of function is fixed.
+	// the address of function is fixed.
+	module_rdma_ops.rdma_read = &semeru_cp_rdma_read; 
 	module_rdma_ops.rdma_write = &semeru_cp_rdma_write;
 
 	rdma_ops_wrapper(&module_rdma_ops); // exported kernel call

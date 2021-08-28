@@ -70,6 +70,12 @@ void rdma_write_to_mem_server_inc(int mem_server_id);
 void periodically_print_info(const char* message);
 
 
+
+// ###############  Debug macros ####################
+
+//#define DEBUG_MODE_BRIEF 1
+
+
 #endif // End of SEMERU_CPU
 
 
