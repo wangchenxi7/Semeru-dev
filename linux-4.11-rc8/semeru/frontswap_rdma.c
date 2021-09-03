@@ -1472,6 +1472,11 @@ int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru
 			goto err; // Skip the WR enqueue.
 		}
 
+		#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		printk("%s,Post a 1-sided RDMA wr , dir %d , start addr 0x%llx done.\n", __func__, dir,
+		       (uint64_t)(addr_scan_ptr - ret * PAGE_SIZE));
+		#endif
+
 		// Post 1-sided RDMA read wr
 		// Both read/write queue depth are RDMA_SEND_QUEUE_DEPTH
 		ret = cp_enqueue_send_wr(rdma_session, rdma_queue, rdma_req_sg);
@@ -1480,10 +1485,6 @@ int semeru_cp_rdma_send(struct rdma_session_context *rdma_session, struct semeru
 			goto err;
 		}
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-		printk("%s,Post a 1-sided RDMA wr , dir %d , start addr 0x%llx done.\n", __func__, dir,
-		       (uint64_t)(addr_scan_ptr - ret * PAGE_SIZE));
-#endif
 
 		//debug - drain after inserting any rdma_wr
 		// drain after queue is full

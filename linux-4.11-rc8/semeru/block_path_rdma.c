@@ -2114,9 +2114,6 @@ err:
 	return ret; 
 }
 
-
-
-
 /**
  * Control-Path, build a rdma wr for the RDMA read/write in CP.
  * 
@@ -2127,108 +2124,101 @@ err:
  * 2) start_addr/end_addr stores the virtual address range to be processed.
  * 
  */
-int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct rmem_rdma_command *rdma_cmd_ptr, bool write_or_not,
-									struct remote_mapping_chunk *	remote_chunk_ptr, char ** addr_scan_ptr,  char* end_addr){
-
-
+int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct rmem_rdma_command *rdma_cmd_ptr,
+		     bool write_or_not, struct remote_mapping_chunk *remote_chunk_ptr, char **addr_scan_ptr,
+		     char *end_addr)
+{
 	int ret = 0;
 	int i;
 	int dma_entry = 0;
-	struct ib_device	*ibdev	=	rdma_session->rdma_dev->dev;  // get the ib_devices
+	struct ib_device *ibdev = rdma_session->rdma_dev->dev; // get the ib_devices
 
 	//printk(KERN_INFO "%s, build wr for range [0x%llx, 0x%llx)\n",__func__, (uint64_t)*addr_scan_ptr, (uint64_t)end_addr );
 
-	// 1) Register the CPU server's local RDMA buffer.  
-	//	  Map the corresponding physical pages to S/G structure.  
-	rdma_cmd_ptr->nentry	= meta_data_map_sg(rdma_session, rdma_cmd_ptr->sgl, addr_scan_ptr, end_addr);
-	rdma_cmd_ptr->io_rq 	= NULL; // means this is CP path data.
-	if(unlikely(rdma_cmd_ptr->nentry == 0)){
+	// 1) Register the CPU server's local RDMA buffer.
+	//	  Map the corresponding physical pages to S/G structure.
+	rdma_cmd_ptr->nentry = meta_data_map_sg(rdma_session, rdma_cmd_ptr->sgl, addr_scan_ptr, end_addr);
+	rdma_cmd_ptr->io_rq = NULL; // means this is CP path data.
+	if (unlikely(rdma_cmd_ptr->nentry == 0)) {
 		// It's ok, the pte are not mapped to any physical pages.
 		printk(KERN_INFO "%s, Find zero mapped pages for range [0x%llu, 0x%llu). Skip this wr. \n", __func__,
-		 																																					(uint64_t)(*addr_scan_ptr - rdma_cmd_ptr->nentry * PAGE_SIZE), 
-		 																																					(uint64_t)end_addr);
+		       (uint64_t)(*addr_scan_ptr - rdma_cmd_ptr->nentry * PAGE_SIZE), (uint64_t)end_addr);
 		goto err; // return 0.
 	}
 
 	// 2) Register the physical address stored in S/G structure to DMA device.
 	//  	Here gets the scatterlist->dma_address.
 	//    CPU server RDMA buffer  registration.
-	dma_entry	=	ib_dma_map_sg( ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry,
-											write_or_not ? DMA_TO_DEVICE : DMA_FROM_DEVICE);  // Inform PCI device the dma address of these scatterlist.
-	ret = dma_entry;  // return the number of pages mapped to RDMA device.
+	dma_entry = ib_dma_map_sg(ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry,
+				  write_or_not ?
+						DMA_TO_DEVICE :
+						DMA_FROM_DEVICE); // Inform PCI device the dma address of these scatterlist.
+	ret = dma_entry; // return the number of pages mapped to RDMA device.
 
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+	printk("	after ib_dma_map_sg. scatterlist[0],  dma_addr: 0x%llx, dma_length: 0x%llx,  scatterlist.length: 0x%llx. \n",
+	       (uint64_t)sg_dma_address(&(rdma_cmd_ptr->sgl[0])), (uint64_t)sg_dma_len(&rdma_cmd_ptr->sgl[0]),
+	       (uint64_t)rdma_cmd_ptr->sgl[0].length);
 
-	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-		printk("	after ib_dma_map_sg. scatterlist[0],  dma_addr: 0x%llx, dma_length: 0x%llx,  scatterlist.length: 0x%llx. \n",
-																	(uint64_t)sg_dma_address(&(rdma_cmd_ptr->sgl[0]) ),
-																	(uint64_t)sg_dma_len(&rdma_cmd_ptr->sgl[0]),
-																	(uint64_t)rdma_cmd_ptr->sgl[0].length);
+	// Here can't be ZERO !
+	if (unlikely(dma_entry == 0)) {
+		printk(KERN_ERR "ERROR in %s Registered 0 entries to rdma scatterlist \n", __func__);
+		goto err;
+	}
 
-		// Here can't be ZERO !
-		if( unlikely(dma_entry == 0) ){
-			printk(KERN_ERR "ERROR in %s Registered 0 entries to rdma scatterlist \n", __func__);
-			goto err;
-		}
-
-	//	print_io_request_physical_pages(io_rq, __func__);
-	//	print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
-	#endif
-
-
-
+//	print_io_request_physical_pages(io_rq, __func__);
+//	print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
+#endif
 
 	// 3) Register Remote RDMA buffer to WR.
 	// 		The whole remote virtual memory pool is already resigered as RDMA buffer.
 	//		Here just fills the information into the rdma_sq_wr.
-	rdma_cmd_ptr->rdma_sq_wr.rkey					= remote_chunk_ptr->remote_rkey;
-// Start address of the S/G vector. Universal address space.
-	rdma_cmd_ptr->rdma_sq_wr.remote_addr	= remote_chunk_ptr->remote_addr + ( (uint64_t)(*addr_scan_ptr - rdma_cmd_ptr->nentry * PAGE_SIZE) & CHUNK_MASK ); 
-	rdma_cmd_ptr->rdma_sq_wr.wr.opcode		= write_or_not ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
+	rdma_cmd_ptr->rdma_sq_wr.rkey = remote_chunk_ptr->remote_rkey;
+	// Start address of the S/G vector. Universal address space.
+	rdma_cmd_ptr->rdma_sq_wr.remote_addr =
+		remote_chunk_ptr->remote_addr +
+		((uint64_t)(*addr_scan_ptr - rdma_cmd_ptr->nentry * PAGE_SIZE) & CHUNK_MASK);
+	rdma_cmd_ptr->rdma_sq_wr.wr.opcode = write_or_not ? IB_WR_RDMA_WRITE : IB_WR_RDMA_READ;
 	rdma_cmd_ptr->rdma_sq_wr.wr.send_flags = IB_SEND_SIGNALED; // 1-sided RDMA message ? both read /write
-	rdma_cmd_ptr->rdma_sq_wr.wr.wr_id	= (u64)rdma_cmd_ptr;		// assign the meta data. Used to free the buffer when receive the wc
+	rdma_cmd_ptr->rdma_sq_wr.wr.wr_id =
+		(u64)rdma_cmd_ptr; // assign the meta data. Used to free the buffer when receive the wc
 
-	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-		printk(KERN_INFO "%s, access remote data, rdma_sq_wr.remote_addr: 0x%llx, rkey: 0x%llx, len: 0x%llx , wr.wr_id: 0x%llx \n",
-																							__func__,
-																							(uint64_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr,
-																							(uint64_t)rdma_cmd_ptr->rdma_sq_wr.rkey,
-																							(uint64_t)(ret* PAGE_SIZE),
-																							(uint64_t)rdma_cmd_ptr->rdma_sq_wr.wr.wr_id);
-	#endif
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+	printk(KERN_INFO
+	       "%s, access remote data, rdma_sq_wr.remote_addr: 0x%llx, rkey: 0x%llx, len: 0x%llx , wr.wr_id: 0x%llx \n",
+	       __func__, (uint64_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr, (uint64_t)rdma_cmd_ptr->rdma_sq_wr.rkey,
+	       (uint64_t)(ret * PAGE_SIZE), (uint64_t)rdma_cmd_ptr->rdma_sq_wr.wr.wr_id);
+#endif
 
 	// 4) Register Local RDMA Buffer to WR.
 	// [Warning] assume all the sectors in this bio is contiguous.
-	// Then the remote address is contiguous (virtual space). 
+	// Then the remote address is contiguous (virtual space).
 	// Scatter-Gather can only be one to multiple/mutiple to one.
 	//
 	// build multiple ib_sge
 	//struct ib_sge sge_list[dma_entry];
 	//
 	// [?] not use the scatterlist->page_link at all ?
-	for(i=0; i<dma_entry; i++ ){
-		rdma_cmd_ptr->sge_list[i].addr 		= sg_dma_address(&(rdma_cmd_ptr->sgl[i]));  // scatterlist->addr
-		rdma_cmd_ptr->sge_list[i].length	= PAGE_SIZE; // should be the size for each ib_sge !! not the total size of RDMA S/G !!
-		rdma_cmd_ptr->sge_list[i].lkey		=	rdma_session->rdma_dev->dev->local_dma_lkey;
-	
-		#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-			printk(KERN_INFO "%s, Local RDMA Buffer[%d], sge_list.addr: 0x%llx, lkey: 0x%llx, len: 0x%llx \n",
-																							__func__,
-																							i,
-																							(uint64_t)rdma_cmd_ptr->sge_list[i].addr,
-																							(uint64_t)rdma_cmd_ptr->sge_list[i].lkey,
-																							(uint64_t)rdma_cmd_ptr->sge_list[i].length);
-		#endif
-	
+	for (i = 0; i < dma_entry; i++) {
+		rdma_cmd_ptr->sge_list[i].addr = sg_dma_address(&(rdma_cmd_ptr->sgl[i])); // scatterlist->addr
+		rdma_cmd_ptr->sge_list[i].length =
+			PAGE_SIZE; // should be the size for each ib_sge !! not the total size of RDMA S/G !!
+		rdma_cmd_ptr->sge_list[i].lkey = rdma_session->rdma_dev->dev->local_dma_lkey;
+
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		printk(KERN_INFO "%s, Local RDMA Buffer[%d], sge_list.addr: 0x%llx, lkey: 0x%llx, len: 0x%llx \n",
+		       __func__, i, (uint64_t)rdma_cmd_ptr->sge_list[i].addr, (uint64_t)rdma_cmd_ptr->sge_list[i].lkey,
+		       (uint64_t)rdma_cmd_ptr->sge_list[i].length);
+#endif
 	}
 
-	rdma_cmd_ptr->rdma_sq_wr.wr.sg_list		= rdma_cmd_ptr->sge_list;  // let wr.sg_list points to the start of the ib_sge array
-	rdma_cmd_ptr->rdma_sq_wr.wr.num_sge		= dma_entry;
-		
+	rdma_cmd_ptr->rdma_sq_wr.wr.sg_list =
+		rdma_cmd_ptr->sge_list; // let wr.sg_list points to the start of the ib_sge array
+	rdma_cmd_ptr->rdma_sq_wr.wr.num_sge = dma_entry;
+
 err:
-	return ret; 
+	return ret;
 }
-
-
 
 /**
  * Semeru CS - Map multiple meta data structure's physical address to rdma scatter-gather.
