@@ -1069,6 +1069,21 @@ class rdma_padding : public CHeapRDMAObj<rdma_padding, NON_ALLOC_TYPE>{
 public:
   size_t num_of_item;
   char* content[];
+
+// function
+public:
+  void init(size_t byte_size){
+    num_of_item = byte_size - sizeof(size_t);
+    memset(content, 0, num_of_item);
+  }
+
+  void control_path_flush(int mem_server_id, char *message_start_addr, size_t message_size){
+    
+      syscall(RDMA_WRITE, mem_server_id, message_start_addr, message_size);  
+      tty->print("%s, Pauseless debug flush data [0x%lx, 0x%lx)\n",
+        __func__, (size_t)message_start_addr, (size_t)(message_start_addr + message_size) );
+  }
+
 };
 
 

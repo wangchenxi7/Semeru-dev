@@ -52,9 +52,9 @@
 //  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
 #define REGION_SIZE_GB 4UL // RDMA manage granularity, not the Heap Region.
 #define RDMA_META_REGION_NUM 1UL
-#define RDMA_DATA_REGION_NUM 8UL
+#define RDMA_DATA_REGION_NUM 2UL
 #define SEMERU_START_ADDR 0x400000000000UL
-#define NUM_OF_MEMORY_SERVER 2UL
+#define NUM_OF_MEMORY_SERVER 1UL
 
 // ###
 // below is derived macros
@@ -69,15 +69,16 @@
 #define RDMA_DATA_SPACE_START_ADDR (RDMA_META_SPACE_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE)
 #define DATA_REGION_PER_MEM_SERVER (RDMA_DATA_REGION_NUM / NUM_OF_MEMORY_SERVER)
 
+
+
+// ############################### Only being used for correctness checks ###############################
 // Memory server #1, Data Region[1] to Region[5]
-// Only being used for correctness checks,
 // Plase calculated this derived information.
 #define MEMORY_SERVER_0_REGION_START_ID (RDMA_META_REGION_NUM)
 #define MEMORY_SERVER_0_START_ADDR (RDMA_DATA_SPACE_START_ADDR)
 
 // Memory server #2, Data Region[5] to Region[9]
 #define MEMORY_SERVER_1_REGION_START_ID (MEMORY_SERVER_0_REGION_START_ID + DATA_REGION_PER_MEM_SERVER)
-//#define MEMORY_SERVER_1_REGION_START_ID 9 //debug, single server
 #define MEMORY_SERVER_1_START_ADDR (MEMORY_SERVER_0_START_ADDR + DATA_REGION_PER_MEM_SERVER * REGION_SIZE_GB * ONE_GB)
 
 
@@ -106,7 +107,7 @@
 // #define DEBUG_REQUEST_TAG 1
 
 //#define DEBUG_LATENCY_CLIENT 1
-//#define DEBUG_MODE_BRIEF 1 
+#define DEBUG_MODE_BRIEF 1 
 //#define DEBUG_MODE_DETAIL 1
 //#define DEBUG_BD_ONLY 1			// Build and install BD & RDMA modules, but not connect them.
 //#define DEBUG_RDMA_ONLY 1			// Only build and install RDMA modules.

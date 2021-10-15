@@ -126,10 +126,10 @@ then
 	echo "Close current swap partition"
 	close_swap_partition
 
-  # 2. Create a swapfile and mount it as swap device 
-  create_swap_file
+    # 2. Create a swapfile and mount it as swap device 
+    create_swap_file
 
-	# 2. load semeru module 
+	# 3. load semeru module 
 	echo "insmod ~/linux-4.11-rc8/semeru/semeru_cpu_server.ko"
 	sudo insmod ./semeru_cpu_server.ko
 

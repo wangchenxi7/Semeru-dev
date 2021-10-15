@@ -228,14 +228,14 @@ public :
 
   received_memory_server_cset* recv_mem_server_cset() { return _recv_mem_server_cset;  }
   void update_cset_to_mem_server(size_t mem_id )	{ 
-    syscall(RDMA_WRITE_SIGNAL, mem_id, _recv_mem_server_cset, MEMORY_SERVER_CSET_SIZE);	 
+    //syscall(RDMA_WRITE_SIGNAL, mem_id, _recv_mem_server_cset, MEMORY_SERVER_CSET_SIZE);	 
   }
 
   flags_of_cpu_server_state* cpu_server_flags() { return _cpu_server_flags;  }
   void send_cpu_server_flags_to_mem_server()	  { 
     int mem_id;
     for(mem_id=0; mem_id<NUM_OF_MEMORY_SERVER; mem_id ++ ){
-      syscall(RDMA_WRITE, mem_id, _cpu_server_flags, FLAGS_OF_CPU_SERVER_STATE_SIZE); 
+      //syscall(RDMA_WRITE, mem_id, _cpu_server_flags, FLAGS_OF_CPU_SERVER_STATE_SIZE); 
     }
 
   }
@@ -253,7 +253,7 @@ public :
   void send_mem_server_flags_to_mem_server()	  { 
     int mem_id;
     for(mem_id=0; mem_id<NUM_OF_MEMORY_SERVER; mem_id ++ ){
-      syscall(RDMA_WRITE, mem_id, _mem_server_flags, FLAGS_OF_MEM_SERVER_STATE_SIZE);	
+      //syscall(RDMA_WRITE, mem_id, _mem_server_flags, FLAGS_OF_MEM_SERVER_STATE_SIZE);	
     }
   }
 
@@ -289,7 +289,7 @@ public :
 // Debug Structures
 //
 public:
-  //rdma_padding* _debug_rdma_padding;
+  rdma_padding* _debug_rdma_padding;
 
 
 

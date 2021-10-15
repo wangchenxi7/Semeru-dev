@@ -138,7 +138,7 @@
 // //################################## Global variable control ##################################
 
 // Number of Memory server
-#define NUM_OF_MEMORY_SERVER 2
+#define NUM_OF_MEMORY_SERVER 1
 //#define CUR_MEMORY_SERVER_ID 0
 
 // Memory server #1, Region[1] to Region[5]
@@ -156,7 +156,7 @@
 // | -- Meta Region -- | -- Data Regsons --|
 //  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
 #define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
-#define RDMA_DATA_REGION_NUM   8
+#define RDMA_DATA_REGION_NUM   2
 #define SEMERU_START_ADDR     ((size_t)0x400000000000)
 
 

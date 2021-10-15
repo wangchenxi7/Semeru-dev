@@ -1738,12 +1738,27 @@ jint G1CollectedHeap::initialize() {
 
     initialize_cpu_mem_comm_structs(&rdma_rs);
 
-	  // Debug
-	  // Do padding for the first GB meta data space. Until the start of alive_bitmap.
-	  // _debug_rdma_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
-	  // tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
-		// 																																							(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
-		// 																																							(size_t)RDMA_PADDING_SIZE_LIMIT);
+	  // Debug for Pauseless GC
+    if(SemeruEnableMemPool && UseCompressedOops==false){
+	    // Do padding for the first GB meta data space. Until the start of alive_bitmap.
+	    _debug_rdma_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
+	    tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
+								(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
+								(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE_LIMIT));
+
+      // try to flush the pending data to remote
+      // around 0x40007f000000 
+      int target_mem_server_id = 0;
+      char* message_start = (char*)0x40007f000000;
+      size_t message_size = 4096*8;
+  
+      _debug_rdma_padding->init(RDMA_PADDING_SIZE_LIMIT);
+      _debug_rdma_padding->control_path_flush(target_mem_server_id, message_start, message_size);
+
+    
+    }
+    // end of debug
+
 
   }else{
     // The normal path to initialize the Java Heap
@@ -3591,7 +3606,7 @@ G1CollectedHeap::semeru_do_collection_pause_at_safepoint(double target_pause_tim
             if((size_t)pair_array[i].st > send_end + 0x4000) {
               //log_debug(semeru, rdma)("Write metadata 0x%lx , size 0x%lx to Memory Server", (size_t)send_base , ((send_end - (size_t)send_base -1)/0x1000 + 1)*0x1000 );
               for(int mem_id =0; mem_id < NUM_OF_MEMORY_SERVER; mem_id++){
-                syscall(RDMA_WRITE, mem_id, send_base, (send_end - (size_t)send_base));  // flush the klass to each memory servers
+                //syscall(RDMA_WRITE, mem_id, send_base, (send_end - (size_t)send_base));  // flush the klass to each memory servers
                 log_debug(semeru, rdma)("Write metadata 0x%lx , size 0x%lx to all Memory Server[%d]", (size_t)send_base , (send_end - (size_t)send_base), mem_id );
               }
               send_base = pair_array[i].st;
@@ -3606,7 +3621,7 @@ G1CollectedHeap::semeru_do_collection_pause_at_safepoint(double target_pause_tim
           if(send_base != NULL) {
    
             for(int mem_id =0; mem_id < NUM_OF_MEMORY_SERVER; mem_id++){
-              syscall(RDMA_WRITE, mem_id, send_base, (send_end - (size_t)send_base));  // flush the klass to each memory servers
+              //syscall(RDMA_WRITE, mem_id, send_base, (send_end - (size_t)send_base));  // flush the klass to each memory servers
               log_debug(semeru, rdma)("Write metadata 0x%lx , size 0x%lx to all Memory Server[%d]", (size_t)send_base , (send_end - (size_t)send_base), mem_id );
             }
             

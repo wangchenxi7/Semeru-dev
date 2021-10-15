@@ -1018,24 +1018,24 @@ void HeapRegion::send_info_at_gc(){
   // 1) Region basi information
   log_debug(semeru,rdma)("Write CPUToMemoryAtGC 0x%lx , class size 0x%lx to Memory Server[%d] ", 
                             (size_t)_cpu_to_mem_gc , (size_t)(sizeof(CPUToMemoryAtGC)), target_mem_id );
-  syscall(RDMA_WRITE, target_mem_id, _cpu_to_mem_gc, sizeof(CPUToMemoryAtGC));
+  //syscall(RDMA_WRITE, target_mem_id, _cpu_to_mem_gc, sizeof(CPUToMemoryAtGC));
     
   // 2) Control the Memory server gc behavior. e.g. reset the  _cm_scanned to enable GC.
   log_debug(semeru,rdma)("Write MemoryToCPUAtGC 0x%lx , class size 0x%lx to Memory Server[%d] ", 
                             (size_t)_mem_to_cpu_gc , (size_t)(sizeof(MemoryToCPUAtGC)), target_mem_id );
-  syscall(RDMA_WRITE, target_mem_id, _mem_to_cpu_gc, sizeof(MemoryToCPUAtGC));
+  //syscall(RDMA_WRITE, target_mem_id, _mem_to_cpu_gc, sizeof(MemoryToCPUAtGC));
   
   // 3) e.g. Region usage and allocation information
   log_debug(semeru,rdma)("Write SyncBetweenMemoryAndCPU 0x%lx , class size 0x%lx to Memory Server[%d]", 
                             (size_t)_sync_mem_cpu , (size_t)(sizeof(SyncBetweenMemoryAndCPU)), target_mem_id );
-  syscall(RDMA_WRITE, target_mem_id, _sync_mem_cpu, sizeof(SyncBetweenMemoryAndCPU));
+  //syscall(RDMA_WRITE, target_mem_id, _sync_mem_cpu, sizeof(SyncBetweenMemoryAndCPU));
 
     // Send the offset array of _sync_mem_cpu->_bot_part->_offset_array_part
     // 1 byte for a card, 512 bytes
   log_debug(semeru,rdma)("  Write SyncBetweenMemoryAndCPU->_bot_part->_offset_array_part 0x%lx, size 0x%lx \n", 
                                                                                     (size_t)_sync_mem_cpu->_bot_part.offset_array_part(), 
                                                                                     _sync_mem_cpu->_bot_part.offset_array_part_length() );
-  syscall(RDMA_WRITE, target_mem_id, _sync_mem_cpu->_bot_part.offset_array_part(), _sync_mem_cpu->_bot_part.offset_array_part_length());
+  //syscall(RDMA_WRITE, target_mem_id, _sync_mem_cpu->_bot_part.offset_array_part(), _sync_mem_cpu->_bot_part.offset_array_part_length());
 	
 }
 
@@ -1084,7 +1084,7 @@ void HeapRegion::send_target_queue_at_gc(){
 
 
 
-  syscall(RDMA_WRITE,target_mem_id, _sync_mem_cpu->_cross_region_ref_target_queue, align_up(sizeof(BitQueue), PAGE_SIZE)+CROSS_REGION_REF_TARGET_Q_LEN*sizeof(size_t));
+  //syscall(RDMA_WRITE,target_mem_id, _sync_mem_cpu->_cross_region_ref_target_queue, align_up(sizeof(BitQueue), PAGE_SIZE)+CROSS_REGION_REF_TARGET_Q_LEN*sizeof(size_t));
 }
 
 
