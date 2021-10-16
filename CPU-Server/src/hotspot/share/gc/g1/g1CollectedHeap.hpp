@@ -289,7 +289,7 @@ public :
 // Debug Structures
 //
 public:
-  //rdma_padding* _debug_rdma_padding;
+  rdma_padding* _debug_rdma_padding;
 
 
 

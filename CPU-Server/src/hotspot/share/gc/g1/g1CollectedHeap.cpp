@@ -1738,12 +1738,26 @@ jint G1CollectedHeap::initialize() {
 
     initialize_cpu_mem_comm_structs(&rdma_rs);
 
-	  // Debug
-	  // Do padding for the first GB meta data space. Until the start of alive_bitmap.
-	  // _debug_rdma_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
-	  // tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
-		// 																																							(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
-		// 																																							(size_t)RDMA_PADDING_SIZE_LIMIT);
+    // // Debug for Pauseless GC
+    // if(SemeruEnableMemPool && UseCompressedOops==false){
+	  //   // Do padding for the first GB meta data space. Until the start of alive_bitmap.
+	  //   _debug_rdma_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
+	  //   tty->print("WARNING in %s, padding data in Meta Region[0x%lx, 0x%lx) for debug. \n",__func__,
+		// 						(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
+		// 						(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE_LIMIT));
+
+    //   // try to flush the pending data to remote
+    //   // around 0x40007f000000 
+    //   int target_mem_server_id = 0;
+    //   char* message_start = (char*)0x40007f000000;
+    //   size_t message_size = 4096*8;
+  
+    //   _debug_rdma_padding->init(RDMA_PADDING_SIZE_LIMIT);
+    //   _debug_rdma_padding->control_path_flush(target_mem_server_id, message_start, message_size);
+
+    
+    // }
+    // // end of debug
 
   }else{
     // The normal path to initialize the Java Heap

@@ -247,7 +247,7 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* pretou
 
   // Semeru
   // Added by Chenxi.
-  if(SemeruEnableMemPool && UseCompressedOops==false){
+  // if(SemeruEnableMemPool && UseCompressedOops==false){
     //
 	  // Debug. Commit the rest of TargetObjQueue space for RDMA buffer registration purpose.
 	  // 				The space needed to be padded is [ num_regions * TASKQUEUE_SIZE * , TARGET_OBJ_OFFSET + TARGET_OBJ_SIZE_BYTE]
@@ -258,7 +258,7 @@ uint HeapRegionManager::expand_at(uint start, uint num_regions, WorkGang* pretou
 	  // tty->print("WARNING in %s, padding data in Meta Region[0x%lx,0x%lx) for debug. \n",__func__,
 		// 																																	(size_t)start_addr_to_padding,
 		// 																																	(size_t)(start_addr_to_padding + size_to_be_padded));
-  }
+  // }
   
 
   verify_optional();
