@@ -129,14 +129,14 @@
 #define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
 
 
-static const char cur_mem_server_ip[]    = "10.0.0.2";
+static const char cur_mem_server_ip[]    = "10.0.0.51";
 static const char cur_mem_server_port[]  = "9400";
 
 // Structures of the Regions
 // | -- Meta Region -- | -- Data Regsons --|
 //  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
 #define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
-#define RDMA_DATA_REGION_NUM   8
+#define RDMA_DATA_REGION_NUM   2
 #define SEMERU_START_ADDR     ((size_t)0x400000000000)
 
 

@@ -2017,23 +2017,21 @@ jint G1SemeruCollectedHeap::initialize_memory_pool() {
 		log_debug(semeru, alloc)("%s, Meta data allocation End \n", __func__);
 //	#endif
 
-	// Debug
-	// Padding the available sapce of Meta region
-	// 
-	// Do padding for the first GB meta data space. Until the start of alive_bitmap.
-	_debug_meta_region_padding		= new(RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
-	tty->print("%s, (Memory Server Only) WARNING, padding data in Meta Region[0x%lx, 0x%lx). \n",__func__,
-	 																																				(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
-	 																																				(size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE_LIMIT));
+		// Debug
+		// Padding the available sapce of Meta region
+		//
+		// Do padding for the first GB meta data space. Until the start of alive_bitmap.
+		_debug_meta_region_padding = new (RDMA_PADDING_SIZE_LIMIT, rdma_rs.base() + RDMA_PADDING_OFFSET) rdma_padding();
+		tty->print("%s, (Memory Server Only) WARNING, padding data in Meta Region[0x%lx, 0x%lx). \n", __func__,
+				   (size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET),
+				   (size_t)(rdma_rs.base() + RDMA_PADDING_OFFSET + RDMA_PADDING_SIZE_LIMIT));
 
-	//
-	// End of RDMA structure section
-	//
-	
+		//
+		// End of RDMA structure section
+		//
 
-
-	// Carve out the space after reserved_for_rdma_data as a the reserved G1 Java heap space.
- 	ReservedSpace g1_rs = heap_rs.last_part(reserved_for_rdma_data);   
+		// Carve out the space after reserved_for_rdma_data as a the reserved G1 Java heap space.
+		ReservedSpace g1_rs = heap_rs.last_part(reserved_for_rdma_data);   
 	#ifdef ASSERT
 		tty->print("%s, Reserve G1 Java heap, [0x%lx, 0x%lx) \n", __func__, 
 																																	(size_t)g1_rs.base() , 

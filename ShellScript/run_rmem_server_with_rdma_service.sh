@@ -51,7 +51,7 @@ java_exe="${JAVA_HOME}/bin/java"
 ## Semeru Configuration
 
 EnableSemeruMemPool="true"
-SemeruMemPoolSize="32G"
+SemeruMemPoolSize="16G"
 
 # Region size and Heap's allocation alignment.
 SemeruMemPoolAlignment="512M"
@@ -117,7 +117,8 @@ if [ "${execute_mode}" = "execution"  ]
 then
   echo "${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}"
 
-	numactl --cpunodebind=0 --membind=0 ${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
+	#numactl --cpunodebind=0 --membind=0 ${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
+	${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
 
 elif [ "${execute_mode}" = "gdb" ]
 then
