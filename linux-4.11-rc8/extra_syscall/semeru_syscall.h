@@ -27,6 +27,8 @@
 #include <linux/init.h>
 #include <linux/slab.h>
 
+
+
 // read/write data from Semeru Memory server, char* start_addr, unsigned long size
 // return the RDMA buffer address back
 //  
@@ -47,3 +49,13 @@ struct semeru_rdma_ops{
 
 // a global structure
 struct semeru_rdma_ops  rdma_ops_in_kernel;
+
+
+
+
+//
+// Functions
+//
+
+
+int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr);

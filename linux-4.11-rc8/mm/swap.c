@@ -42,6 +42,7 @@
 #include <linux/swap_global_struct_bd_layer.h>
 #include <linux/swap_global_struct_mem_layer.h>
 #include <linux/swapops.h>
+#include <asm/tlb.h>
 
 
 #define CREATE_TRACE_POINTS
@@ -1998,4 +1999,296 @@ void __init swap_setup(void)
 
 
 
+//
+// Semeru swap functions
+//
+
+
+
+
+
+// define the swap out operations for each level
+static struct mm_walk semeru_swapout_walk_ops = {
+	.pmd_entry = semeru_swapout_pmd_range,
+};
+
+
+
+/**
+ * @brief 
+ * 
+ * @param tlb : record the TLB flusing information. 
+ * @param vma : the vma to be swapped out.
+ * @param addr : start virt addr
+ * @param end  : end virt addr
+ * 
+ * @return ret : 
+ * 	0 : success.
+ * 	non-zero : error code
+ */
+int semeru_swapout_page_range(struct mmu_gather *tlb,
+			     struct mm_struct *mm,
+			     unsigned long addr, unsigned long end)
+{
+	struct semeru_swapout_walk_private walk_private = {
+		.pageout = true,
+		.tlb = tlb,
+	};
+
+	int ret;
+
+	// initialize the mm_walk
+	semeru_swapout_walk_ops.mm = mm;
+	semeru_swapout_walk_ops.private = &walk_private;
+
+	tlb_start_vma(tlb, vma);
+	ret = walk_page_range(addr, end, &semeru_swapout_walk_ops);
+	tlb_end_vma(tlb, vma);
+
+	return ret;
+}
+
+
+
+
+
+/**
+ * @brief Swap out all the pages of a pmd entry.
+ * 
+ * @param pmd 
+ * @param addr : the start virt addr. Used to limit the swap out range of this pmd.
+ * @param end  : the end virt addr. Used to limit the swap out range of this pmd.
+ * @param walk 
+ * @return int 
+ * 	0 : success
+ * 	positive value: the page skipped.
+ * 	negative : error
+ */
+int semeru_swapout_pmd_range(pmd_t *pmd,
+				unsigned long addr, unsigned long end,
+				struct mm_walk *walk)
+{
+	struct semeru_swapout_walk_private *private = walk->private;
+	struct mmu_gather *tlb = private->tlb;
+	bool pageout = private->pageout;
+	struct mm_struct *mm = tlb->mm;
+	struct vm_area_struct *vma = walk->vma;
+	pte_t *orig_pte, *pte, ptent;
+	spinlock_t *ptl;
+	struct page *page = NULL;
+	LIST_HEAD(page_list);
+	size_t skipped_page = 0;
+	size_t reclaimed_page = 0;
+
+
+#if defined(DEBUG_MODE_BRIEF)
+	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
+		__func__, addr, end);
+#endif
+
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+
+	if (pmd_trans_huge(*pmd)) {
+		pmd_t orig_pmd;
+		unsigned long next = pmd_addr_end(addr, end);
+
+		// warning message
+		pr_warn("%s, !! Disable transparanet huge page in madvise!!. not support yet.\n", __func__);
+
+
+		tlb_change_page_size(tlb, HPAGE_PMD_SIZE);
+		ptl = pmd_trans_huge_lock(pmd, vma);
+		if (!ptl)
+			return 0;
+
+		orig_pmd = *pmd;
+		if (is_huge_zero_pmd(orig_pmd))
+			goto huge_unlock;
+
+		if (unlikely(!pmd_present(orig_pmd))) {
+			// VM_BUG_ON(thp_migration_supported() &&
+			// 		!is_pmd_migration_entry(orig_pmd));
+			goto huge_unlock;
+		}
+
+		page = pmd_page(orig_pmd);
+
+		/* Do not interfere with other mappings of this page */
+		if (page_mapcount(page) != 1)
+			goto huge_unlock;
+
+		if (next - addr != HPAGE_PMD_SIZE) {
+			int err;
+
+			get_page(page);
+			spin_unlock(ptl);
+			lock_page(page);
+			err = split_huge_page(page);
+			unlock_page(page);
+			put_page(page);
+			if (!err)
+				goto regular_page;
+			return 0;
+		}
+
+		if (pmd_young(orig_pmd)) {
+			pmdp_invalidate(vma, addr, pmd);
+			orig_pmd = pmd_mkold(orig_pmd);
+
+			set_pmd_at(mm, addr, pmd, orig_pmd);
+			tlb_remove_pmd_tlb_entry(tlb, pmd, addr);
+		}
+
+		ClearPageReferenced(page);
+		test_and_clear_page_young(page);
+		if (pageout) {
+			if (!isolate_lru_page(page)) {
+				if (PageUnevictable(page))
+					putback_lru_page(page);
+				else
+					list_add(&page->lru, &page_list);
+			}
+		} else
+			deactivate_page(page);
+huge_unlock:
+		spin_unlock(ptl);
+		if (pageout)
+			reclaim_pages(&page_list);
+		return 0;
+	}
+
+regular_page:
+	if (pmd_trans_unstable(pmd))
+		return 0;
+
+#endif  // end CONFIG_TRANSPARENT_HUGEPAGE
+
+	tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
+	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
+	//flush_tlb_batched_pending(mm);
+	// flush the pending TLB entires ? can we delay this until unmap ?
+	try_to_unmap_flush();
+
+	arch_enter_lazy_mmu_mode();
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		ptent = *pte;
+
+		if (pte_none(ptent)){
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			skipped_page++;
+			continue;
+		}
+
+		if (!pte_present(ptent)){
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			skipped_page++;
+			continue;
+		}
+
+		page = vm_normal_page(vma, addr, ptent);
+		if (!page){
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			skipped_page++;
+			continue;
+		}
+
+		/* NOT support huge page yet.
+		 * Creating a THP page is expensive so split it only if we
+		 * are sure it's worth. Split it if we are only owner.
+		 */
+		if (PageTransCompound(page)) {
+
+			pr_err("%s, should NOT reach here #1.\n", __func__);
+			BUG_ON(1);
+
+			if (page_mapcount(page) != 1)
+				break;
+			get_page(page);
+			if (!trylock_page(page)) {
+				put_page(page);
+				break;
+			}
+			pte_unmap_unlock(orig_pte, ptl);
+			if (split_huge_page(page)) {
+				unlock_page(page);
+				put_page(page);
+				pte_offset_map_lock(mm, pmd, addr, &ptl);
+				break;
+			}
+			unlock_page(page);
+			put_page(page);
+			pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
+			pte--;
+			addr -= PAGE_SIZE;
+			continue;
+		}
+
+		/* Do not interfere with other mappings of this page */
+		if (page_mapcount(page) != 1){
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			skipped_page++;
+			continue;
+		}
+
+		VM_BUG_ON_PAGE(PageTransCompound(page), page);
+
+		// the page is accessed and cached in TLB
+		if (pte_young(ptent)) {
+			ptent = ptep_get_and_clear_full(mm, addr, pte,
+							tlb->fullmm);
+			ptent = pte_mkold(ptent);
+			set_pte_at(mm, addr, pte, ptent);
+			tlb_remove_tlb_entry(tlb, pte, addr);
+		}
+
+		/*
+		 * We are deactivating a page for accelerating reclaiming.
+		 * VM couldn't reclaim the page unless we clear PG_young.
+		 * As a side effect, it makes confuse idle-page tracking
+		 * because they will miss recent referenced history.
+		 */
+		ClearPageReferenced(page);
+		test_and_clear_page_young(page);
+		if (pageout) {
+			if (!isolate_lru_page(page)) {
+				if (PageUnevictable(page)){
+					putback_lru_page(page);
+					print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-Unevictable");
+					skipped_page++;
+				}else{
+					list_add(&page->lru, &page_list);
+					reclaimed_page++;
+#if defined(DEBUG_MODE_BRIEF)
+					pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
+						__func__,addr, (size_t)page );
+#endif
+				}
+			}
+		} else{
+			deactivate_page(page);
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-pageout false");
+			skipped_page++; // Deactivate this page instead of swapping out it.
+		}
+	} // end of for
+
+	arch_leave_lazy_mmu_mode();
+	pte_unmap_unlock(orig_pte, ptl);
+
+#if defined(DEBUG_MODE_BRIEF)
+	pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
+		__func__, reclaimed_page, skipped_page );
+#endif
+
+	if (pageout)
+		reclaimed_page = reclaim_pages(&page_list);
+	cond_resched();
+	
+#if defined(DEBUG_MODE_BRIEF)
+	pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
+		__func__, reclaimed_page);
+#endif
+
+	return skipped_page;
+}
 

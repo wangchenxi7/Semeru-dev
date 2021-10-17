@@ -8,9 +8,10 @@
 #include "semeru_syscall.h"
 
 // Develop syscall for this section
-#include "linux/swap_global_struct_mem_layer.h"
-
-
+#include <linux/swap_global_struct_mem_layer.h>
+#include <linux/swap.h>
+#include <asm/tlb.h>
+#include <linux/mm.h>
 
 
 /**
@@ -51,64 +52,73 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * 
  */
-asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server,  char __user * start_addr, unsigned long size){
-	char* ret;
+asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *start_addr, unsigned long size)
+{
+	char *ret;
 	int write_type;
 
-	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	printk("Enter %s. with type 0x%x \n", __func__, type);
-	#endif
+#endif
 
-	if(type == 1){
+	if (type == 1) {
 		// rdma read
-		if(rdma_ops_in_kernel.rdma_read != NULL){
-			rdma_ops_in_kernel.rdma_read(target_server, start_addr,size);
-		}else{
+		if (rdma_ops_in_kernel.rdma_read != NULL) {
+			rdma_ops_in_kernel.rdma_read(target_server, start_addr, size);
+		} else {
 			printk("rdma_ops_in_kernel.rdma_read is NULL. Can't execute it. \n");
 		}
-	}else if(type == 2){
-		// rdma data write 
-		if( rdma_ops_in_kernel.rdma_write != NULL){
-			
-			#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
-			#endif
-			write_type = 0x0; // data write 
-			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
-			if(unlikely(ret == NULL) ){
-				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
+	} else if (type == 2) {
+		// rdma data write
+		if (rdma_ops_in_kernel.rdma_write != NULL) {
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n", (uint64_t)rdma_ops_in_kernel.rdma_write);
+#endif
+			write_type = 0x0; // data write
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr, size);
+			if (unlikely(ret == NULL)) {
+				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__,
+				       (unsigned long)start_addr, (unsigned long)(start_addr + size));
 				return -1;
 			}
-		}else{
+		} else {
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
 		}
 
-	}else if(type == 3){
-		// rdma signal write 
-		if( rdma_ops_in_kernel.rdma_write != NULL){
-			
-			#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n",(uint64_t)rdma_ops_in_kernel.rdma_write );
-			#endif
-			write_type = 0x1; // signal write 
-			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr,size);
-			if(unlikely(ret == NULL) ){
-				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__, (unsigned long)start_addr, (unsigned long)(start_addr + size) );
+	} else if (type == 3) {
+		// rdma signal write
+		if (rdma_ops_in_kernel.rdma_write != NULL) {
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n", (uint64_t)rdma_ops_in_kernel.rdma_write);
+#endif
+			write_type = 0x1; // signal write
+			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr, size);
+			if (unlikely(ret == NULL)) {
+				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__,
+				       (unsigned long)start_addr, (unsigned long)(start_addr + size));
 				return -1;
 			}
-	
-		}else{
+
+		} else {
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
 		}
 
-	}else{
+	} else if (type == 4) {
+// force swap out and unmap a range of user virtual address
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		pr_warn("%s, write type %d, forcing swap out data in [0x%lx, 0x%lx)\n",
+			__func__, type, (size_t)start_addr, (size_t)(start_addr + size) );
+#endif
+		semeru_force_swapout((size_t)start_addr, (size_t)(start_addr + size));
+
+
+	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
 	}
 
 	return 0;
 }
-
 
 //
 // Functions for swap ratio monitor
@@ -244,5 +254,58 @@ asmlinkage int sys_test_syscall(char* __user *buff, uint64_t len){
 	}
 
 err:
+	return ret;
+}
+
+
+
+
+/**
+ * @brief only anonmous data can be paged out.
+ * 
+ * @param vma 
+ * @return true : can be swapped out
+ * @return false : can not be swapped out
+ */
+static inline bool can_do_swapout(struct vm_area_struct *vma)
+{
+	if (vma_is_anonymous(vma))
+		return true;
+
+	return false;
+}
+
+
+
+/**
+ * @brief Force swapping out the spcificed virtual address range
+ * 
+ * @param vma 
+ * @param prev 
+ * @param start_addr 
+ * @param end_addr 
+ * @return int 
+ * 	0: all the spcificed pages are paged out
+ * 	negative value : error code
+ * 	positive value : the number of pages are not paged out 
+ */
+int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
+{
+	struct mm_struct *mm = current->mm; // current points to the the caller process.
+	struct vm_area_struct *vma = find_vma(mm, start_addr);
+	struct mmu_gather tlb;
+	int ret = 0;
+
+	if (!can_do_swapout(vma))
+		return 0;
+
+	lru_add_drain(); // release the cpu local physical pages
+	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
+	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
+	tlb_finish_mmu(&tlb,start_addr, end_addr);
+
+	pr_warn("%s, Force swap out for [0x%lx, 0x%lx) finished.\n",
+		__func__, start_addr, end_addr);
+
 	return ret;
 }

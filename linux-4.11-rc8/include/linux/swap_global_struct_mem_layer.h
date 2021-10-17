@@ -142,6 +142,12 @@ int is_page_in_swap_cache(pte_t	pte);
 struct page* page_in_swap_cache(pte_t	pte); 
 
 
+static inline void print_skipped_page(pte_t pte, unsigned long addr, const char * message){
+	pr_warn("%s, skip virt addr 0x%lx, pte val 0x%lx",
+		message, addr, pte.pte);
+}
+
+
 #endif // __LINUX_SWAP_SWAP_GLOBAL_STRUCT_MEM_LAYER_H
 
 

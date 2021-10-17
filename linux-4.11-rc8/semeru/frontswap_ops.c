@@ -216,6 +216,8 @@ int dp_build_fs_rdma_wr(struct rdma_session_context *rdma_session, struct semeru
 	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	if(dir == DMA_FROM_DEVICE){
 		printk(KERN_INFO "%s, read data from remote 0x%lx, size 0x%lx \n", __func__, (size_t)rdma_req->rdma_wr.remote_addr, (size_t)PAGE_SIZE);
+	}else{
+		printk(KERN_INFO "%s, Write data to remote 0x%lx, size 0x%lx \n", __func__, (size_t)rdma_req->rdma_wr.remote_addr, (size_t)PAGE_SIZE);
 	}
 	#endif
 

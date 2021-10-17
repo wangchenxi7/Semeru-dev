@@ -73,6 +73,7 @@ void periodically_print_info(const char* message);
 
 // ###############  Debug macros ####################
 
+// Debug the RDMA module separately
 //#define DEBUG_MODE_BRIEF 1
 
 

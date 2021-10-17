@@ -119,6 +119,17 @@ void tlb_finish_mmu(struct mmu_gather *tlb, unsigned long start,
 extern bool __tlb_remove_page_size(struct mmu_gather *tlb, struct page *page,
 				   int page_size);
 
+// store the page size info
+static inline void tlb_change_page_size(struct mmu_gather *tlb, unsigned int page_size)
+{
+	if (tlb->page_size && tlb->page_size != page_size) {
+		if (!tlb->fullmm && !tlb->need_flush_all)
+			tlb_flush_mmu(tlb);
+	}
+
+	tlb->page_size = page_size;
+}
+
 static inline void __tlb_adjust_range(struct mmu_gather *tlb,
 				      unsigned long address,
 				      unsigned int range_size)

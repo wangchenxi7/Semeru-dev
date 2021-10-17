@@ -246,6 +246,12 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 	int err = 0;
 	struct vm_area_struct *vma = walk->vma;
 
+#if defined(DEBUG_MODE_BRIEF)
+	// Semeru 
+	pr_warn("%s, foce swap-out [0x%lx, 0x%lx)\n",
+		__func__, start, end);
+#endif
+
 	if (vma && is_vm_hugetlb_page(vma)) {
 		if (walk->hugetlb_entry)
 			err = walk_hugetlb_range(start, end, walk);

@@ -624,11 +624,28 @@ static inline bool mem_cgroup_swap_full(struct page *page)
 #endif
 
 
-
-
-
-
-
-
 #endif /* __KERNEL__*/
+
+
+
+
+
+//
+// For Pauseless GC
+//
+
+
+// used for forcing swap-out
+struct semeru_swapout_walk_private {
+	struct mmu_gather *tlb;
+	bool pageout;
+};
+
+
+
+extern unsigned long reclaim_pages(struct list_head *page_list);
+extern int semeru_swapout_pmd_range(pmd_t *pmd, unsigned long addr, unsigned long end, struct mm_walk *walk);
+extern int semeru_swapout_page_range(struct mmu_gather *tlb, struct mm_struct *mm, unsigned long addr,
+				     unsigned long end);
+
 #endif /* _LINUX_SWAP_H */
