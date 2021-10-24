@@ -1242,12 +1242,15 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			  char *end_addr)
 {
 	uint64_t entries = 0; // mapped pages
-	size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
 	pte_t *pte_ptr;
 	struct page *buf_page;
 
 	// Scan and find several, at most package_len_limit, contiguous pages as RDMA buffer.
 	while (*addr_scan_ptr < end_addr) {
+		//printk(KERN_INFO "%s, Current tomap Virt page 0x%lx\n", __func__,
+		//       (size_t)*addr_scan_ptr);
+
 		//[?] Will this walking cause too much overhead ?
 		pte_ptr = walk_page_table(current->mm, (uint64_t)(*addr_scan_ptr)); 
 
@@ -1334,8 +1337,8 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	struct ib_device *ibdev = rdma_session->rdma_dev->dev; // get the ib_devices
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-	printk(KERN_INFO "%s, build wr for range [0x%llx, 0x%llx)\n", __func__, (uint64_t)*addr_scan_ptr,
-	       (uint64_t)end_addr);
+	// printk(KERN_INFO "%s, build wr for range [0x%llx, 0x%llx)\n", __func__, (uint64_t)*addr_scan_ptr,
+	//        (uint64_t)end_addr);
 #endif
 
 	// 1) Register the CPU server's local RDMA buffer.
@@ -1389,11 +1392,11 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 		goto err;
 	}
 
-	printk(KERN_INFO
-	       "%s,  Mapped %d entries. From CPU server [0x%lx, 0x%lx) to Memory server[0x%lx, 0x%lx) , in current rdma_wr \n",
-	       __func__, dma_entry, (size_t)(*addr_scan_ptr - dma_entry * PAGE_SIZE), (size_t)*addr_scan_ptr,
-	       (size_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr,
-	       (size_t)(rdma_cmd_ptr->rdma_sq_wr.remote_addr + dma_entry * PAGE_SIZE));
+	// printk(KERN_INFO
+	//        "%s,  Mapped %d entries. From CPU server [0x%lx, 0x%lx) to Memory server[0x%lx, 0x%lx) , in current rdma_wr \n",
+	//        __func__, dma_entry, (size_t)(*addr_scan_ptr - dma_entry * PAGE_SIZE), (size_t)*addr_scan_ptr,
+	//        (size_t)rdma_cmd_ptr->rdma_sq_wr.remote_addr,
+	//        (size_t)(rdma_cmd_ptr->rdma_sq_wr.remote_addr + dma_entry * PAGE_SIZE));
 
 	//print_scatterlist_info(rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry);
 #endif
@@ -1414,9 +1417,9 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 		rdma_cmd_ptr->sge_list[i].lkey = rdma_session->rdma_dev->dev->local_dma_lkey;
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-		printk(KERN_INFO "%s, Local RDMA Buffer[%d], ib_sge list addr: 0x%llx, lkey: 0x%llx, len: 0x%llx \n",
-		       __func__, i, (uint64_t)rdma_cmd_ptr->sge_list[i].addr, (uint64_t)rdma_cmd_ptr->sge_list[i].lkey,
-		       (uint64_t)rdma_cmd_ptr->sge_list[i].length);
+		// printk(KERN_INFO "%s, Local RDMA Buffer[%d], ib_sge list addr: 0x%llx, lkey: 0x%llx, len: 0x%llx \n",
+		//        __func__, i, (uint64_t)rdma_cmd_ptr->sge_list[i].addr, (uint64_t)rdma_cmd_ptr->sge_list[i].lkey,
+		//        (uint64_t)rdma_cmd_ptr->sge_list[i].length);
 #endif
 	} // end of for
 

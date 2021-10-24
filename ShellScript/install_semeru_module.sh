@@ -9,7 +9,7 @@
 SWAP_PARTITION_SIZE="32G"
 
 # Cause of sudo, NOT use ${HOME}
-home_dir="/mnt/ssd/wcx"
+home_dir="/mnt/ssd/haoran"
 semeru_module_dir="${home_dir}/Semeru/linux-4.11-rc8/semeru"
 swap_file="${home_dir}/swapfile" 
 

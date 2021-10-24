@@ -9,7 +9,7 @@
 SWAP_PARTITION_SIZE="32G"
 
 # Cause of sudo, NOT use ${HOME}
-home_dir="/mnt/ssd/wcx"
+home_dir="/mnt/ssd/haoran"
 swap_file="${home_dir}/swapfile" 
 
 
