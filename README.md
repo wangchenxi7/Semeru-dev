@@ -41,6 +41,8 @@ To build *Semeru*, the ﬁrst step is to download its source code:
 git clone https://github.com/uclasystem/Semeru.git
 # if the repo name is different, e.g. `Semeru-dev`, change it to `Semeru` to easily run following commands
 mv Semeru-dev Semeru
+cd Semeru
+git checkout haoran_use
 ```
 
 When deploying *Semeru*, install the three components in the following order: the kernel on the CPU server, the *Semeru* JVM on the CPU server, and the LJVM on each memory server. Finally, connect the CPU server with memory servers before running applications.
@@ -170,12 +172,21 @@ The next step is to install the LJVM on each memory server.
   boot_jdk="${home_dir}/jdk-12.0.2"
   ```
 
+- Get source code for the modified version of memory server for branch `haoran_use`
+
+  ```bash
+  # ask Haoran for permissions
+  git clone https://github.com/mahaoran1997/NewPauselessMemory.git
+  cd NewPauselessMemory
+  git checkout compaction
+  ```
+
 - Change the IP addresses
 
   ```cpp
   // E.g., mem-server #0’s IP is 10.0.0.2, memory server ID is 0.
   // Change the IP address and ID in ﬁle:
-  // ~/Semeru/Memory-Server/src/hotspot/share/utilities/globalDefinitions.hpp
+  // ~/NewPauselessMemory/src/hotspot/share/utilities/globalDefinitions.hpp
   // @Mem-server #0
   #define NUM_OF_MEMORY_SERVER 2
   #define CUR_MEMORY_SERVER_ID 0
@@ -187,17 +198,10 @@ The next step is to install the LJVM on each memory server.
 
   ```bash
   # Use the same ${build_mode} as the CPU-server JVM.
-  cd ~/Semeru/Memory-Server/
-  ./build_memory_server.sh ${build_mode}
-  ./build_memory_server.sh build
-  # the JDK is under now under ${home_dir}/Semeru/Memory-Server/build/linux-x86_64-server-${build_mode}/jdk
-  
-  # optional: install JDK. If installed,
-  # The compiled Java home will be installed under:
-  # ${home_dir}/jdk12u-self-build/jvm/openjdk-12.0.2-internal
-  ./build_memory_server.sh install
-
-  ## Set JAVA_HOME to point to the folder.
+  cd ~/NewPauselessMemory
+  ~/Semeru/Memory-Server/build_memory_server.sh ${build_mode}
+  ~/Semeru/Memory-Server/build_memory_server.sh build
+  # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-${build_mode}/jdk
   ```
 
 
@@ -209,16 +213,10 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
 - Launch memory servers
 
   ```bash
-  # Use the shell script to run each memory server.
-  # ${execution_mode} can be execution or gdb.
-  # @Each memory server
-  cd ~/Semeru/ShellScript
-  ## maybe add `JAVA_HOME="${home_dir}/Semeru/Memory-Server/build/linux-x86_64-server-${build_mode}/jdk"` in run_rmem_server_with_rdma_service.sh
-  code run_rmem_server_with_rdma_service.sh
-  sudo yum install numactl -y
-  ## config SEMERU_HOME in .bash_rc
+  cd ~/Semeru/testcase/MemoryServer
+  javac Case1.java
   tmux
-  ./run_rmem_server_with_rdma_service.sh Case1 execution
+  ~/NewPauselessMemory/build/linux-x86_64-server-release/jdk/bin/java -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:-UseCompressedOops -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=32g -XX:SemeruMemPoolInitialSize=32g -XX:SemeruMemPoolAlignment=64M -XX:SemeruConcGCThreads=1 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 -XX:-ShenandoahPacing -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:ShenandoahRefProcFrequency=0 -cp ~/Semeru/testcase/MemoryServer Case1
   ```
 
 - Connect the CPU server with memory servers
@@ -270,7 +268,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # Modify the function *start_instance* under
   # Spark/sbin/start-slave.sh
   # @CPU server
-  cgexec -sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
+  cgexec --sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
   # We also recommend that only run the executor on the CPU-Server JVM.
   # Please refer to the FAQ chapter for more details.
   # In order to achive this, specify the executor JVM in Spark/conf/spark-defaults.conf :
