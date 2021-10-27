@@ -143,8 +143,8 @@ struct page* page_in_swap_cache(pte_t	pte);
 
 
 static inline void print_skipped_page(pte_t pte, unsigned long addr, const char * message){
-	pr_warn("%s, skip virt addr 0x%lx, pte val 0x%lx",
-		message, addr, pte.pte);
+	// pr_warn("%s, skip virt addr 0x%lx, pte val 0x%lx",
+	// 	message, addr, pte.pte);
 }
 
 

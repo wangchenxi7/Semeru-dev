@@ -549,6 +549,9 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
  */
 static unsigned long swapin_nr_pages(unsigned long offset)
 {
+	
+	return 1;
+
 	static unsigned long prev_offset;
 	unsigned int pages, max_pages, last_ra;
 	static atomic_t last_readahead_pages;
