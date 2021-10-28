@@ -270,7 +270,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # Modify the function *start_instance* under
   # Spark/sbin/start-slave.sh
   # @CPU server
-  cgexec -sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
+  cgexec --sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
   # We also recommend that only run the executor on the CPU-Server JVM.
   # Please refer to the FAQ chapter for more details.
   # In order to achive this, specify the executor JVM in Spark/conf/spark-defaults.conf :
