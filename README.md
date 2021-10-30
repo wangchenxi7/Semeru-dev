@@ -41,6 +41,8 @@ To build *Semeru*, the ﬁrst step is to download its source code:
 git clone https://github.com/uclasystem/Semeru.git
 # if the repo name is different, e.g. `Semeru-dev`, change it to `Semeru` to easily run following commands
 mv Semeru-dev Semeru
+cd Semeru
+git checkout haoran_use
 ```
 
 When deploying *Semeru*, install the three components in the following order: the kernel on the CPU server, the *Semeru* JVM on the CPU server, and the LJVM on each memory server. Finally, connect the CPU server with memory servers before running applications.
@@ -53,14 +55,27 @@ We ﬁrst discuss how to build and install the kernel.
 
 - Modify *grub* and set transparent_hugepage to *madvise*:
 
-  <pre><code>sudo vim /etc/default/grub 
-  + transparent_hugepage=madvise </code></pre>
+  ```bash
+  sudo vim /etc/default/grub 
+  + transparent_hugepage=madvise
+  ```
 
-- Install the kernel and restart the machine on both CPU server and memory servers
+- Modify `Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h` as desired, e.g.,
+
+  ```c++
+  #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1 ->
+  //#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+  #define RDMA_DATA_REGION_NUM 2UL  // default 32GB ->
+  #define RDMA_DATA_REGION_NUM 8UL  // default 32GB
+  ```
+
+- Install the kernel and restart the machine on both CPU server and memory servers:
 
   ```bash
-  cd Semeru/linux-4.11-rc8
+  cd ~/Semeru/linux-4.11-rc8
   sudo ./build_kernel.sh build
+  # `grub_boot_verion` may need to be changed to boot with the correct kernel
+  # use `uname -a` after reboot to see whether the correct kernel is booted
   sudo ./build_kernel.sh install
   sudo reboot
   ```
@@ -68,6 +83,7 @@ We ﬁrst discuss how to build and install the kernel.
 - Install the MLNX-OFED driver. We download the MLNX_OFED_LINUX-4.5-1.0.1.0-rhel7.6-x86_64, and install it against our newly built kernel:
 
   ```bash
+  # check CentOS version, and select the correct driver to install!
   # Download link can be find here: https://www.mellanox.com/products/infiniband-drivers/linux/mlnx_ofed
   wget https://content.mellanox.com/ofed/MLNX_OFED-4.5-1.0.1.0/MLNX_OFED_LINUX-4.5-1.0.1.0-rhel7.6-x86_64.tgz
   tar xzf MLNX_OFED_LINUX-4.5-1.0.1.0-rhel7.6-x86_64.tgz
@@ -84,24 +100,19 @@ We ﬁrst discuss how to build and install the kernel.
   ```bash
   # Configure the number and memory resources of memory servers
   # Take 2 memory servers as example
-  # Set the MACRO variables in Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h
+  # Set the MACRO variables in ~/Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h
   # Adjust the number of memory servers and the Regions will be divided into each memory server evenly
 
   #define NUM_OF_MEMORY_SERVER 2UL
   
   # And then, each memory server contains 1 Meta Region and 4 Data Regions.
-  ````
 
-
-  ```bash
   # Add the IP of each memory server into
-  # Semeru/linux-4.11-rc8/semeru/semeru_cpu.c
+  # ~/Semeru/linux-4.11-rc8/semeru/semeru_cpu.c
   # e.g., the Inﬁniband IPs of the 2 memory servers are 10.0.0.2 and 10.0.0.4
-  char * mem_server_ip[] = {"10.0.0.2","10.0.0.4"};
+  char *mem_server_ip[] = {"10.0.0.2","10.0.0.4"};
   uint16_t mem_server_port = 9400;
-  ````
-  
-  ````bash
+
   # Then build the Semeru RDMA module
   cd ~/Semeru/linux-4.11-rc8/semeru
   make
@@ -123,10 +134,10 @@ We next discuss the steps to build and install the CPU-server JVM.
 - Download Oracle JDK 12 to build *Semeru* JVM
 
   ```bash
-  # Assume jdk 12.02 is under path: ${home_dir}/jdk12.0.2 
-  # Or change the path in shell script, Semeru/CPU-Server/build_cpu_server.sh
+  # Assume jdk 12.0.2 is under path: ${home_dir}/jdk-12.0.2 
+  # Or change the path in shell script, ~/Semeru/CPU-Server/build_cpu_server.sh
   code ~/Semeru/CPU-Server/build_cpu_server.sh
-  boot_jdk="${home_dir}/jdk12.0.2"
+  boot_jdk="${home_dir}/jdk-12.0.2"
   ```
 
 - Build the CPU-server JVM
@@ -143,7 +154,7 @@ We next discuss the steps to build and install the CPU-server JVM.
   ./build_cpu_server.sh release
   ./build_cpu_server.sh build
   # Take release mode as example — the compiled JVM will be in:
-  # Semeru/CPU-Server/build/linux-x86_64-server-release/jdk
+  # ~/Semeru/CPU-Server/build/linux-x86_64-server-release/jdk
   ```
 
 
@@ -154,38 +165,43 @@ The next step is to install the LJVM on each memory server.
 
 - Download OpenJDK 12 and build the LJVM
 
-  <pre><code># Assume OpenJDK12 is under the path: ${home_dir}/jdk-12.0.2
+  ```bash
+  # Assume OpenJDK12 is under the path: ${home_dir}/jdk-12.0.2
   # Or you can change the path in the script  
-  # Semeru/Memory-Server/build_memory_server.sh
-  boot_jdk="${home_dir}/jdk-12.0.2"</code></pre>
+  # ~/Semeru/Memory-Server/build_memory_server.sh
+  boot_jdk="${home_dir}/jdk-12.0.2"
+  ```
+
+- Get source code for the modified version of memory server for branch `haoran_use`
+
+  ```bash
+  # ask Haoran for permissions
+  git clone https://github.com/mahaoran1997/NewPauselessMemory.git
+  cd NewPauselessMemory
+  git checkout compaction
+  ```
 
 - Change the IP addresses
 
-  <pre><code># E.g., mem-server #0’s IP is 10.0.0.2, memory server ID is 0.
-  # Change the IP address and ID in ﬁle:
-  # Semeru/Memory-Server/src/hotspot/share/
-  # utilities/globalDefinitions.hpp
-  # @Mem-server #0
+  ```cpp
+  // E.g., mem-server #0’s IP is 10.0.0.2, memory server ID is 0.
+  // Change the IP address and ID in ﬁle:
+  // ~/NewPauselessMemory/src/hotspot/share/utilities/globalDefinitions.hpp
+  // @Mem-server #0
   #define NUM_OF_MEMORY_SERVER 2
   #define CUR_MEMORY_SERVER_ID 0
   static const char cur_mem_server_ip[] = "10.0.0.2";
-  static const char cur_mem_server_port[]= "9400";</code></pre>
+  static const char cur_mem_server_port[]= "9400";
+  ```
 
 - Build and install the LJVM
 
   ```bash
   # Use the same ${build_mode} as the CPU-server JVM.
-  cd Semeru/Memory-Server/
-  ./build_memory_server.sh ${build_mode}
-  ./build_memory_server.sh build
-  # the JDK is under now under ${home_dir}/Semeru/Memory-Server/build/linux-x86_64-server-${build_mode}/jdk
-  
-  # optional: install JDK. If installed,
-  # The compiled Java home will be installed under:
-  # ${home_dir}/jdk12u-self-build/jvm/openjdk-12.0.2-internal
-  ./build_memory_server.sh install
-
-  ## Set JAVA_HOME to point to the folder.
+  cd ~/NewPauselessMemory
+  ~/Semeru/Memory-Server/build_memory_server.sh ${build_mode}
+  ~/Semeru/Memory-Server/build_memory_server.sh build
+  # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-${build_mode}/jdk
   ```
 
 
@@ -197,15 +213,10 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
 - Launch memory servers
 
   ```bash
-  # Use the shell script to run each memory server.
-  # ${execution_mode} can be execution or gdb.
-  # @Each memory server
-  cd ~/Semeru/ShellScript
-  ## maybe add `JAVA_HOME="${home_dir}/Semeru/Memory-Server/build/linux-x86_64-server-${build_mode}/jdk"` in run_rmem_server_with_rdma_service.sh
-  code run_rmem_server_with_rdma_service.sh
-  sudo yum install numactl -y
+  cd ~/Semeru/testcase/MemoryServer
+  javac Case1.java
   tmux
-  ./run_rmem_server_with_rdma_service.sh Case1 execution
+  ~/NewPauselessMemory/build/linux-x86_64-server-release/jdk/bin/java -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:-UseCompressedOops -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=32g -XX:SemeruMemPoolInitialSize=32g -XX:SemeruMemPoolAlignment=64M -XX:SemeruConcGCThreads=1 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 -XX:-ShenandoahPacing -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:ShenandoahRefProcFrequency=0 -cp ~/Semeru/testcase/MemoryServer Case1
   ```
 
 - Connect the CPU server with memory servers
@@ -215,7 +226,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # The default size of remote memory server is 36GB:
   # 4GB meta region and 32GB data regions.
   # If not, assign the data regions size to the parameter 
-  # in Semeru/ShellScript/install_semeru_module.sh :
+  # in ~/Semeru/ShellScript/install_semeru_module.sh :
   # SWAP_PARTITION_SIZE="32G"
   # We don't recommend to change the Java heap size right now.
   # Please refer to the Known Issues chapter for more details.
@@ -226,7 +237,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # To close the swap partition, do the following:
   # @CPU server
   cd ~/Semeru/ShellScript/
-  install_semeru_module.sh close_semeru
+  ./install_semeru_module.sh close_semeru
   # If the memory servers are crashed, the CPU server should disconnect 
   # with the memory servers automatically.
   # In this case, we recommend to restart the CPU server for performance test.
@@ -257,7 +268,7 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # Modify the function *start_instance* under
   # Spark/sbin/start-slave.sh
   # @CPU server
-  cgexec -sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
+  cgexec --sticky -g memory:memctl "${SPARK_HOME}/sbin" /sparkdaemon.sh start $CLASS $WORKER_NUM -webui-port "$WEBUI_PORT" $PORT_FLAG $PORT_NUM $MASTER "$@"
   # We also recommend that only run the executor on the CPU-Server JVM.
   # Please refer to the FAQ chapter for more details.
   # In order to achive this, specify the executor JVM in Spark/conf/spark-defaults.conf :
