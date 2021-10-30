@@ -112,6 +112,14 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		semeru_force_swapout((size_t)start_addr, (size_t)(start_addr + size));
 
 
+	} else if (type == 8) {
+// force swap out and unmap a range of user virtual address
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		pr_warn("%s, write back and invalidate all cache\n",
+			__func__);
+#endif
+		wbinvd_on_all_cpus();
+
 	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
