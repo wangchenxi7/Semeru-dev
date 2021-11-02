@@ -46,6 +46,7 @@
 
 // Semeru
 #include <linux/swap_global_struct_bd_layer.h>
+#include <linux/swap_global_struct_mem_layer.h>
 
 static bool swap_count_continued(struct swap_info_struct *, pgoff_t,
 				 unsigned char);
@@ -2974,6 +2975,10 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 		prio =
 		  (swap_flags & SWAP_FLAG_PRIO_MASK) >> SWAP_FLAG_PRIO_SHIFT;
 	enable_swap_info(p, prio, swap_map, cluster_info, frontswap_map);
+
+	// Semeru
+	// initialize the control path support conter
+	enable_control_path();
 
 	pr_info("Adding %uk swap on %s.  Priority:%d extents:%d across:%lluk %s%s%s%s%s\n",
 		p->pages<<(PAGE_SHIFT-10), name->name, p->prio,

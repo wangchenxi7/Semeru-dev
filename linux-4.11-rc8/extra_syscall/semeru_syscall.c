@@ -56,6 +56,7 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 {
 	char *ret;
 	int write_type;
+	int cpu;
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 	printk("Enter %s. with type 0x%x \n", __func__, type);
@@ -104,13 +105,44 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		}
 
 	} else if (type == 4) {
-// force swap out and unmap a range of user virtual address
+		// force swap out and unmap a range of user virtual address
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-		pr_warn("%s, write type %d, forcing swap out data in [0x%lx, 0x%lx)\n",
+		pr_warn("%s, write type %d, forcing swap out data in [0x%lx, 0x%lx) to memory server[%d]\n",
 			__func__, type, (size_t)start_addr, (size_t)(start_addr + size) );
 #endif
 		semeru_force_swapout((size_t)start_addr, (size_t)(start_addr + size));
 
+
+	} else if (type == 5) { 
+		// control path write and flush the pages being written under data path
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		pr_warn("%s, write type %d, Control path flush flag to memory server[%d] for range [0x%lx, 0x%lx) =>\n",
+			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
+#endif	
+		// disable preempt and hold the core until finish cp writing
+		cpu = get_cpu(); 
+
+		// wait the exit of all the threads within swap zone
+		prepare_control_path_flush();
+
+		// flush signal flag to target memory server
+		write_type = 0x0; // data write
+		ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr, size);
+		control_path_flush_done(); // reset cp flushing flag despite the write results
+		if (unlikely(ret == NULL)) {
+			printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__,
+				       (unsigned long)start_addr, (unsigned long)(start_addr + size));
+			
+			return -1;
+		}
+
+		// enable preempt
+		put_cpu();
+
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+		pr_warn("%s, write type %d, Control path flush flag to memory server[%d] for range [0x%lx, 0x%lx) done.<=\n",
+			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
+#endif
 
 	} else {
 		// wrong types

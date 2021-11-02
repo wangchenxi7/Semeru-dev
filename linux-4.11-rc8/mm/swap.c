@@ -69,6 +69,14 @@ atomic_t prefetch_swapin_number;
 atomic_t hit_on_swap_cache_number;
 
 //
+// Control path support
+atomic_t cp_path_prepare_to_flush;
+atomic_t enter_swap_zone_counter;
+int control_path_control_enabled;
+
+
+
+//
 // static functions
 //
 
@@ -470,11 +478,12 @@ void print_lru_flush_list_via_memcgroup(const char* message){
 					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );
 				#endif
 			}else{
-				for(i=0; i< number_of_mapped_virt; i++)
+				for(i=0; i< number_of_mapped_virt; i++){
 					printk(KERN_INFO "%s,	Entry [0x%llx], virtual page addr[%d] 0x%llx, page 0x%llx \n", message, (u64)(count++), i, (u64)virt_addr[i], (u64)page);
-
+				}
 					// debug page flags 
-					printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d, PageDirty %d\n", PageSwapCache(page), PageAnon(page),PageLRU(page), PageDirty(page) );
+					printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d, PageDirty %d\n", 
+						PageSwapCache(page), PageAnon(page),PageLRU(page), PageDirty(page) );
 				
 				#ifdef DEBUG_FLUSH_LIST_DETAIL
 					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );

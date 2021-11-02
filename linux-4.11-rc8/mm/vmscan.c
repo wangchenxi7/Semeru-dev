@@ -63,6 +63,7 @@
 
 // Semeru CPU
 #include <linux/swap_global_struct_bd_layer.h>
+#include <linux/swap_global_struct_mem_layer.h>
 
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
@@ -1053,6 +1054,13 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 
 	cond_resched();
 
+
+	// Semeru
+	// sync with control path flushing
+	// may be rescheduled here
+	//test_and_enter_swap_zone();
+	test_and_enter_swap_zone_with_debug_info(0, "enter shrink_page_list");
+
 	// try to swap out all the pages in the inactive list
 	// Skip the pages can't be swapped out.
 	// Add the skipped pages into active list ?
@@ -1431,6 +1439,12 @@ keep:
 		stat->nr_ref_keep = nr_ref_keep;
 		stat->nr_unmap_fail = nr_unmap_fail;
 	}
+
+	// Semeru
+	// batch swap-out done
+	leave_swap_zone_with_debug_info(0, "shrink-page-list-done");
+
+
 	return nr_reclaimed;
 }
 
