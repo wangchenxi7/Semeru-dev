@@ -69,7 +69,7 @@ install_new_kernel_contents () {
 update_grub_entries () {
   
   # The kernel boot version
-  grub_boot_verion=4
+  grub_boot_verion=0
 
 	if [[ $OS_DISTRO == "CentOS Linux" ]]
 	then
@@ -100,11 +100,11 @@ update_grub_entries () {
   
     echo "Set bootable kernel verion to ${version}"
 	  echo "Set default entry to Item ${grub_boot_verion} (Please check if this is the expected ${version})"
-	  sudo grub-set-default ${grub_boot_verion}
+	  sudo grub2-set-default ${grub_boot_verion}
 
 	  echo "Current grub entry"
 	  sleep 1
-	  sudo grub-editenv list
+	  sudo grub2-editenv list
 
 	elif [ $OS_DISTRO == "Ubuntu" ]
 	then
