@@ -51,8 +51,8 @@
 // | -- Meta Region -- | -- Data Regsons --|
 //  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
 #define REGION_SIZE_GB 4UL // RDMA manage granularity, not the Heap Region.
-#define RDMA_META_REGION_NUM 4UL
-#define RDMA_DATA_REGION_NUM 8UL
+#define RDMA_META_REGION_NUM 1UL
+#define RDMA_DATA_REGION_NUM 16UL
 #define SEMERU_START_ADDR 0x400000000000UL // 0x400000000000UL
 #define NUM_OF_MEMORY_SERVER 1UL
 
