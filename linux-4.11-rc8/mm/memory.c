@@ -2729,6 +2729,12 @@ int do_swap_page(struct vm_fault *vmf)
 		// 3) if page == NULL, read data from disk to swap cache.
 		//
 
+		//
+		// sync with control path flushing
+		// may be rescheduled here
+		//test_and_enter_swap_zone();
+		//test_and_enter_swap_zone_with_debug_info(vmf->address, "enter do_swap_page");
+
 		// Debug, count the number of on-demand swapin
 		// If the page is read from swap cache, ignore it.
 		on_demand_swapin_inc();  // on-demand,
@@ -2751,6 +2757,7 @@ int do_swap_page(struct vm_fault *vmf)
 			}
 
 			delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
+
 			goto unlock;
 		}
 
@@ -2758,6 +2765,8 @@ int do_swap_page(struct vm_fault *vmf)
 		ret = VM_FAULT_MAJOR;
 		count_vm_event(PGMAJFAULT);
 		mem_cgroup_count_vm_event(vma->vm_mm, PGMAJFAULT);
+
+
 	} else if (PageHWPoison(page)) {
 		/*
 		 * hwpoisoned dirty swapcache pages are kept for killing
@@ -2922,6 +2931,7 @@ out_release:
 		unlock_page(swapcache);
 		put_page(swapcache);
 	}
+
 	return ret;
 }
 

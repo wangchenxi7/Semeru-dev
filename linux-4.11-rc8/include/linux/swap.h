@@ -15,7 +15,8 @@
 
 
 
-
+//
+// Semeru 
 
 
 
@@ -28,8 +29,18 @@
 // void insert_swp_entry( struct page *page  , unsigned long virt_addr  );
 // unsigned long retrieve_swp_entry_virt_addr(swp_entry_t entry);
 
-// // End of Semeru
 
+//extern spinlock_t control_path_flush_lock;
+
+// static inline void control_path_flush_lock_init(void){
+// 	spin_lock_init(&(control_path_flush_lock));
+// }
+
+
+
+
+// End of Semeru
+//
 
 
 
