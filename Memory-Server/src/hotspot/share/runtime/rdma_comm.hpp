@@ -35,10 +35,6 @@
 
 
 
-// Enable the debug information.
-//#define DEBUG_RDMA_SERVER 		1
-
-
 // Used for describing RDMA QP status.
 // [?] Does this matter ?
 // This stauts is only used in function, handle_cqe(struct ibv_wc *wc). 

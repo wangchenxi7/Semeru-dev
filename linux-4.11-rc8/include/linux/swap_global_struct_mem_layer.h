@@ -34,6 +34,162 @@
 //
 // ###################### Functions ######################
 //
+
+//
+// Control path support
+extern int control_path_control_enabled;
+extern atomic_t cp_path_prepare_to_flush;
+extern atomic_t enter_swap_zone_counter;
+
+
+static inline void disable_control_path(void){
+	control_path_control_enabled = 0;
+}
+
+static inline void reset_swap_zone_counter(void){
+	atomic_set(&enter_swap_zone_counter, 0);
+}
+
+static inline void enter_swap_zone(void){
+	atomic_inc(&enter_swap_zone_counter);
+}
+
+static inline void enter_swap_zone_with_debug_info(size_t addr, const char* message){
+	atomic_inc(&enter_swap_zone_counter);
+
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+	pr_warn("%s, fault on 0x%lx increased enter_swap_zone_counter to %d ===>\n",
+		message, addr, atomic_read(&enter_swap_zone_counter));
+#endif
+}
+
+static inline void leave_swap_zone(void){
+	atomic_dec(&enter_swap_zone_counter);
+}
+
+static inline void leave_swap_zone_with_debug_info(size_t addr, const char* message){
+	atomic_dec(&enter_swap_zone_counter);
+
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)	
+	pr_warn("%s, fault on 0x%lx, decreased enter_swap_zone_counter to %d <=== \n",
+		message, addr, atomic_read(&enter_swap_zone_counter));
+#endif
+}
+
+
+
+static inline void prepare_control_path_flush(void){
+
+	atomic_t debug_counter;
+
+	// enter flush zone,
+	// 1) prevent new swap-out jumping in
+	// 2) wait the exits of all the entered swap-outs
+	atomic_set(&cp_path_prepare_to_flush, 1);
+	atomic_set(&debug_counter, 0);
+
+	// wait all the threads exit the swap zone
+	do{
+		if(likely(atomic_read(&enter_swap_zone_counter))){
+			// some threads are still in swap zone
+			// block and wait
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+			pr_warn("%s, wait for the existing of %d swap operations.\n", 
+				__func__, atomic_read(&enter_swap_zone_counter));
+#endif
+			//debug
+			atomic_inc(&debug_counter);
+			if(atomic_read(&debug_counter) > 9999){
+				pr_warn("%s, wait too long, give up cp flush.\n", __func__);
+				atomic_set(&cp_path_prepare_to_flush, 0);
+				break;
+			}
+
+			cond_resched();
+		}else{
+
+			pr_warn("%s, All threads exited swap zone.\n", 
+				__func__);
+
+			break; // safe to return.
+		}
+	}while(1);
+}
+
+static inline void control_path_flush_done(void){
+	
+	// enter_swap_zone_counter must be 0 here.
+	BUG_ON(atomic_read(&enter_swap_zone_counter));
+
+	atomic_set(&cp_path_prepare_to_flush, 0);
+}
+
+static inline void reset_control_path_flush_flags(void){
+	atomic_set(&cp_path_prepare_to_flush, 0);
+}
+
+// spin lock check
+// static inline void test_and_enter_swap_zone(void){
+// 	unsigned long flags; // store the context before disabling interrup
+// 	spin_lock_irqsave(&control_path_flush_lock, flags);
+// 	enter_swap_zone(); // no need to use atomic here
+// 	spin_unlock_irqrestore(&control_path_flush_lock, flags);
+// }
+
+
+static inline void test_and_enter_swap_zone(void){
+	do{
+		if(unlikely(atomic_read(&cp_path_prepare_to_flush))){
+			// control path is preparing to flush the on-the-fly data
+			// reshedule and try again
+			cond_resched();
+		}else{
+			// safe to enter the swap zone
+			enter_swap_zone();
+			break;
+		}
+
+	}while(1);
+}
+
+
+static inline void test_and_enter_swap_zone_with_debug_info(size_t addr, const char* message){
+	do{
+		if(unlikely(atomic_read(&cp_path_prepare_to_flush))){
+			// control path is preparing to flush the on-the-fly data
+			// reshedule and try again
+			cond_resched();
+		}else{
+			// safe to enter the swap zone
+			enter_swap_zone_with_debug_info(addr, message);
+			break;
+		}
+
+	}while(1);
+}
+
+
+
+// not thread-safe, used in swap_on with lock aquired
+// Only intilize these fields once for all of  the swap partitions.
+static inline int enable_control_path(void){
+	if(!control_path_control_enabled){
+		control_path_control_enabled = 1;
+
+		reset_swap_zone_counter();
+		reset_control_path_flush_flags();
+
+		return 1;
+	}else{
+		return 0; // no need to re-initialize the counters.
+	}
+}
+
+
+
+
+//
+// profilings 
 extern atomic_t on_demand_swapin_number;
 extern atomic_t prefetch_swapin_number;
 extern atomic_t hit_on_swap_cache_number;

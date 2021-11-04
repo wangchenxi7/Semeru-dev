@@ -126,9 +126,6 @@
 #define MAX_CSERVER_CSET_LENGTH 14
 
 
-//
-// Semeru Macros
-//
 
 //
 // Semeru Macros
@@ -136,35 +133,6 @@
 
 //
 // //################################## Global variable control ##################################
-
-// Number of Memory server
-#define NUM_OF_MEMORY_SERVER 2
-//#define CUR_MEMORY_SERVER_ID 0
-
-// Memory server #1, Region[1] to Region[5]
-#define MEMORY_SERVER_0_REGION_START_ID		1
-
-// Memory server #2, Region[5] to Region[9]
-#define MEMORY_SERVER_1_REGION_START_ID		5
-//#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
-
-
-//static const char cur_mem_server_ip[]    = "10.0.0.2";
-//static const char cur_mem_server_port[]  = "9400";
-
-// Structures of the Regions
-// | -- Meta Region -- | -- Data Regsons --|
-//  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
-#define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
-#define RDMA_DATA_REGION_NUM   8
-#define SEMERU_START_ADDR     ((size_t)0x400000000000)
-
-
-//
-// Debug options
-//#define DEBUG_RDMA_SERVER 1
-
-//#define ASSERT 1
 
 
 #ifndef ONE_MB
@@ -186,6 +154,17 @@
 #endif
 
 
+
+//
+// Debug options
+//#define DEBUG_RDMA_SERVER 1
+
+//#define ASSERT 1
+
+
+
+
+
 //#define MAX_REQUEST_SGL		(size_t)1 		// get from ibv_query_device, should be 32 for our Connect-3. But memory pool don't need this.
 
 
@@ -201,7 +180,68 @@
 #define DIRTY_TAG_SEND_END		 (uint32_t)( (1<<16) - 1)	// 0,1111,1111,1111,1111, AND this vlaue to set high 16 bits as 0.
 
 
+//
+// Memory layout
+//
 
+
+
+// // Number of Memory server
+// #define NUM_OF_MEMORY_SERVER 2
+// //#define CUR_MEMORY_SERVER_ID 0
+
+// // Memory server #1, Region[1] to Region[5]
+// #define MEMORY_SERVER_0_REGION_START_ID		1
+
+// // Memory server #2, Region[5] to Region[9]
+// #define MEMORY_SERVER_1_REGION_START_ID		5
+// //#define MEMORY_SERVER_1_REGION_START_ID		9		//debug, single server
+
+
+// //static const char cur_mem_server_ip[]    = "10.0.0.2";
+// //static const char cur_mem_server_port[]  = "9400";
+
+// // Structures of the Regions
+// // | -- Meta Region -- | -- Data Regsons --|
+// //  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
+// #define REGION_SIZE_GB        ((size_t)4)   	// Have to be 1GB at current ! or will cause inconsistence problems. 
+// #define RDMA_DATA_REGION_NUM   8
+// #define SEMERU_START_ADDR     ((size_t)0x400000000000)
+
+
+// Structures of the Regions
+// | -- Meta Region -- | -- Data Regsons --|
+//  The meta Regions starts from SEMERU_START_ADDR. Its size is defined by RDMA_STRUCTURE_SPACE_SIZE.
+#define REGION_SIZE_GB 4UL // RDMA manage granularity, not the Heap Region.
+#define RDMA_META_REGION_NUM 1UL
+#define RDMA_DATA_REGION_NUM 4UL  // default 32GB
+#define SEMERU_START_ADDR 0x400000000000UL
+#define NUM_OF_MEMORY_SERVER 1  // default 2 memory servers
+
+
+// ###
+// below is derived macros
+
+//
+// Meta space
+#define RDMA_META_SPACE_START_ADDR (SEMERU_START_ADDR)
+#define RDMA_STRUCTURE_SPACE_SIZE (RDMA_META_REGION_NUM * REGION_SIZE_GB * ONE_GB)
+
+//
+// Data space
+#define RDMA_DATA_SPACE_START_ADDR (RDMA_META_SPACE_START_ADDR + RDMA_STRUCTURE_SPACE_SIZE)
+#define DATA_REGION_PER_MEM_SERVER (RDMA_DATA_REGION_NUM / NUM_OF_MEMORY_SERVER)
+
+// Memory server #1, Data Region[1] to Region[5]
+// Only being used for correctness checks,
+// Plase calculated this derived information.
+#define MEMORY_SERVER_0_REGION_START_ID (RDMA_META_REGION_NUM)
+#define MEMORY_SERVER_0_START_ADDR (RDMA_DATA_SPACE_START_ADDR)
+
+// Memory server #2, Data Region[5] to Region[9]
+#define MEMORY_SERVER_1_REGION_START_ID (MEMORY_SERVER_0_REGION_START_ID + DATA_REGION_PER_MEM_SERVER)
+//#define MEMORY_SERVER_1_REGION_START_ID 9 //debug, single server
+#define MEMORY_SERVER_1_START_ADDR (MEMORY_SERVER_0_START_ADDR + DATA_REGION_PER_MEM_SERVER * REGION_SIZE_GB * ONE_GB)
 
 
 
@@ -232,11 +272,11 @@
 
 // RDMA structure space
 // [  Small meta data  ]  [ aliv_bitmap per region ]   [ dest_bitmap per region ] [ reserved for now]
-#define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
+//#define RDMA_STRUCTURE_SPACE_SIZE  ((size_t) ONE_GB *4)
 
 
-#define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
-#define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
+//#define MEMORY_SERVER_0_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_0_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
+//#define MEMORY_SERVER_1_START_ADDR	(size_t)(SEMERU_START_ADDR + MEMORY_SERVER_1_REGION_START_ID * REGION_SIZE_GB * ONE_GB)
 
 
 
