@@ -2090,10 +2090,10 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 	size_t reclaimed_page = 0;
 
 
-#if defined(DEBUG_MODE_BRIEF)
+//#if defined(DEBUG_MODE_BRIEF)
 	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
 		__func__, addr, end);
-#endif
+//#endif
 
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -2173,13 +2173,13 @@ regular_page:
 
 #endif  // end CONFIG_TRANSPARENT_HUGEPAGE
 
-	tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
+	// tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
 	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
 	//flush_tlb_batched_pending(mm);
 	// flush the pending TLB entires ? can we delay this until unmap ?
-	try_to_unmap_flush();
+	// try_to_unmap_flush();
 
-	arch_enter_lazy_mmu_mode();
+	// arch_enter_lazy_mmu_mode();
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 
@@ -2243,13 +2243,13 @@ regular_page:
 		VM_BUG_ON_PAGE(PageTransCompound(page), page);
 
 		// the page is accessed and cached in TLB
-		if (pte_young(ptent)) {
-			ptent = ptep_get_and_clear_full(mm, addr, pte,
-							tlb->fullmm);
-			ptent = pte_mkold(ptent);
-			set_pte_at(mm, addr, pte, ptent);
-			tlb_remove_tlb_entry(tlb, pte, addr);
-		}
+		// if (pte_young(ptent)) {
+		// 	ptent = ptep_get_and_clear_full(mm, addr, pte,
+		// 					tlb->fullmm);
+		// 	ptent = pte_mkold(ptent);
+		// 	set_pte_at(mm, addr, pte, ptent);
+		// 	tlb_remove_tlb_entry(tlb, pte, addr);
+		// }
 
 		/*
 		 * We are deactivating a page for accelerating reclaiming.
@@ -2268,10 +2268,10 @@ regular_page:
 				}else{
 					list_add(&page->lru, &page_list);
 					reclaimed_page++;
-#if defined(DEBUG_MODE_BRIEF)
+//#if defined(DEBUG_MODE_BRIEF)
 					pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
 						__func__,addr, (size_t)page );
-#endif
+//#endif
 				}
 			}
 		} else{
@@ -2284,10 +2284,10 @@ regular_page:
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(orig_pte, ptl);
 
-#if defined(DEBUG_MODE_BRIEF)
+//#if defined(DEBUG_MODE_BRIEF)
 	pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
 		__func__, reclaimed_page, skipped_page );
-#endif
+//#endif
 
 	if (pageout)
 		reclaimed_page = reclaim_pages(&page_list);

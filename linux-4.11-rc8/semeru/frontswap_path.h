@@ -406,7 +406,7 @@ int init_write_tag_rdma_command(struct rdma_session_context *rdma_session);
 // functions for frontswap
 int semeru_init_frontswap(void);
 void semeru_exit_frontswap(void);
-void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset);
+size_t translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset);
 int semeru_frontswap_store(unsigned type, pgoff_t page_offset, struct page *page);
 int semeru_frontswap_load(unsigned type, pgoff_t page_offset, struct page *page);
 

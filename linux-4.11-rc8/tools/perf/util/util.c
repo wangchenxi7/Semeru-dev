@@ -397,12 +397,12 @@ void dump_stack_kernel(void)
 	char **strings = backtrace_symbols(array, size);
 	size_t i;
 
-	//printf("Obtained %zd stack frames.\n", size);
-	printk("Obtained %zd stack frames.\n", size);
+	printf("Obtained %zd stack frames.\n", size);
+	//printk("Obtained %zd stack frames.\n", size);
 
 	for (i = 0; i < size; i++){
-		// printf("%s\n", strings[i]);
-		printk("%s\n", strings[i]);
+		 printf("%s\n", strings[i]);
+		//printk("%s\n", strings[i]);
 	}
 
 	free(strings);

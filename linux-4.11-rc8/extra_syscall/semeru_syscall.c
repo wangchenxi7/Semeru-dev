@@ -106,19 +106,19 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 
 	} else if (type == 4) {
 		// force swap out and unmap a range of user virtual address
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 		pr_warn("%s, write type %d, forcing swap out data in [0x%lx, 0x%lx) to memory server[%d]\n",
-			__func__, type, (size_t)start_addr, (size_t)(start_addr + size) );
-#endif
+			__func__, type, (size_t)start_addr, (size_t)(start_addr + size) ,target_server);
+//#endif
 		semeru_force_swapout((size_t)start_addr, (size_t)(start_addr + size));
 
 
 	} else if (type == 5) { 
 		// control path write and flush the pages being written under data path
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 		pr_warn("%s, write type %d, Control path flush flag to memory server[%d] for range [0x%lx, 0x%lx) =>\n",
 			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
-#endif	
+//#endif	
 		// disable preempt and hold the core until finish cp writing
 		cpu = get_cpu(); 
 
@@ -139,10 +139,10 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		// enable preempt
 		put_cpu();
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 		pr_warn("%s, write type %d, Control path flush flag to memory server[%d] for range [0x%lx, 0x%lx) done.<=\n",
 			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
-#endif
+//#endif
 
 	} else {
 		// wrong types

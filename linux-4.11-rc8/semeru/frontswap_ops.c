@@ -309,7 +309,7 @@ static inline int get_memory_server_id(size_t chunk_index)
  * @param mem_addr 
  * @param swap_entry_offset 
  */
-void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset)
+size_t translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset)
 {
 	
 	// page offset, compared start of Data Region
@@ -336,6 +336,8 @@ void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swa
 	// skip the meta regions for both translation paths.
 	mem_addr->mem_server_chunk_index += RDMA_META_REGION_NUM;
 	mem_addr->mem_server_offset_within_chunk = offset_within_chunk;
+
+	return start_addr; // offset to data space
 
 }
 
@@ -368,13 +370,14 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	struct rdma_session_context *rdma_session;
 	struct remote_mapping_chunk *remote_chunk_ptr;
 	struct mem_server_addr mem_addr;
+	size_t start_addr;
 
 	//debug - before translation
 	//pr_warn("%s, store page 0x%lx, swap_entry 0x%lx \n", __func__, (size_t)page,  swap_entry_offset);
 
 	// 1) Translate swap index to memory server address
 	// page offset, compared start of Data Region
-	translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
+	start_addr = translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
 
 	// debug - after translation
 	//pr_warn("%s, for swap_entry 0x%lx mem_server_id %d, chunk index %lu, offset 0x%lx \n", 
@@ -442,14 +445,15 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 		goto out;
 	}
 
-#ifdef DEBUG_MODE_DETAIL
-	//pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
-	//                    __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
+//#ifdef DEBUG_MODE_DETAIL
+	// Diable swap-out of Meta Region
+	pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
+	                   __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
 
-	// Enable swap-out of Meta Region
-	pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n", __func__,
-		rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
-#endif
+	// // Enable swap-out of Meta Region
+	// pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n", __func__,
+	// 	rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
+//#endif
 
 	put_cpu(); // enable preeempt.
 
@@ -472,10 +476,10 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	kmem_cache_free(rdma_queue->fs_rdma_req_cache, rdma_req); // safe to free
 	ret = 0; // reset to 0 for succss.
 
-#ifdef DEBUG_MODE_DETAIL
+//#ifdef DEBUG_MODE_DETAIL
 	pr_info("%s, rdma_queue[%d] store page 0x%lx, virt addr 0x%lx DONE <<<<< \n", __func__, rdma_queue->q_index,
-		(size_t)page, start_addr);
-#endif
+		(size_t)page, RDMA_DATA_SPACE_START_ADDR + start_addr);
+//#endif
 
 #endif
 
