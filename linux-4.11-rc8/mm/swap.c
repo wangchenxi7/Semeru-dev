@@ -2242,14 +2242,14 @@ regular_page:
 
 		VM_BUG_ON_PAGE(PageTransCompound(page), page);
 
-		// the page is accessed and cached in TLB
-		// if (pte_young(ptent)) {
-		// 	ptent = ptep_get_and_clear_full(mm, addr, pte,
-		// 					tlb->fullmm);
-		// 	ptent = pte_mkold(ptent);
-		// 	set_pte_at(mm, addr, pte, ptent);
-		// 	tlb_remove_tlb_entry(tlb, pte, addr);
-		// }
+		//the page is accessed and cached in TLB
+		if (pte_young(ptent)) {
+			ptent = ptep_get_and_clear_full(mm, addr, pte,
+							tlb->fullmm);
+			ptent = pte_mkold(ptent);
+			set_pte_at(mm, addr, pte, ptent);
+			tlb_remove_tlb_entry(tlb, pte, addr);
+		}
 
 		/*
 		 * We are deactivating a page for accelerating reclaiming.
