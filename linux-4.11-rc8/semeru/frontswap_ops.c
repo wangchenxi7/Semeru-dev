@@ -455,13 +455,16 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	// 	rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
 //#endif
 
-	put_cpu(); // enable preeempt.
+	
 
 	// 2.3 wait for write is done.
 
 	// busy wait on the rdma_queue[cpu].
 	// This is not exclusive.
 	drain_rdma_queue(rdma_queue); // poll the corresponding RDMA CQ
+
+
+	put_cpu(); // enable preeempt.
 
 	// 3) wait for the finish of current fs_rdma_req
 	//  [??] uninterruptible is good. drain_rdma_queue() already processed all the outstanding rdma requests
@@ -565,13 +568,16 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
 		rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
 #endif
 
-	put_cpu(); // enable preeempt.
+	
 
 	// 2.3 wait for write is done.
 
 	// busy wait on the rdma_queue[cpu].
 	// This is not exclusive.
 	drain_rdma_queue(rdma_queue); // poll the corresponding RDMA CQ
+
+
+	put_cpu(); // enable preeempt.
 
 	// 3) wait for the finish of current fs_rdma_req
 	//  [??] uninterruptible is good. drain_rdma_queue() already processed all the outstanding rdma requests
