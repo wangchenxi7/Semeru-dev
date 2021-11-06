@@ -2070,8 +2070,7 @@ int semeru_swapout_page_range(struct mmu_gather *tlb,
  * @param walk 
  * @return int 
  * 	0 : success
- * 	positive value: the page skipped.
- * 	negative : error
+ *   non-0 : failed.
  */
 int semeru_swapout_pmd_range(pmd_t *pmd,
 				unsigned long addr, unsigned long end,
@@ -2173,13 +2172,13 @@ regular_page:
 
 #endif  // end CONFIG_TRANSPARENT_HUGEPAGE
 
-	// tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
+	tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
 	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
 	//flush_tlb_batched_pending(mm);
 	// flush the pending TLB entires ? can we delay this until unmap ?
-	// try_to_unmap_flush();
+	try_to_unmap_flush();
 
-	// arch_enter_lazy_mmu_mode();
+	arch_enter_lazy_mmu_mode();
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 
@@ -2298,6 +2297,10 @@ regular_page:
 		__func__, reclaimed_page);
 #endif
 
-	return skipped_page;
+	// return skipped_page;
+
+	// the semeru_swapout_walk_ops->pmd_entry treates non-zero as error
+	// and stop flushing.
+	return 0;
 }
 
