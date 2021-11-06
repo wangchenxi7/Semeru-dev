@@ -1068,7 +1068,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 		struct address_space *mapping;
 		struct page *page;
 		int may_enter_fs;
-		enum page_references references = PAGEREF_RECLAIM_CLEAN;
+		// enum page_references references = PAGEREF_RECLAIM_CLEAN;
+		enum page_references references = PAGEREF_RECLAIM;
 		bool dirty, writeback;
 		bool lazyfree = false;
 		int ret = SWAP_SUCCESS;
@@ -5214,43 +5215,54 @@ unsigned long reclaim_pages(struct list_head *page_list)
 			continue;
 		}
 
-		nr_reclaimed += shrink_page_list(&node_page_list,
-						NODE_DATA(nid),
-						&sc, 
-						TTU_UNMAP,
-						&dummy_stat, false);
 		// nr_reclaimed += shrink_page_list(&node_page_list,
 		// 				NODE_DATA(nid),
 		// 				&sc, 
 		// 				TTU_UNMAP,
-		// 				&dummy_stat, true);
+		// 				&dummy_stat, false);
+		nr_reclaimed += shrink_page_list(&node_page_list,
+						NODE_DATA(nid),
+						&sc, 
+						TTU_UNMAP,
+						&dummy_stat, true);
 
+		size_t cnt = 0;
 		// pages failed to be swapped out
 		while (!list_empty(&node_page_list)) {
 			page = lru_to_page(&node_page_list);
 			list_del(&page->lru);
 			putback_lru_page(page);
+			cnt ++;
 		}
+		if (cnt != 0)
+			pr_warn("%s, first not list empty list length: 0x%lx \n",
+				__func__, cnt);
 
 		nid = NUMA_NO_NODE;
 	}
 
 	if (!list_empty(&node_page_list)) {
-		nr_reclaimed += shrink_page_list(&node_page_list,
-						NODE_DATA(nid),
-						&sc,
-						TTU_UNMAP,
-						&dummy_stat, false);
 		// nr_reclaimed += shrink_page_list(&node_page_list,
 		// 				NODE_DATA(nid),
 		// 				&sc,
 		// 				TTU_UNMAP,
-		// 				&dummy_stat, true);
+		// 				&dummy_stat, false);
+		nr_reclaimed += shrink_page_list(&node_page_list,
+						NODE_DATA(nid),
+						&sc,
+						TTU_UNMAP,
+						&dummy_stat, true);
+		
+		size_t cnt = 0;
 		while (!list_empty(&node_page_list)) {
 			page = lru_to_page(&node_page_list);
 			list_del(&page->lru);
 			putback_lru_page(page);
+			cnt ++;
 		}
+		if (cnt != 0)
+			pr_warn("%s, first not list empty list length: 0x%lx \n",
+				__func__, cnt);
 	}
 
 	memalloc_noreclaim_restore(noreclaim_flag);
