@@ -1524,10 +1524,11 @@ char *semeru_cp_rdma_read(int mem_server_id, char __user *start_addr, unsigned l
 	struct rdma_session_context *rdma_session = &rdma_session_global_ptr[mem_server_id];
 	struct semeru_rdma_req_sg *rdma_req_sg;
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+if((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000)
 	printk(KERN_INFO " %s, memory_server[%d] start_addr : 0x%lx, size : 0x%lx \n", 
 		__func__, mem_server_id, (unsigned long)start_addr, size);
-#endif
+//#endif
 
 	// #1 Do page alignmetn,
 	// If the sent data small than a page, align up to a page
@@ -1614,10 +1615,11 @@ char *semeru_cp_rdma_write(int mem_server_id, int write_type, char __user *start
 	struct rdma_session_context *rdma_session = &rdma_session_global_ptr[mem_server_id];
 	struct semeru_rdma_req_sg *rdma_req_sg;
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+if((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000)
 	printk(KERN_INFO " %s, mem_server[%d] write_type 0x%x, start_addr : 0x%lx, size : 0x%lx \n", 
 		__func__, mem_server_id, write_type, (unsigned long)start_addr, size);
-#endif
+//#endif
 
 	// #1 Do page alignmetn,
 	// If the sent data small than a page, align up to a page

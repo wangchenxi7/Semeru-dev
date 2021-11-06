@@ -340,6 +340,83 @@ int walk_page_range(unsigned long start, unsigned long end,
 	return err;
 }
 
+int sb_walk_page_range(unsigned long start, unsigned long end,
+		    struct mm_walk *walk)
+{
+	int err = 0;
+	unsigned long next;
+	struct vm_area_struct *vma;
+
+	if (start >= end)
+		return -EINVAL;
+
+	if (!walk->mm)
+		return -EINVAL;
+
+	VM_BUG_ON_MM(!rwsem_is_locked(&walk->mm->mmap_sem), walk->mm);
+
+	vma = find_vma(walk->mm, start);
+	do {
+		if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				printk("%s, enter do branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+					__func__, (size_t)start, (size_t)next, (size_t)end);
+		if (!vma) { /* after the last vma */
+			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				printk("%s, if (!vma) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+					__func__, (size_t)start, (size_t)next, (size_t)end);
+
+			walk->vma = NULL;
+			next = end;
+		} else if (start < vma->vm_start) { /* outside vma */
+			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				printk("%s, else if (start < vma->vm_start)  branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+					__func__, (size_t)start, (size_t)next, (size_t)end);
+			walk->vma = NULL;
+			next = min(end, vma->vm_start);
+		} else { /* inside vma */
+			walk->vma = vma;
+			next = min(end, vma->vm_end);
+			vma = vma->vm_next;
+
+			err = walk_page_test(start, next, walk);
+			if (err > 0) {
+				if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+					printk("%s, walk_page_test err > 0 branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+						__func__, (size_t)start, (size_t)next, (size_t)end);
+				/*
+				 * positive return values are purely for
+				 * controlling the pagewalk, so should never
+				 * be passed to the callers.
+				 */
+				err = 0;
+				continue;
+			}
+			if (err < 0) {
+				if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+					printk("%s, walk_page_test err < 0 branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+						__func__, (size_t)start, (size_t)next, (size_t)end);
+				break;
+			}
+
+		}
+		if (walk->vma || walk->pte_hole) {
+			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				printk("%s, if (walk->vma || walk->pte_hole) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+					__func__, (size_t)start, (size_t)next, (size_t)end);
+
+			err = __walk_page_range(start, next, walk);
+		}
+		if (err) {
+			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				printk("%s, last if (err) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
+					__func__, (size_t)start, (size_t)next, (size_t)end);
+			break;
+		}
+
+	} while (start = next, start < end);
+	return err;
+}
+
 int walk_page_vma(struct vm_area_struct *vma, struct mm_walk *walk)
 {
 	int err;

@@ -530,9 +530,10 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 
 	// Not found in Swap Cache, do the swaping in
 	if (page_was_allocated){
-		#ifdef DEBUG_MODE_DETAIL
+		// #ifdef DEBUG_MODE_DETAIL
+		if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
 			printk(KERN_INFO "%s, swap in page, virt 0x%lx , swap_entry offset 0x%lx \n", __func__, (size_t)addr, (size_t)swp_offset(entry) );
-		#endif
+		// #endif
 
 		swap_readpage(retpage);   // 2) the page is allocated, read it.
 	}

@@ -159,6 +159,9 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 
 	// enable the swap-out of Meta Region
 	//swp_entry_to_virtual_remapping[swp_offset(entry)] = ( (virt_addr -  SEMERU_START_ADDR) >> PAGE_SHIFT );
+if((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000)
+	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
+		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
 
 #ifdef DEBUG_SWAP_PATH
 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
@@ -2013,14 +2016,16 @@ void __init swap_setup(void)
 //
 
 
-
-
+static int semeru_test_walk(unsigned long start, unsigned long end, struct mm_walk *walk)
+{
+ return 0;
+}
 
 // define the swap out operations for each level
 static struct mm_walk semeru_swapout_walk_ops = {
-	.pmd_entry = semeru_swapout_pmd_range,
+ .pmd_entry = semeru_swapout_pmd_range,
+ .test_walk = semeru_test_walk
 };
-
 
 
 /**
@@ -2051,7 +2056,7 @@ int semeru_swapout_page_range(struct mmu_gather *tlb,
 	semeru_swapout_walk_ops.private = &walk_private;
 
 	tlb_start_vma(tlb, vma);
-	ret = walk_page_range(addr, end, &semeru_swapout_walk_ops);
+	ret = sb_walk_page_range(addr, end, &semeru_swapout_walk_ops);
 	tlb_end_vma(tlb, vma);
 
 	return ret;
@@ -2090,10 +2095,11 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 	size_t reclaimed_page = 0;
 
 
-#if defined(DEBUG_MODE_BRIEF)
+// #if defined(DEBUG_MODE_BRIEF)
+	if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
 	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
 		__func__, addr, end);
-#endif
+// #endif
 
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
@@ -2184,20 +2190,20 @@ regular_page:
 		ptent = *pte;
 
 		if (pte_none(ptent)){
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range ptenone");
 			skipped_page++;
 			continue;
 		}
 
 		if (!pte_present(ptent)){
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range non pte present");
 			skipped_page++;
 			continue;
 		}
 
 		page = vm_normal_page(vma, addr, ptent);
 		if (!page){
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range no page");
 			skipped_page++;
 			continue;
 		}
@@ -2235,7 +2241,7 @@ regular_page:
 
 		/* Do not interfere with other mappings of this page */
 		if (page_mapcount(page) != 1){
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range page_mapcount");
 			skipped_page++;
 			continue;
 		}
@@ -2263,20 +2269,27 @@ regular_page:
 			if (!isolate_lru_page(page)) {
 				if (PageUnevictable(page)){
 					putback_lru_page(page);
-					print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-Unevictable");
+					print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-Unevictable pageunevictable");
 					skipped_page++;
 				}else{
 					list_add(&page->lru, &page_list);
 					reclaimed_page++;
-#if defined(DEBUG_MODE_BRIEF)
+// #if defined(DEBUG_MODE_BRIEF)
+if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
 					pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
 						__func__,addr, (size_t)page );
-#endif
+// #endif
 				}
+			}
+			else {
+if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
+					pr_warn("%s, enter this buggy path!!! 0x%lx, page 0x%lx\n",
+						__func__,addr, (size_t)page );
+
 			}
 		} else{
 			deactivate_page(page);
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-pageout false");
+			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-pageout false other");
 			skipped_page++; // Deactivate this page instead of swapping out it.
 		}
 	} // end of for
@@ -2284,20 +2297,23 @@ regular_page:
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(orig_pte, ptl);
 
-#if defined(DEBUG_MODE_BRIEF)
+// #if defined(DEBUG_MODE_BRIEF)
+if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
 	pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
 		__func__, reclaimed_page, skipped_page );
-#endif
+// #endif
 
 	if (pageout)
 		reclaimed_page = reclaim_pages(&page_list);
 	cond_resched();
 	
-#if defined(DEBUG_MODE_BRIEF)
+// #if defined(DEBUG_MODE_BRIEF)
+if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
 	pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
 		__func__, reclaimed_page);
-#endif
+// #endif
 
-	return skipped_page;
+	// return skipped_page;
+	return 0;
 }
 

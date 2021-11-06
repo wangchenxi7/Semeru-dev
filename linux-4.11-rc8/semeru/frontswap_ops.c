@@ -309,7 +309,7 @@ static inline int get_memory_server_id(size_t chunk_index)
  * @param mem_addr 
  * @param swap_entry_offset 
  */
-void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset)
+size_t translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swap_entry_offset)
 {
 	
 	// page offset, compared start of Data Region
@@ -336,7 +336,7 @@ void translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t swa
 	// skip the meta regions for both translation paths.
 	mem_addr->mem_server_chunk_index += RDMA_META_REGION_NUM;
 	mem_addr->mem_server_offset_within_chunk = offset_within_chunk;
-
+	return start_addr;
 }
 
 /**
@@ -374,7 +374,7 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 
 	// 1) Translate swap index to memory server address
 	// page offset, compared start of Data Region
-	translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
+	size_t start_addr = translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
 
 	// debug - after translation
 	//pr_warn("%s, for swap_entry 0x%lx mem_server_id %d, chunk index %lu, offset 0x%lx \n", 
@@ -442,14 +442,15 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 		goto out;
 	}
 
-#ifdef DEBUG_MODE_DETAIL
+// #ifdef DEBUG_MODE_DETAIL
 	//pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n",
 	//                    __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset );
 
 	// Enable swap-out of Meta Region
+	if((size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr)>=0x400100000000ULL && (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr) <= 0x400108000000)
 	pr_info("%s,  rdma_queue[%d] store page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx >>>>> \n", __func__,
-		rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
-#endif
+		rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
+// #endif
 
 	put_cpu(); // enable preeempt.
 
@@ -504,7 +505,7 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
 	struct mem_server_addr mem_addr;
 
 	// 1) Translate swap index to memory server address
-	translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
+	size_t start_addr = translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
 
 #ifdef RDMA_MESSAGE_PROFILING
 	rdma_read_from_mem_server_inc(mem_addr.mem_server_id);	
@@ -552,14 +553,15 @@ int semeru_frontswap_load(unsigned type, pgoff_t swap_entry_offset, struct page 
 		goto out;
 	}
 
-#ifdef DEBUG_MODE_DETAIL
+// #ifdef DEBUG_MODE_DETAIL
 	//pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n",
 	//                  __func__, rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
 
 	// enable swap out of Meta Region
+	if((size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr)>=0x400100000000ULL && (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr) <= 0x400108000000)
 	pr_info("%s, rdma_queue[%d]  load page 0x%lx, virt addr 0x%lx, swp_offset 0x%lx  >>>>> \n", __func__,
-		rdma_queue->q_index, (size_t)page, (size_t)(SEMERU_START_ADDR + start_addr), (size_t)swap_entry_offset);
-#endif
+		rdma_queue->q_index, (size_t)page, (size_t)(RDMA_DATA_SPACE_START_ADDR + start_addr), (size_t)swap_entry_offset);
+// #endif
 
 	put_cpu(); // enable preeempt.
 

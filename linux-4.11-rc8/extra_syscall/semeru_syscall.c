@@ -302,10 +302,13 @@ err:
  */
 static inline bool can_do_swapout(struct vm_area_struct *vma)
 {
-	if (vma_is_anonymous(vma))
-		return true;
+	return vma && vma_is_anonymous(vma);
 
-	return false;
+
+	// if (vma_is_anonymous(vma))
+	// 	return true;
+
+	// return false;
 }
 
 
@@ -332,7 +335,8 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	if (!can_do_swapout(vma))
 		return 0;
 
-	lru_add_drain(); // release the cpu local physical pages
+	// lru_add_drain(); // release the cpu local physical pages
+	lru_add_drain_all(); // release the cpu local physical pages
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb,start_addr, end_addr);
