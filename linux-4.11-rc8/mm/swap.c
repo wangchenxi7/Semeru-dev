@@ -2318,3 +2318,111 @@ if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
 	return 0;
 }
 
+
+// yifan: debug
+#include <linux/vmalloc.h>
+int *PAGE_STATUS;
+
+#define YIFAN_REGION_STT 0x400100000000UL
+#define YIFAN_REGION_END 0x400900000000UL
+int __init init_yifan_debug(void)
+{
+	const unsigned long heap_size = 32UL * 1024 * 1024 * 1024; // 32GB
+	const unsigned long page_num = heap_size / PAGE_SIZE;
+	PAGE_STATUS = vzalloc(sizeof(int) * page_num);
+	if (!PAGE_STATUS) {
+		pr_err("YIFAN: init PAGE_STATUS failed");
+	}
+	return 0;
+}
+__initcall(init_yifan_debug);
+
+static inline int addr2idx(unsigned long addr)
+{
+	int idx;
+	if (addr < YIFAN_REGION_STT || addr >= YIFAN_REGION_END) {
+		return -1;
+	}
+	idx = (addr - YIFAN_REGION_STT) >> PAGE_SHIFT;
+	return idx;
+}
+
+static inline unsigned long idx2addr(int idx)
+{
+	return YIFAN_REGION_STT + (idx << PAGE_SHIFT);
+}
+
+void set_page_status(unsigned long addr, enum page_state state)
+{
+	int idx = addr2idx(addr);
+	if (idx == -1)
+		return;
+	PAGE_STATUS[idx] = state;
+}
+
+bool check_range_eq(unsigned long stt, unsigned long end, enum page_state state)
+{
+	bool ret = true;
+	int i;
+	int stt_idx, end_idx;
+	stt = max(stt, YIFAN_REGION_STT);
+	end = min(end, YIFAN_REGION_END);
+
+	stt_idx = addr2idx(stt);
+	end_idx = addr2idx(end);
+	if (stt_idx == -1 || end_idx == -1) {
+		pr_err("YIFAN: %s range error!", __func__);
+		return false;
+	}
+
+	for (i = stt_idx; i < end_idx; i++) {
+		if (PAGE_STATUS[i] != state) {
+			// yifan: this might be too verbose
+			pr_err("page %p state wrong! %d != %d",
+			       (void *)idx2addr(i), PAGE_STATUS[i], state);
+			ret = false;
+		}
+	}
+
+	if (ret) {
+		pr_err("%s range [%p, %p) check succeed!", __func__,
+		       (void *)stt, (void *)end);
+	}
+
+	return ret;
+}
+
+bool check_range_neq(unsigned long stt, unsigned long end,
+		     enum page_state state)
+{
+	bool ret = true;
+	int i;
+	int stt_idx, end_idx;
+	stt = max(stt, YIFAN_REGION_STT);
+	end = min(end, YIFAN_REGION_END);
+
+	stt_idx = addr2idx(stt);
+	end_idx = addr2idx(end);
+	if (stt_idx == -1 || end_idx == -1) {
+		pr_err("YIFAN: %s - range error!", __func__);
+		return false;
+	}
+
+	for (i = stt_idx; i < end_idx; i++) {
+		if (PAGE_STATUS[i] == state) {
+			// yifan: this might be too verbose
+			pr_err("%s - page %p state wrong! %d == %d", __func__,
+			       (void *)idx2addr(i), PAGE_STATUS[i], state);
+			ret = false;
+		}
+	}
+
+	if (ret) {
+		pr_err("%s - range [%p, %p) check succeed!", __func__,
+		       (void *)stt, (void *)end);
+	}
+
+	return ret;
+}
+#undef YIFAN_REGION_STT
+#undef YIFAN_REGION_END

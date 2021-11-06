@@ -145,6 +145,7 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
 //#endif
 
+		check_range_neq((size_t)start_addr, (size_t)start_addr + size, PG_UNMAP);
 	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);

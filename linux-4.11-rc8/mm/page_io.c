@@ -26,6 +26,8 @@
 
 //Semeru
 #include <linux/swap_global_struct_bd_layer.h>
+// yifan: track page status
+#include <linux/swap_global_struct_mem_layer.h>
 
 
 /**
@@ -303,6 +305,18 @@ int swap_writepage(struct page *page, struct writeback_control *wbc)
 		set_page_writeback(page);
 		unlock_page(page);
 		end_page_writeback(page);
+
+		// yifan: track page status
+		{
+			swp_entry_t entry = {
+				.val = page_private(page),
+			};
+			pgoff_t offset = swp_offset(entry);
+			set_page_status(
+				retrieve_swap_remmaping_virt_addr_via_offset(
+					offset),
+				PG_WROUT);
+		}
 		goto out;
 	}
 
