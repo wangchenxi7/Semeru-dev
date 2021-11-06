@@ -119,3 +119,9 @@ all.config
 # Kdevelop4
 *.kdev4
 .tmp_versions
+
+.tmp_System.map
+.tmp_vmlinux1
+.tmp_vmlinux2
+.version
+settings.json
