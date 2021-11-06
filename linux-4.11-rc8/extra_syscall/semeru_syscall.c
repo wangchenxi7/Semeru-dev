@@ -302,13 +302,13 @@ err:
  */
 static inline bool can_do_swapout(struct vm_area_struct *vma)
 {
-	return vma && vma_is_anonymous(vma);
+	// return vma && vma_is_anonymous(vma);
 
 
-	// if (vma_is_anonymous(vma))
-	// 	return true;
+	if (vma_is_anonymous(vma))
+		return true;
 
-	// return false;
+	return false;
 }
 
 
@@ -332,11 +332,14 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	struct mmu_gather tlb;
 	int ret = 0;
 
+	pr_warn("%s, Start entering force swap out for [0x%lx, 0x%lx) finished.\n",
+		__func__, start_addr, end_addr);
+
 	if (!can_do_swapout(vma))
 		return 0;
 
-	// lru_add_drain(); // release the cpu local physical pages
-	lru_add_drain_all(); // release the cpu local physical pages
+	lru_add_drain(); // release the cpu local physical pages
+	// lru_add_drain_all(); // release the cpu local physical pages
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb,start_addr, end_addr);

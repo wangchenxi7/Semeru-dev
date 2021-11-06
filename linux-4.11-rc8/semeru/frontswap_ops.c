@@ -478,10 +478,10 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	kmem_cache_free(rdma_queue->fs_rdma_req_cache, rdma_req); // safe to free
 	ret = 0; // reset to 0 for succss.
 
-//#ifdef DEBUG_MODE_DETAIL
+#ifdef DEBUG_MODE_DETAIL
 	pr_info("%s, rdma_queue[%d] store page 0x%lx, virt addr 0x%lx DONE <<<<< \n", __func__, rdma_queue->q_index,
 		(size_t)page, RDMA_DATA_SPACE_START_ADDR + start_addr);
-//#endif
+#endif
 
 #endif
 
