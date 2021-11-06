@@ -311,6 +311,23 @@ static inline void print_skipped_page(pte_t pte, unsigned long addr, const char 
 }
 
 
+// yifan debug
+enum page_state {
+	PG_INIT = 0,
+	PG_UNMAP,
+	PG_WROUT,
+	PG_MAP,
+	PG_RDIN
+};
+
+extern int *PAGE_STATUS;
+
+void set_page_status(unsigned long addr, enum page_state state);
+bool check_range_eq(unsigned long stt, unsigned long end,
+		    enum page_state state);
+bool check_range_neq(unsigned long stt, unsigned long end, enum page_state state);
+
+
 #endif // __LINUX_SWAP_SWAP_GLOBAL_STRUCT_MEM_LAYER_H
 
 
