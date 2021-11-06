@@ -45,7 +45,10 @@ again:
 				err = walk->pte_hole(addr, next, walk);
 			if (err)
 				break;
-			continue;
+
+			// it no define mm_walk->pte_hole, 
+			// err is 0, skip this pmd.
+			continue;  
 		}
 		/*
 		 * This implies that each ->pmd_entry() handler

@@ -93,13 +93,13 @@ static inline void prepare_control_path_flush(void){
 		if(likely(atomic_read(&enter_swap_zone_counter))){
 			// some threads are still in swap zone
 			// block and wait
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			pr_warn("%s, wait for the existing of %d swap operations.\n", 
 				__func__, atomic_read(&enter_swap_zone_counter));
-#endif
+//#endif
 			//debug
 			atomic_inc(&debug_counter);
-			if(atomic_read(&debug_counter) > 9999){
+			if(atomic_read(&debug_counter) > 999){
 				pr_warn("%s, wait too long, give up cp flush.\n", __func__);
 				atomic_set(&cp_path_prepare_to_flush, 0);
 				break;
@@ -119,9 +119,15 @@ static inline void prepare_control_path_flush(void){
 static inline void control_path_flush_done(void){
 	
 	// enter_swap_zone_counter must be 0 here.
-	BUG_ON(atomic_read(&enter_swap_zone_counter));
+	//BUG_ON(atomic_read(&enter_swap_zone_counter));
+	if((unlikely(atomic_read(&enter_swap_zone_counter)))){
+		pr_err("%s, %d swap ops not flushed before sent signal !!\n",
+		__func__, atomic_read(&enter_swap_zone_counter));
+	}
 
 	atomic_set(&cp_path_prepare_to_flush, 0);
+
+	pr_warn("%s, <<==.\n", __func__);
 }
 
 static inline void reset_control_path_flush_flags(void){

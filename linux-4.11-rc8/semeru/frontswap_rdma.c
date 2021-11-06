@@ -1565,12 +1565,13 @@ if((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000
 		goto out;
 	}
 
-	put_cpu(); // enable core preemtp
 
 	// 2) Wait for the completion.
 	// There is no physical page.
 	// So, we just drain the corresponding queue
 	drain_rdma_queue(rdma_queue); // poll the corresponding RDMA CQ
+
+	put_cpu(); // enable core preemtp
 
 	// 5ms at most. The waiting is un-interrupptible
 	ret = wait_for_completion_timeout(&(rdma_req_sg->done),  msecs_to_jiffies(5)); 
@@ -1663,12 +1664,14 @@ if((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000
 		goto out;
 	}
 
-	put_cpu(); // enable core preemtp
+
 
 	// 1) Wait for the completion.
 	// There is no physical page.
 	// So, we just drain the corresponding queue
 	drain_rdma_queue(rdma_queue); // poll the corresponding RDMA CQ
+
+	put_cpu(); // enable core preemtp
 
 	// 5ms at most. The waiting is un-interrupptible
 	ret = wait_for_completion_timeout(&(rdma_req_sg->done), msecs_to_jiffies(5)); 
