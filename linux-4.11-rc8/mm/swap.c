@@ -159,7 +159,7 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 
 	// enable the swap-out of Meta Region
 	//swp_entry_to_virtual_remapping[swp_offset(entry)] = ( (virt_addr -  SEMERU_START_ADDR) >> PAGE_SHIFT );
-if((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000)
+if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
 		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
 
@@ -2096,7 +2096,7 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 
 
 // #if defined(DEBUG_MODE_BRIEF)
-	if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
+	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
 		__func__, addr, end);
 // #endif
@@ -2197,7 +2197,7 @@ regular_page:
 		}
 
 		if (!pte_present(ptent)){
-			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range non pte present");
+			// print_skipped_page(ptent, addr, "semeru_swapout_pmd_range non pte present");
 			skipped_page++;
 			continue;
 		}
@@ -2276,14 +2276,14 @@ regular_page:
 					list_add(&page->lru, &page_list);
 					reclaimed_page++;
 // #if defined(DEBUG_MODE_BRIEF)
-if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
+if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 					pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
 						__func__,addr, (size_t)page );
 // #endif
 				}
 			}
 			else {
-if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
+if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 					pr_warn("%s, enter this buggy path!!! 0x%lx, page 0x%lx\n",
 						__func__,addr, (size_t)page );
 
@@ -2299,7 +2299,7 @@ if((size_t)addr>=0x400100000000ULL && (size_t)addr < 0x400108000000)
 	pte_unmap_unlock(orig_pte, ptl);
 
 // #if defined(DEBUG_MODE_BRIEF)
-if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
+if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
 	pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
 		__func__, reclaimed_page, skipped_page );
 // #endif
@@ -2309,7 +2309,7 @@ if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
 	cond_resched();
 	
 // #if defined(DEBUG_MODE_BRIEF)
-if((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000)
+if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
 	pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
 		__func__, reclaimed_page);
 // #endif
@@ -2350,6 +2350,16 @@ static inline int addr2idx(unsigned long addr)
 static inline unsigned long idx2addr(int idx)
 {
 	return YIFAN_REGION_STT + (idx << PAGE_SHIFT);
+}
+
+void init_page_status(void)
+{
+	const unsigned long heap_size = 32UL * 1024 * 1024 * 1024; // 32GB
+	const unsigned long page_num = heap_size / PAGE_SIZE;
+	int i;
+	for (i = 0; i < page_num; i++) {
+		PAGE_STATUS[i] = 0;
+	}
 }
 
 void set_page_status(unsigned long addr, enum page_state state)

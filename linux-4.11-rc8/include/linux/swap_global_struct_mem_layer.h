@@ -305,7 +305,7 @@ struct page* page_in_swap_cache(pte_t	pte);
 
 
 static inline void print_skipped_page(pte_t pte, unsigned long addr, const char * message){
-	if(addr>=0x400100000000ULL && addr < 0x400108000000)
+	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 		pr_warn("%s, skip virt addr 0x%lx, pte val 0x%lx",
 			message, addr, pte.pte);
 }
@@ -314,15 +314,18 @@ static inline void print_skipped_page(pte_t pte, unsigned long addr, const char 
 // yifan debug
 enum page_state {
 	PG_INIT = 0,
+	PG_MAP,
+	PG_RDIN,
 	PG_UNMAP,
 	PG_WROUT,
-	PG_MAP,
-	PG_RDIN
 };
 
 extern int *PAGE_STATUS;
 
+void init_page_status(void);
 void set_page_status(unsigned long addr, enum page_state state);
+bool check_range_geq(unsigned long stt, unsigned long end,
+		     enum page_state state);
 bool check_range_eq(unsigned long stt, unsigned long end,
 		    enum page_state state);
 bool check_range_neq(unsigned long stt, unsigned long end, enum page_state state);

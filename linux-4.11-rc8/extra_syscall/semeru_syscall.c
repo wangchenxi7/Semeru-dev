@@ -146,8 +146,15 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 //#endif
 	} else if (type == 6) {
 		return check_range_neq((size_t)start_addr,
-				       (size_t)start_addr + size, PG_UNMAP);
-	} else {
+				       (size_t)start_addr + size, PG_INIT);
+	} else if (type == 7) {
+		prepare_control_path_flush();
+	} else if (type == 8) {
+		control_path_flush_done(); // reset cp flushing flag despite the write results
+	}else if (type == 9) {
+		init_page_status();
+	}
+		else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
 	}
@@ -340,8 +347,8 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	if (!can_do_swapout(vma))
 		return 0;
 
-	lru_add_drain(); // release the cpu local physical pages
-	// lru_add_drain_all(); // release the cpu local physical pages
+	// lru_add_drain(); // release the cpu local physical pages
+	lru_add_drain_all(); // release the cpu local physical pages
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb,start_addr, end_addr);

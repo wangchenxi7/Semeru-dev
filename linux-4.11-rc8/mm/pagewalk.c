@@ -360,18 +360,18 @@ int sb_walk_page_range(unsigned long start, unsigned long end,
 
 	vma = find_vma(walk->mm, start);
 	do {
-		if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+		if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 				printk("%s, enter do branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 					__func__, (size_t)start, (size_t)next, (size_t)end);
 		if (!vma) { /* after the last vma */
-			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+			if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 				printk("%s, if (!vma) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 					__func__, (size_t)start, (size_t)next, (size_t)end);
 
 			walk->vma = NULL;
 			next = end;
 		} else if (start < vma->vm_start) { /* outside vma */
-			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+			if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 				printk("%s, else if (start < vma->vm_start)  branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 					__func__, (size_t)start, (size_t)next, (size_t)end);
 			walk->vma = NULL;
@@ -383,7 +383,7 @@ int sb_walk_page_range(unsigned long start, unsigned long end,
 
 			err = walk_page_test(start, next, walk);
 			if (err > 0) {
-				if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 					printk("%s, walk_page_test err > 0 branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 						__func__, (size_t)start, (size_t)next, (size_t)end);
 				/*
@@ -395,7 +395,7 @@ int sb_walk_page_range(unsigned long start, unsigned long end,
 				continue;
 			}
 			if (err < 0) {
-				if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+				if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 					printk("%s, walk_page_test err < 0 branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 						__func__, (size_t)start, (size_t)next, (size_t)end);
 				break;
@@ -403,14 +403,14 @@ int sb_walk_page_range(unsigned long start, unsigned long end,
 
 		}
 		if (walk->vma || walk->pte_hole) {
-			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+			if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 				printk("%s, if (walk->vma || walk->pte_hole) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 					__func__, (size_t)start, (size_t)next, (size_t)end);
 
 			err = __walk_page_range(start, next, walk);
 		}
 		if (err) {
-			if((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000)
+			if(((size_t)start>=0x400100000000ULL && (size_t)start < 0x400108000000) || ((size_t)start>=0x400500000000ULL && (size_t)start < 0x400508000000))
 				printk("%s, last if (err) branch start: 0x%lx, next: 0x%lx, end: 0x%lx\n",
 					__func__, (size_t)start, (size_t)next, (size_t)end);
 			break;
