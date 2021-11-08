@@ -144,6 +144,14 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 			__func__, type, target_server, (size_t)start_addr, (size_t)(start_addr + size) );
 //#endif
 
+	} else if (type == 7) {
+		// yifan: user needs to disable data path swap out before doing 
+		// any control path operations.
+		prepare_control_path_flush();
+	} else if (type == 8) {
+		// yifan: user needs to resume data path swap out after doing
+		// control path operations.
+		control_path_flush_done();
 	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
