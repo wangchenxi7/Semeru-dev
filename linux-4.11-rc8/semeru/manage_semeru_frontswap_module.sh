@@ -7,7 +7,9 @@
 
 # The swap file/partition size should be equal to the whole size of remote memory
 # SWAP_PARTITION_SIZE="64G"
-SWAP_PARTITION_SIZE="32G"
+# SWAP_PARTITION_SIZE="32G"
+# SWAP_PARTITION_SIZE="36G"
+SWAP_PARTITION_SIZE="72G"
 
 # Cause of sudo, NOT use ${HOME}
 home_dir="/mnt/ssd/haoran"

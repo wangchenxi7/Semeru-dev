@@ -68,7 +68,12 @@ static inline void leave_swap_zone(void){
 }
 
 static inline void leave_swap_zone_with_debug_info(size_t addr, const char* message){
-	atomic_dec(&enter_swap_zone_counter);
+	int ret = atomic_dec_return(&enter_swap_zone_counter);
+
+	if(ret < 0) {
+		pr_warn("%s, fault on 0x%lx, decreased enter_swap_zone_counter to %d <=== \n",
+				message, addr, ret);
+	}
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)	
 	pr_warn("%s, fault on 0x%lx, decreased enter_swap_zone_counter to %d <=== \n",
@@ -305,7 +310,7 @@ struct page* page_in_swap_cache(pte_t	pte);
 
 
 static inline void print_skipped_page(pte_t pte, unsigned long addr, const char * message){
-	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
+	// if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 		pr_warn("%s, skip virt addr 0x%lx, pte val 0x%lx",
 			message, addr, pte.pte);
 }
@@ -321,14 +326,16 @@ enum page_state {
 };
 
 extern int *PAGE_STATUS;
+extern pte_t *PTE_STATUS;
 
 void init_page_status(void);
-void set_page_status(unsigned long addr, enum page_state state);
+void set_page_status(unsigned long addr, int state, pte_t pte);
+void get_page_status(unsigned long addr);
 bool check_range_geq(unsigned long stt, unsigned long end,
-		     enum page_state state);
+		     int state);
 bool check_range_eq(unsigned long stt, unsigned long end,
-		    enum page_state state);
-bool check_range_neq(unsigned long stt, unsigned long end, enum page_state state);
+		    int state);
+bool check_range_neq(unsigned long stt, unsigned long end, int state);
 
 
 #endif // __LINUX_SWAP_SWAP_GLOBAL_STRUCT_MEM_LAYER_H

@@ -153,6 +153,8 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		control_path_flush_done(); // reset cp flushing flag despite the write results
 	}else if (type == 9) {
 		init_page_status();
+	} else if (type == 10) {
+		get_page_status(start_addr);
 	}
 		else {
 		// wrong types

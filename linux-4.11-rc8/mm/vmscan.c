@@ -1054,6 +1054,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 
 	cond_resched();
 
+	// yifan added
+	// force_reclaim = true;
 
 	// Semeru
 	// sync with control path flushing
@@ -1311,23 +1313,117 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			try_to_unmap_flush_dirty();
 			switch (pageout(page, mapping, sc)) {  // 3) Write the dirty page to disk
 			case PAGE_KEEP:
+				{ // yifan added
+					unsigned long private = page_private(page);
+					swp_entry_t entry = { .val = private };
+					int type = swp_type(entry);
+					pgoff_t offset = swp_offset(entry);
+					unsigned long rvaddr = 0;
+					if (offset < SWAP_ARRAY_LENGTH)
+						rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+					if (unlikely(non_swap_entry(entry))) {
+						pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+					}
+
+					pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+				}
 				goto keep_locked;
 			case PAGE_ACTIVATE:
+				{ // yifan added
+					unsigned long private = page_private(page);
+					swp_entry_t entry = { .val = private };
+					int type = swp_type(entry);
+					pgoff_t offset = swp_offset(entry);
+					unsigned long rvaddr = 0;
+					if (offset < SWAP_ARRAY_LENGTH)
+						rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+					if (unlikely(non_swap_entry(entry))) {
+						pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+					}
+
+					pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+				}
 				goto activate_locked;
 			case PAGE_SUCCESS:          // Submit the bio to swap partition successfully
-				if (PageWriteback(page))	// PG_writeback bit true, means the page is still under writting.
+				if (PageWriteback(page)) { // PG_writeback bit true, means the page is still under writting.
+					{ // yifan added
+						unsigned long private = page_private(page);
+						swp_entry_t entry = { .val = private };
+						int type = swp_type(entry);
+						pgoff_t offset = swp_offset(entry);
+						unsigned long rvaddr = 0;
+						if (offset < SWAP_ARRAY_LENGTH)
+							rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+						if (unlikely(non_swap_entry(entry))) {
+							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+						}
+
+						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					}
 					goto keep;
-				if (PageDirty(page))
+				}
+				if (PageDirty(page)) {
+					{ // yifan added
+						unsigned long private = page_private(page);
+						swp_entry_t entry = { .val = private };
+						int type = swp_type(entry);
+						pgoff_t offset = swp_offset(entry);
+						unsigned long rvaddr = 0;
+						if (offset < SWAP_ARRAY_LENGTH)
+							rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+						if (unlikely(non_swap_entry(entry))) {
+							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+						}
+
+						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					}
 					goto keep;
+				}
 
 				/*
 				 * A synchronous write - probably a ramdisk.  Go
 				 * ahead and try to reclaim the page.
 				 */
-				if (!trylock_page(page))
+				if (!trylock_page(page)) {
+					{ // yifan added
+						unsigned long private = page_private(page);
+						swp_entry_t entry = { .val = private };
+						int type = swp_type(entry);
+						pgoff_t offset = swp_offset(entry);
+						unsigned long rvaddr = 0;
+						if (offset < SWAP_ARRAY_LENGTH)
+							rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+						if (unlikely(non_swap_entry(entry))) {
+							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+						}
+
+						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					}
 					goto keep;
-				if (PageDirty(page) || PageWriteback(page))
+				}
+				if (PageDirty(page) || PageWriteback(page)) {
+					{ // yifan added
+						unsigned long private = page_private(page);
+						swp_entry_t entry = { .val = private };
+						int type = swp_type(entry);
+						pgoff_t offset = swp_offset(entry);
+						unsigned long rvaddr = 0;
+						if (offset < SWAP_ARRAY_LENGTH)
+							rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+						if (unlikely(non_swap_entry(entry))) {
+							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
+						}
+
+						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					}
 					goto keep_locked;
+				}
 				mapping = page_mapping(page);  // [?] after swap out, this maping should be NULL ? or points to the swap partition ?
 			case PAGE_CLEAN:
 				; /* try to free the page below */
@@ -2501,6 +2597,9 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 	struct page *page, *next;
 	LIST_HEAD(clean_pages);
 
+	// yifan added
+	test_and_enter_swap_zone_with_debug_info(0, "enter shrink_page_list");
+
 	list_for_each_entry_safe(page, next, page_list, lru) {
 		if (page_is_file_cache(page) && !PageDirty(page) &&
 		    !__PageMovable(page)) {
@@ -2513,6 +2612,10 @@ unsigned long reclaim_clean_pages_from_list(struct zone *zone,
 			TTU_UNMAP|TTU_IGNORE_ACCESS, NULL, true);
 	list_splice(&clean_pages, page_list);
 	mod_node_page_state(zone->zone_pgdat, NR_ISOLATED_FILE, -ret);
+
+	// yifan added
+	leave_swap_zone_with_debug_info(0, "shrink-page-list-done");
+
 	return ret;
 }
 
@@ -3098,6 +3201,9 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 			return SWAP_CLUSTER_MAX;
 	}
 
+	// yifan added
+	test_and_enter_swap_zone_with_debug_info(0, "enter shrink_page_list");
+
 	lru_add_drain(); // [x] Flush the per-cpu local pagevecs to global LRU list.
 
 	if (!sc->may_unmap)
@@ -3120,14 +3226,16 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	}
 	spin_unlock_irq(&pgdat->lru_lock);  // release lock
 
-	if (nr_taken == 0)
+	if (nr_taken == 0) {
+		// yifan added
+		leave_swap_zone_with_debug_info(0, "shrink-page-list-done");
 		return 0;
+	}
 
 	// [x] The main function of swapping out pages.
 	//  	  Return value is the number of swapped out pages.
 	nr_reclaimed = shrink_page_list(&page_list, pgdat, sc, TTU_UNMAP,
 				&stat, false);
-
 
 	// Semeru CPU
 	// Free all the swapped out pages immediately
@@ -3234,6 +3342,10 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 			stat.nr_activate, stat.nr_ref_keep,
 			stat.nr_unmap_fail,
 			sc->priority, file);
+
+	// yifan added
+	leave_swap_zone_with_debug_info(0, "shrink-page-list-done");
+
 	return nr_reclaimed;
 }
 
@@ -3644,6 +3756,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	if (!sc->may_unmap)
 		isolate_mode |= ISOLATE_UNMAPPED;
 
+	// yifan added
+	test_and_enter_swap_zone_with_debug_info(0, "enter shrink_page_list");
+
 	spin_lock_irq(&pgdat->lru_lock);
 
 	nr_taken = isolate_lru_pages(nr_to_scan, lruvec, &l_hold,
@@ -3714,6 +3829,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	nr_deactivate = move_active_pages_to_lru(lruvec, &l_inactive, &l_hold, lru - LRU_ACTIVE);
 	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
 	spin_unlock_irq(&pgdat->lru_lock);
+
+	// yifan added
+	leave_swap_zone_with_debug_info(0, "shrink-page-list-done");
 
 	mem_cgroup_uncharge_list(&l_hold);
 	free_hot_cold_page_list(&l_hold, true);

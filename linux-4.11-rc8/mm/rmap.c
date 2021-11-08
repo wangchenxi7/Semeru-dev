@@ -1386,7 +1386,7 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 		address = pvmw.address;		// The corresponding virtual address 
 
 		// yifan: track page status
-		set_page_status(address, PG_UNMAP);
+		// set_page_status(address, PG_UNMAP);
 
 		if (!(flags & TTU_IGNORE_ACCESS)) {
 			if (ptep_clear_flush_young_notify(vma, address,

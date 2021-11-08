@@ -42,8 +42,8 @@
 //    frontswap path only supports one memory server now. We will add the supports of multiple memory servers later.
 #define SEMERU_FRONTSWAP_PATH 1
 
-#define SMALL
-// #define BIG
+// #define SMALL
+#define LARGE
 
 
 //
@@ -57,7 +57,7 @@
 #define RDMA_META_REGION_NUM 1UL
 
 
-#ifdef BIG
+#ifdef LARGE
 #define RDMA_DATA_REGION_NUM 16UL
 #endif
 #ifdef SMALL
