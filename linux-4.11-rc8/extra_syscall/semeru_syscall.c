@@ -301,10 +301,7 @@ err:
  */
 static inline bool can_do_swapout(struct vm_area_struct *vma)
 {
-	if (vma_is_anonymous(vma))
-		return true;
-
-	return false;
+	return vma && vma_is_anonymous(vma);
 }
 
 
@@ -328,10 +325,15 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	struct mmu_gather tlb;
 	int ret = 0;
 
-	if (!can_do_swapout(vma))
+	if (!can_do_swapout(vma)) {
+		pr_warn("vma %p for range [0x%lx, 0x%lx) cannot be swapped out!",
+			vma, start_addr, end_addr);
 		return 0;
+	}
 
-	lru_add_drain(); // release the cpu local physical pages
+	lru_add_drain_all(); // release the cpu local physical pages
+	// yifan: I feel these tlb calls are unneccessary but simply leave them
+	// here unless we need further optimizes.
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb,start_addr, end_addr);
