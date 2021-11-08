@@ -2013,12 +2013,15 @@ void __init swap_setup(void)
 //
 
 
-
-
+static int semeru_test_walk(unsigned long start, unsigned long end, struct mm_walk *walk)
+{
+ return 0;
+}
 
 // define the swap out operations for each level
 static struct mm_walk semeru_swapout_walk_ops = {
 	.pmd_entry = semeru_swapout_pmd_range,
+	.test_walk = semeru_test_walk
 };
 
 
