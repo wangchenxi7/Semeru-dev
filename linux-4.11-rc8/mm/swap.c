@@ -2175,6 +2175,8 @@ regular_page:
 
 #endif  // end CONFIG_TRANSPARENT_HUGEPAGE
 
+	// yifan: again I feel these TLB calls are unnecessary. But I will
+	// simply leave them here unless further optimizations are needed.
 	tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
 	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
 	//flush_tlb_batched_pending(mm);
@@ -2184,6 +2186,23 @@ regular_page:
 	arch_enter_lazy_mmu_mode();
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
+
+		if (is_swap_pte(ptent)) {
+			swp_entry_t entry = pte_to_swp_entry(ptent);
+			int type = swp_type(entry);
+			pgoff_t offset = swp_offset(entry);
+			if (!non_swap_entry(entry) && offset < SWAP_ARRAY_LENGTH) { // yifan: assume this is a valid swap entry
+				struct address_space *swapper_space = swap_address_space(entry);
+				page = find_get_page(swapper_space, swp_offset(entry));
+				if (page) { // page in swap cache
+					unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+					pr_err("YIFAN: %s:%d swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						__func__, __LINE__, entry.val, type, offset, rvaddr);
+					put_page(page);
+					goto isolate_page;
+				}
+			}
+		}
 
 		if (pte_none(ptent)){
 			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range");
@@ -2253,6 +2272,7 @@ regular_page:
 			tlb_remove_tlb_entry(tlb, pte, addr);
 		}
 
+isolate_page:
 		/*
 		 * We are deactivating a page for accelerating reclaiming.
 		 * VM couldn't reclaim the page unless we clear PG_young.
@@ -2262,6 +2282,10 @@ regular_page:
 		ClearPageReferenced(page);
 		test_and_clear_page_young(page);
 		if (pageout) {
+			// yifan: I feel we should do get_page_unless_zero
+			// before calling isolate_lru_page, and do put_page
+			// after isolate_lru_page. But again leave it as is
+			// unless we get any problem.
 			if (!isolate_lru_page(page)) {
 				if (PageUnevictable(page)){
 					putback_lru_page(page);
