@@ -4048,6 +4048,19 @@ out_tracing:
 		// we could. Let's try to do some stealing...
 		log_info(semeru,mem_trace)("%s, worker[0x%x] Trying to steal work from other threads.. ", __func__, worker_id());
 
+		// // debug
+		// // check the passing content.
+		// size_t debug_addr_start = RDMA_DATA_SPACE_START_ADDR;
+		// size_t debug_addr_end = RDMA_DATA_SPACE_START_ADDR + ONE_MB;
+		// while(debug_addr_start < debug_addr_end){
+		// 	log_info(semeru,mem_trace)("%s, worker[0x%x] addr 0x%lx, first size_t value 0x%lx \n", 
+		// 		__func__,  worker_id(), debug_addr_start, *(size_t*)debug_addr_start  );
+
+		// 	debug_addr_start+= PAGE_SIZE;
+		// }
+
+		// // debug end 
+
 		// We cannot check whether the global stack is empty, since other
 		// tasks might be pushing objects to it concurrently.
 		// 

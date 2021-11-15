@@ -117,7 +117,10 @@ if [ "${execute_mode}" = "execution"  ]
 then
   echo "${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}"
 
-	numactl --cpunodebind=0 --membind=0 ${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
+	#numactl --cpunodebind=0 --membind=0 ${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
+	
+    # Do not limit the memory usage node
+    ${java_exe} ${original_gc_mode}  ${compressedOop}  ${logOpt}   -Xms${MemSize} -Xmx${MemSize} ${SemeruMemPoolParameter}  -XX:ParallelGCThreads=${STWParallelThread} -XX:-UseDynamicNumberOfGCThreads   -XX:ConcGCThreads=${concurrentThread} ${SpecialOpts}  -cp ${testcase_dir}  ${bench}
 
 elif [ "${execute_mode}" = "gdb" ]
 then
