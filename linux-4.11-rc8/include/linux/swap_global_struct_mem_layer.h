@@ -14,6 +14,7 @@
 #define __LINUX_SWAP_SWAP_GLOBAL_STRUCT_MEM_LAYER_H
 
 #include <linux/swap_global_struct.h>
+//#include <linux/pagemap.h>
 
 //
 // ###################### MACRO #########################
@@ -93,10 +94,10 @@ static inline void prepare_control_path_flush(void){
 		if(likely(atomic_read(&enter_swap_zone_counter))){
 			// some threads are still in swap zone
 			// block and wait
-//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			pr_warn("%s, wait for the existing of %d swap operations.\n", 
 				__func__, atomic_read(&enter_swap_zone_counter));
-//#endif
+#endif
 			//debug
 			atomic_inc(&debug_counter);
 			if(atomic_read(&debug_counter) > 999){
@@ -296,12 +297,27 @@ static inline u64 swap_out_pages_for_range(u64 start_vaddr, u64 end_vaddr){
 
 
 
+
+
 //
-// ###################### Debug Functions ######################
+// ###################### Swap cache related Functions ######################
 //
 
 int is_page_in_swap_cache(pte_t	pte); 
 struct page* page_in_swap_cache(pte_t	pte); 
+struct page* try_to_find_page_in_swap_cache(swp_entry_t entry);
+
+
+
+
+
+
+
+//
+// ###################### Debug Functions ######################
+//
+
+
 
 
 static inline void print_skipped_page(pte_t pte, unsigned long addr, const char * message){

@@ -32,6 +32,9 @@
 #include "frontswap_path.h"
 #include "semeru_cpu.h"
 
+// kernel header
+//#include <linux/swap_global_struct_mem_layer.h>
+
 //
 // Implement the global vatiables here
 //
@@ -1276,6 +1279,31 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 				       __func__, (uint64_t)(*addr_scan_ptr));
 			}
 #endif
+
+			// if the page is unmapped, in swap cache and dirty
+			// control path need to write it to remote memory server
+			// Or the memory server tracing can be wrong.
+			//
+			// Warning : the try_to_find_page_in_swap_cache will get_page, 
+			// which increased the reference count of the page.
+			// if the data path is swapping out this page, this can cause race problem.
+			// Must pause the data path before checking swap cache.
+			//
+			// if(is_swap_pte(*pte_ptr)){
+			// 	swp_entry_t entry = pte_to_swp_entry(*pte_ptr);
+			// 	int type = swp_type(entry);
+			// 	pgoff_t offset = swp_offset(entry);
+			// 	if (!non_swap_entry(entry) && offset < SWAP_ARRAY_LENGTH) { // within heap range
+			// 		struct page *page = try_to_find_page_in_swap_cache(entry);
+			// 		if (page) { // page in swap cache
+			// 			unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+			// 			pr_err("%s: Should write but not! swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx， write_back ? %d", 
+			// 			__func__, entry.val, type, offset, rvaddr, PageWriteback(page));
+			// 			put_page(page);
+			// 		}
+			// 	}
+			// }
+
 
 			// Exit#1, Find a breaking point.
 			// Stop building the S/G buffer.
