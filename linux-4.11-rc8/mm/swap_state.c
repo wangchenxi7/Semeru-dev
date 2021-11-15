@@ -80,6 +80,14 @@ EXPORT_SYMBOL(page_in_swap_cache);
 
 
 
+struct page * try_to_find_page_in_swap_cache(swp_entry_t entry){
+	struct address_space *swapper_space = swap_address_space(entry);
+	struct page *page = find_get_page(swapper_space, swp_offset(entry));
+
+	return page;
+}
+EXPORT_SYMBOL(try_to_find_page_in_swap_cache);
+
 // End of Semeru
 //
 
