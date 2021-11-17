@@ -33,7 +33,7 @@
 
 // #1 enable the swp_entry_t to virtual address remap or not
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
-#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+// #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
 // #2 This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT

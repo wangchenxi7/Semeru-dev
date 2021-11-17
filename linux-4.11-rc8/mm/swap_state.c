@@ -25,6 +25,7 @@
 //
 // Semeru
 #include <linux/swap_global_struct_mem_layer.h>
+int prefetch_win = 0;
 
 
 // The funciont is declared in linux/swap_global_struct_mem_layer.h
@@ -531,8 +532,8 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	// Not found in Swap Cache, do the swaping in
 	if (page_was_allocated){
 		// #ifdef DEBUG_MODE_DETAIL
-		if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
-			printk(KERN_INFO "%s, swap in page, virt 0x%lx , swap_entry offset 0x%lx \n", __func__, (size_t)addr, (size_t)swp_offset(entry) );
+		// if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
+		// 	printk(KERN_INFO "%s, swap in page, virt 0x%lx , swap_entry offset 0x%lx \n", __func__, (size_t)addr, (size_t)swp_offset(entry) );
 		// #endif
 
 		swap_readpage(retpage);   // 2) the page is allocated, read it.
@@ -550,8 +551,9 @@ struct page *read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
  */
 static unsigned long swapin_nr_pages(unsigned long offset)
 {
-	
-	return 1;
+	if (prefetch_win) {
+		return prefetch_win;
+	}
 
 	static unsigned long prev_offset;
 	unsigned int pages, max_pages, last_ra;

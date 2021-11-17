@@ -159,9 +159,9 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 
 	// enable the swap-out of Meta Region
 	//swp_entry_to_virtual_remapping[swp_offset(entry)] = ( (virt_addr -  SEMERU_START_ADDR) >> PAGE_SHIFT );
-if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
-	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
-		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
+// if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
+// 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
+// 		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
 
 #ifdef DEBUG_SWAP_PATH
 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
@@ -2198,9 +2198,9 @@ regular_page:
 				struct address_space *swapper_space = swap_address_space(entry);
 				page = find_get_page(swapper_space, swp_offset(entry));
 				if (page) { // page in swap cache
-					unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
-					pr_err("YIFAN: %s:%d swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-						__func__, __LINE__, entry.val, type, offset, rvaddr);
+					// unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
+					// pr_err("YIFAN: %s:%d swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+					// 	__func__, __LINE__, entry.val, type, offset, rvaddr);
 					put_page(page);
 					goto isolate_page;
 				}
@@ -2326,8 +2326,8 @@ if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000UL
 
 // #if defined(DEBUG_MODE_BRIEF)
 // if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
-	pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
-		__func__, reclaimed_page, skipped_page );
+	// pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
+	// 	__func__, reclaimed_page, skipped_page );
 // #endif
 
 	if (pageout)
@@ -2336,8 +2336,8 @@ if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000UL
 	
 // #if defined(DEBUG_MODE_BRIEF)
 // if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
-	pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
-		__func__, reclaimed_page);
+	// pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
+	// 	__func__, reclaimed_page);
 // #endif
 
 	// return skipped_page;

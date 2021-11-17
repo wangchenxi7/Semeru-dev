@@ -1242,7 +1242,8 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			  char *end_addr)
 {
 	uint64_t entries = 0; // mapped pages
-	size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	// size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
 	pte_t *pte_ptr;
 	struct page *buf_page;
 

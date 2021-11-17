@@ -155,8 +155,9 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		init_page_status();
 	} else if (type == 10) {
 		get_page_status(start_addr);
-	}
-		else {
+	} else if (type == 11) { // set swap in window. 0 for kernel default, 1 for disable
+		prefetch_win = (int)size;
+	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
 	}

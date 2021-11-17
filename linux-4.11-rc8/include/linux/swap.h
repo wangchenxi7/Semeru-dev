@@ -37,7 +37,7 @@
 // }
 
 
-
+extern int prefetch_win;
 
 // End of Semeru
 //

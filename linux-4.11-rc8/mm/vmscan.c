@@ -1325,8 +1325,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 						pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 					}
 
-					pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-						__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+					// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 				}
 				goto keep_locked;
 			case PAGE_ACTIVATE:
@@ -1342,8 +1342,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 						pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 					}
 
-					pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-						__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+					// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+					// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 				}
 				goto activate_locked;
 			case PAGE_SUCCESS:          // Submit the bio to swap partition successfully
@@ -1360,8 +1360,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 						}
 
-						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+						// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 					}
 					goto keep;
 				}
@@ -1378,8 +1378,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 						}
 
-						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+						// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 					}
 					goto keep;
 				}
@@ -1401,8 +1401,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 						}
 
-						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+						// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 					}
 					goto keep;
 				}
@@ -1419,8 +1419,8 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 							pr_err("YIFAN: non swap entry! entry %lx\n", entry.val);
 						}
 
-						pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
-							__func__, __LINE__, private, entry.val, type, offset, rvaddr);
+						// pr_err("%s:%d private %lx, swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+						// 	__func__, __LINE__, private, entry.val, type, offset, rvaddr);
 					}
 					goto keep_locked;
 				}
