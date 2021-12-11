@@ -342,3 +342,7 @@ In order to do concurrent tracing, G1 GC maintains some large data structures, e
 #### 3. Java heap size is fixed at 32GB, Start at 0x400,100,000,000.
 
 Some meta variables are related to the Java heap size. E.g., the CPU server swap file/partition size, memory servers' alive_bitmap size etc. It's a little hard to change the Java heap size right now. We will update a new version to fix this problem later.
+
+#### 4. Do NOT use update-alternatives to configure the gcc/g++/bnu tools.
+Or the linker can NOT find the ofed libraries, under /usr/lib, successfully. This can lead to link errors, such as undefined reference to `ibv_dereg_mr'.
+
