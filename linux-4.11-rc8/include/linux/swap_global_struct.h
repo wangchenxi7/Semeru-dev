@@ -33,7 +33,7 @@
 
 // #1 enable the swp_entry_t to virtual address remap or not
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
-// #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
+#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
 // #2 This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT
@@ -247,30 +247,30 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 //     The structure of SemeruHeapRegion. 4K for each Region is enough.
 //     [x] precommit all the space.
 #define HEAP_REGION_MANAGER_OFFSET           (size_t)(MEM_REF_Q_OFFSET+MEM_REF_Q_SIZE_LIMIT) // (KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)  // +832MB,  0x400,034,000,000
-#define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(4*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
+#define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(8*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
 
 
 // 3.1.1 CPU Server To Memory server, Initialization
 // [x] precommit
 #define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(HEAP_REGION_MANAGER_OFFSET + HEAP_REGION_MANAGER_SIZE_LIMIT) // +836MB, 0x400,034,400,000
-#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 4*ONE_MB    //
+#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 8*ONE_MB    //
 
 // 3.1.2 CPU Server To Memory server, GC
 // [x] precommit
 #define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +840MB, 0x400,034,800,000
-#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 3.1.3 Memory server To CPU server 
 // [x] precommit
 #define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +844MB, 0x400,034,C00,000
-#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 3.1.4 Synchonize between CPU server and memory server
 // [x] precommit
 #define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +848MB, 0x400,035,000,000
-#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 5. JVM global flags.
