@@ -126,7 +126,9 @@ We next discuss the steps to build and install the CPU-server JVM.
 - Build the CPU-server JVM
 
 ```bash
+git clone https://github.com/mahaoran1997/NewPauselessCPU.git
 cd ~/NewPauselessCPU
+git checkout 75cdeaf6f00580f403f5d3d4b64a0df9473c4426
 version=release
 bash ./configure --with-debug-level=${version} --with-target-bits=64 --disable-dtrace
 make clean CONF=linux-x86_64-server-${version}
