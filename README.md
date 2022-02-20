@@ -43,6 +43,8 @@ git clone https://github.com/uclasystem/Semeru.git
 mv Semeru-dev Semeru
 cd Semeru
 git checkout haoran_use
+# This commit has the correct version of code, but use the commit a few commits later to have the latest version of README.md
+# Use the commit with message "more fixes in README"
 git checkout 475163866c608a276b137c30c92b07e0cedc9708
 ```
 
@@ -128,6 +130,7 @@ We next discuss the steps to build and install the CPU-server JVM.
 ```bash
 git clone https://github.com/mahaoran1997/NewPauselessCPU.git
 cd ~/NewPauselessCPU
+git checkout throughput_evaulation
 git checkout 75cdeaf6f00580f403f5d3d4b64a0df9473c4426
 version=release
 bash ./configure --with-debug-level=${version} --with-target-bits=64 --disable-dtrace
@@ -139,26 +142,26 @@ make CONF=linux-x86_64-server-${version}
 
 The next step is to install the LJVM on each memory server.
 
-- Get source code for the modified version of memory server for branch `haoran_use`
+- Get source code for the modified version of memory server
 
   ```bash
   # ask Haoran for permissions
   git clone https://github.com/mahaoran1997/NewPauselessMemory.git
   cd NewPauselessMemory
-  git checkout compaction
+  git checkout throughput_evaulation
   git checkout 546fde0b303422aa0ee14da02d337a3d17be0bdc
   ```
 
 - Change the IP addresses
 
   ```cpp
-  // E.g., mem-server #0’s IP is 10.0.0.2, memory server ID is 0.
-  // Change the IP address and ID in ﬁle:
+  // E.g., mem-server's IP is 10.0.10.6, memory server ID is 0.
+  // Change the IP address and ID in file:
   // ~/NewPauselessMemory/src/hotspot/share/utilities/globalDefinitions.hpp
-  // @Mem-server #0
-  #define NUM_OF_MEMORY_SERVER 2
+  // @Mem-server
+  #define NUM_OF_MEMORY_SERVER 1
   #define CUR_MEMORY_SERVER_ID 0
-  static const char cur_mem_server_ip[] = "10.0.0.2";
+  static const char cur_mem_server_ip[] = "10.0.10.6";
   static const char cur_mem_server_port[]= "9400";
   ```
 
@@ -202,10 +205,9 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   code manage_semeru_frontswap_module.sh
   ./manage_semeru_frontswap_module.sh semeru
   ## In case of error, try rebooting both servers, CPU server with iDrac
-  # To close the swap partition, do the following:
+  # To close the swap partition, first kill the CPU server JVM, then do the following:
   # @CPU server
-  cd ~/Semeru/ShellScript/
-  ./install_semeru_module.sh close_semeru
+  ./manage_semeru_frontswap_module.sh semeru close_semeru
   # If the memory servers are crashed, the CPU server should disconnect 
   # with the memory servers automatically.
   # In this case, we recommend to restart the CPU server for performance test.
