@@ -1623,7 +1623,7 @@ if((((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x4001080000
 		__func__, mem_server_id, write_type, (unsigned long)start_addr, size);
 //#endif
 
-	// #1 Do page alignmetn,
+	// #1 Do page alignment,
 	// If the sent data small than a page, align up to a page
 	// Because we need to register a whole physical page as RDMA buffer.
 	start_addr_aligned = (char *)((unsigned long)start_addr & PAGE_MASK); // align_down

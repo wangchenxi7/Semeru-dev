@@ -172,7 +172,7 @@ struct remote_mapping_chunk_list {
 
 /**
  * 1-sided RDMA (read/write) message.
- * Both Semeru Control Path(CP) and Data Path(DP) use this rdma command structu.
+ * Both Semeru Control Path(CP) and Data Path(DP) use this rdma command struct.
  * 
  * Reserve a kcache for semeru_rdma_req_sg allocation.
  * Allocate during the building of the I/O request.

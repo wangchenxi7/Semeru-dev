@@ -43,6 +43,7 @@ git clone https://github.com/uclasystem/Semeru.git
 mv Semeru-dev Semeru
 cd Semeru
 git checkout haoran_use
+git checkout 475163866c608a276b137c30c92b07e0cedc9708
 ```
 
 When deploying *Semeru*, install the three components in the following order: the kernel on the CPU server, the *Semeru* JVM on the CPU server, and the LJVM on each memory server. Finally, connect the CPU server with memory servers before running applications.
@@ -58,15 +59,6 @@ We ﬁrst discuss how to build and install the kernel.
   ```bash
   sudo vim /etc/default/grub 
   + transparent_hugepage=madvise
-  ```
-
-- Modify `Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h` as desired, e.g.,
-
-  ```c++
-  #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1 ->
-  //#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
-  #define RDMA_DATA_REGION_NUM 2UL  // default 32GB ->
-  #define RDMA_DATA_REGION_NUM 8UL  // default 32GB
   ```
 
 - Install the kernel and restart the machine on both CPU server and memory servers:
@@ -131,46 +123,19 @@ sudo yum install libXtst-devel libXt-devel libXrender-devel libXrandr-devel libX
 
 We next discuss the steps to build and install the CPU-server JVM.
 
-- Download Oracle JDK 12 to build *Semeru* JVM
-
-  ```bash
-  # Assume jdk 12.0.2 is under path: ${home_dir}/jdk-12.0.2 
-  # Or change the path in shell script, ~/Semeru/CPU-Server/build_cpu_server.sh
-  code ~/Semeru/CPU-Server/build_cpu_server.sh
-  boot_jdk="${home_dir}/jdk-12.0.2"
-  ```
-
 - Build the CPU-server JVM
 
-  ```bash
-  # ${build_mode} can be one of the three modes:
-  # slowdebug, fastdebug, or release.
-  # We recommend slowdebug mode to debug the JVM code 
-  # and release mode to test the performance.
-  # Please make sure both the CPU server and 
-  # memory servers use the same build mode.
-  cd ~/Semeru/CPU-Server/
-  ./build_cpu_server.sh ${build_mode}
-  ./build_cpu_server.sh release
-  ./build_cpu_server.sh build
-  # Take release mode as example — the compiled JVM will be in:
-  # ~/Semeru/CPU-Server/build/linux-x86_64-server-release/jdk
-  ```
-
-
+```bash
+cd ~/NewPauselessCPU
+version=release
+bash ./configure --with-debug-level=${version} --with-target-bits=64 --disable-dtrace
+make clean CONF=linux-x86_64-server-${version}
+make CONF=linux-x86_64-server-${version}
+```
 
 #### Install the Memory-Server LJVM
 
 The next step is to install the LJVM on each memory server.
-
-- Download OpenJDK 12 and build the LJVM
-
-  ```bash
-  # Assume OpenJDK12 is under the path: ${home_dir}/jdk-12.0.2
-  # Or you can change the path in the script  
-  # ~/Semeru/Memory-Server/build_memory_server.sh
-  boot_jdk="${home_dir}/jdk-12.0.2"
-  ```
 
 - Get source code for the modified version of memory server for branch `haoran_use`
 
@@ -179,6 +144,7 @@ The next step is to install the LJVM on each memory server.
   git clone https://github.com/mahaoran1997/NewPauselessMemory.git
   cd NewPauselessMemory
   git checkout compaction
+  git checkout 546fde0b303422aa0ee14da02d337a3d17be0bdc
   ```
 
 - Change the IP addresses
@@ -196,15 +162,13 @@ The next step is to install the LJVM on each memory server.
 
 - Build and install the LJVM
 
-  ```bash
-  # Use the same ${build_mode} as the CPU-server JVM.
-  cd ~/NewPauselessMemory
-  ~/Semeru/Memory-Server/build_memory_server.sh ${build_mode}
-  ~/Semeru/Memory-Server/build_memory_server.sh build
-  # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-${build_mode}/jdk
-  ```
-
-
+```bash
+cd ~/NewPauselessMemory
+version=release
+bash ./configure --with-debug-level=${version} --with-extra-cxxflags="-lrdmacm -libverbs" --with-extra-ldflags="-lrdmacm -libverbs" --disable-dtrace
+make clean CONF=linux-x86_64-server-${version}
+make CONF=linux-x86_64-server-${version}
+```
 
 #### Running Applications
 
@@ -216,7 +180,8 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   cd ~/Semeru/testcase/MemoryServer
   javac Case1.java
   tmux
-  ~/NewPauselessMemory/build/linux-x86_64-server-release/jdk/bin/java -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:-UseCompressedOops -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=32g -XX:SemeruMemPoolInitialSize=32g -XX:SemeruMemPoolAlignment=64M -XX:SemeruConcGCThreads=1 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 -XX:-ShenandoahPacing -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:ShenandoahRefProcFrequency=0 -cp ~/Semeru/testcase/MemoryServer Case1
+  version=release
+  ~/NewPauselessMemory/build/linux-x86_64-server-${version}/jdk/bin/java -XX:+UnlockExperimentalVMOptions -XX:+UseShenandoahGC -XX:-UseCompressedOops -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+alloc=debug,semeru+mem_trace=debug -Xms128M -Xmx128M -XX:SemeruEnableMemPool -XX:SemeruMemPoolMaxSize=64g -XX:SemeruMemPoolInitialSize=64g -XX:SemeruMemPoolAlignment=128M -XX:SemeruConcGCThreads=1 -XX:ParallelGCThreads=1 -XX:-UseDynamicNumberOfGCThreads -XX:ConcGCThreads=1 -XX:-ShenandoahPacing -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:ShenandoahRefProcFrequency=0 -cp ~/Semeru/testcase/MemoryServer Case1
   ```
 
 - Connect the CPU server with memory servers
@@ -230,10 +195,11 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # SWAP_PARTITION_SIZE="32G"
   # We don't recommend to change the Java heap size right now.
   # Please refer to the Known Issues chapter for more details.
-  cd ~/Semeru/ShellScript/
-  ## modifiy `home_dir` in install_semeru_module.sh
-  code install_semeru_module.sh
-  ./install_semeru_module.sh semeru
+  cd /mnt/ssd/shiliu/Semeru/linux-4.11-rc8/semeru
+  ## modifiy `home_dir`
+  code manage_semeru_frontswap_module.sh
+  ./manage_semeru_frontswap_module.sh semeru
+  ## In case of error, try rebooting both servers, CPU server with iDrac
   # To close the swap partition, do the following:
   # @CPU server
   cd ~/Semeru/ShellScript/
@@ -252,12 +218,10 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # When setting the CPU server local cache, please leave enough size for the native memory.
   # Refer to the Known Issues chapter for more ditals.
   # @CPU server
-  cd ~/Semeru/ShellScript
-  
-  # parameters <create/delete>  <cgroup_name> <memory size>
-  ./cgroupv1_manage.sh create spark 9g
-  # Or delete the cgroup
-  ./cgroupv1_manage.sh delete spark
+  user=`whoami`
+  sudo cgcreate -t ${user} -a ${user} -g memory:/memctl
+  # 8g 25% heap + 4g meta space
+  echo 12g > /sys/fs/cgroup/memory/memctl/memory.limit_in_bytes
   ```
 
 - Add a Spark executor into the created *cgroup*
@@ -290,20 +254,18 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
 
   Some *Semeru* JVM options need to be added for both CPU-server JVM and LVJMs. CPU-server JVM and memory server LJVMs should use the same value for the same JVM option.
 
-  ```bash
-  # E.g., under the conﬁguration of 25% local memmory
-  # 512MB Java heap Region
-  # @CPU server
-  -XX:+SemeruEnableMemPool -XX:EnableBitmap -XX:-UseCompressedOops -Xnoclassgc -XX:G1HeapRegionSize=512M -XX:MetaspaceSize=0x10000000 -XX:SemeruLocalCachePercent=25
-  # @Each memory server
-  # ${MemSize}: the memory size of current memory server
-  # ${ConcThread}: the number of concurrent threads
-  -XX:SemeruEnableMemPool -XX:-UseCompressedOops -XX:SemeruMemPoolMaxSize=${MemSize} -XX:SemeruMemPoolInitialSize=${MemSize} -XX:SemeruConcGCThreads=${ConcThread}
-  # We provide some shellscript examples for Spark applications under the directory: Semeru/ShellScrip/SparkAppShellScrip
-  # Please check their JVM parameters.
-  ```
+Java option for 25% Spark TC:
 
+```config
+-XX:+UnlockExperimentalVMOptions -XX:+UnlockDiagnosticVMOptions -XX:ShenandoahWriteFlushInterval=10000 -XX:ShenandoahHeapRegionSize=128M -XX:ShenandoahMaxRegionSize=128M -Xms64g -XX:+SemeruEnableMemPool -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+mem_trace=debug -XX:+UseShenandoahGC -XX:+PrintGCDetails -XX:ParallelGCThreads=32 -XX:ConcGCThreads=1 -XX:-UseCompressedOops -XX:MetaspaceSize=268435456 -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:-ShenandoahPacing -XX:ShenandoahRefProcFrequency=0 -XX:+DisableExplicitGC -XX:ShenandoahGuaranteedGCInterval=2000000 -XX:ShenandoahUpdateRefsEarly=on -XX:ShenandoahInitFreeThreshold=25 -XX:ShenandoahMinFreeThreshold=13 -XX:ShenandoahEvacReserve=100 -XX:-ShenandoahEvacReserveOverflow -XX:-ShenandoahAllowMixedAllocs -XX:+ShenandoahAlwaysPreTouch -XX:SafepointTimeoutDelay=1000000 -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:-ShenandoahElasticTLAB -XX:ShenandoahLearningSteps=70
+```
 
+If running DaCapo tradesoap:
+
+```bash
+version=release
+cgexec --sticky -g memory:memctl /mnt/ssd/shiliu/NewPauselessCPU/build/linux-x86_64-server-${version}/jdk/bin/java -XX:+UnlockExperimentalVMOptions -XX:+UnlockDiagnosticVMOptions -XX:ShenandoahWriteFlushInterval=10000 -XX:ShenandoahHeapRegionSize=128M -XX:ShenandoahMaxRegionSize=128M -Xms64g -Xmx64g -XX:+SemeruEnableMemPool -Xlog:heap=debug,semeru=debug,semeru+rdma=debug,semeru+mem_compact=debug,semeru+mem_trace=debug -XX:+UseShenandoahGC -XX:+PrintGCDetails -XX:ParallelGCThreads=32 -XX:ConcGCThreads=1 -XX:-UseCompressedOops -XX:MetaspaceSize=268435456 -XX:-ShenandoahConcurrentScanCodeRoots -Xnoclassgc -XX:-ShenandoahPacing -XX:ShenandoahRefProcFrequency=0 -XX:+DisableExplicitGC -XX:ShenandoahGuaranteedGCInterval=2000000 -XX:ShenandoahUpdateRefsEarly=on -XX:ShenandoahInitFreeThreshold=25 -XX:ShenandoahMinFreeThreshold=13 -XX:ShenandoahEvacReserve=100 -XX:-ShenandoahEvacReserveOverflow -XX:-ShenandoahAllowMixedAllocs -XX:+ShenandoahAlwaysPreTouch -XX:SafepointTimeoutDelay=1000000 -XX:IndirectionInitSize=512M -XX:IndirectionMaxSize=512M -XX:-ShenandoahElasticTLAB -XX:ShenandoahLearningSteps=70 -jar ~/test/dacapo-9.12-MR1-bach.jar tradesoap -s huge 2>&1 | tee -a ~/logs/mako-debug.log
+```
 
 # FAQ
 
