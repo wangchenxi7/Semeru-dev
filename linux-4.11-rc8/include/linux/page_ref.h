@@ -197,4 +197,32 @@ static inline void page_ref_unfreeze(struct page *page, int count)
 		__page_ref_unfreeze(page, count);
 }
 
+
+//
+// Semeru 
+
+/**
+ * @brief 
+ * 
+ * @param page 
+ * @param count : the expected old value? 
+ * @return 1 : can be freed, repalce the page->_refcount to 0 from 2.
+ * 0 : cannot be freed.
+ */
+static inline int semeru_page_ref_freeze(struct page *page, int count)
+{
+	int ret = likely(atomic_cmpxchg(&page->_refcount, count, 0) == count);
+
+	//debug
+	if(!ret){
+		pr_err("%s:%d, page->_refcount is %d, cannot be freed. \n", __func__, __LINE__, page->_refcount.counter);
+	}
+
+
+	if (page_ref_tracepoint_active(__tracepoint_page_ref_freeze))
+		__page_ref_freeze(page, count, ret);
+	return ret;
+}
+
+
 #endif

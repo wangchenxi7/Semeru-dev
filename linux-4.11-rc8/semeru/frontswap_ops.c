@@ -287,7 +287,7 @@ static inline int get_memory_server_id(size_t chunk_index)
  * @brief Translate the CPU serve virtual address to memory server virtual address.
  * 	1) Reserve the first region for each memory server as meta region. 
  * 	Never write any data to meta region via data path.
- * 	2) This function is only used by both Data path and Control path.
+ * 	2) This function are used by both Data path and Control path.
  * 	3) This function is only used for data region area.
  * 
  * Examples of Memory region
@@ -378,10 +378,11 @@ int semeru_frontswap_store(unsigned type, pgoff_t swap_entry_offset, struct page
 	// page offset, compared start of Data Region
 	start_addr = translate_to_mem_server_addr(&mem_addr, swap_entry_offset);
 
+#ifdef DEBUG_MODE_DETAIL
 	// debug - after translation
-	//pr_warn("%s, for swap_entry 0x%lx mem_server_id %d, chunk index %lu, offset 0x%lx \n", 
-	//	__func__, swap_entry_offset, mem_addr.mem_server_id,  mem_addr.mem_server_chunk_index, mem_addr.mem_server_offset_within_chunk);
-
+	pr_warn("%s, for swap_entry 0x%lx mem_server_id %d, chunk index %lu, offset 0x%lx \n", 
+		__func__, swap_entry_offset, mem_addr.mem_server_id,  mem_addr.mem_server_chunk_index, mem_addr.mem_server_offset_within_chunk);
+#endif
 	
 #ifdef RDMA_MESSAGE_PROFILING
 	rdma_write_to_mem_server_inc(mem_addr.mem_server_id);	

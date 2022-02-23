@@ -2095,11 +2095,11 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 	size_t reclaimed_page = 0;
 
 
-// #if defined(DEBUG_MODE_BRIEF)
+ #if defined(DEBUG_MODE_BRIEF)
 	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
 	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
 		__func__, addr, end);
-// #endif
+ #endif
 
 
 
@@ -2192,7 +2192,7 @@ regular_page:
 
 		if (is_swap_pte(ptent)) {
 			swp_entry_t entry = pte_to_swp_entry(ptent);
-			int type = swp_type(entry);
+			//int type = swp_type(entry);
 			pgoff_t offset = swp_offset(entry);
 			if (!non_swap_entry(entry) && offset < SWAP_ARRAY_LENGTH) { // yifan: assume this is a valid swap entry
 				struct address_space *swapper_space = swap_address_space(entry);

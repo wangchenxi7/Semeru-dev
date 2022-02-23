@@ -6,14 +6,19 @@
 # Macro define
 
 # The swap file/partition size should be equal to the whole size of remote memory
-# SWAP_PARTITION_SIZE="64G"
-# SWAP_PARTITION_SIZE="32G"
-# SWAP_PARTITION_SIZE="40G"
-SWAP_PARTITION_SIZE="72G"
+# SWAP_PARTITION_SIZE="64"
+# SWAP_PARTITION_SIZE="32"
+# SWAP_PARTITION_SIZE="40"
+SWAP_PARTITION_SIZE="72"
 
 
 # Cause of sudo, NOT use ${HOME}
-home_dir="/mnt/ssd/haoran"
+if [ -z ${HOME} ]
+then
+    home_dir="/mnt/ssd/wcx"
+else
+    home_dir="${HOME}"
+fi
 swap_file="${home_dir}/swapfile" 
 
 
@@ -33,7 +38,7 @@ then
 	echo "	1.1 close current Swap partition"
 	echo "	1.2 create swapfile as fake swap device"
 	echo "	1.3 install semeru"
-  echo "create_swap_file : Creat a swapfile under ${swap_file} with size ${SWAP_PARTITION_SIZE}"
+  echo "create_swap_file : Creat a swapfile under ${swap_file} with size ${SWAP_PARTITION_SIZE}GB"
 	echo "load_semeru : load semeru module"
 	echo "	2.1 Instll semeru for the frontswap path.	"
 	echo "close_semeru : Close the remote memory partition && Remove the Semeru module "	
@@ -91,21 +96,21 @@ function create_swap_file () {
   if [ -e ${swap_file} ]
   then
     echo "Please confirm the size of swapfile match the expected ${SWAP_PARTITION_SIZE}" 
-    cur_size=$(du -sh ${swap_file} | awk '{print $1;}' ) 
-    if [ "${cur_size}"  != "${SWAP_PARTITION_SIZE}" ]
+    cur_size=$(du -sh ${swap_file} | awk '{print $1;}' | tr -cd '[[:digit:]]') 
+    if [ "${cur_size}"  -lt "${SWAP_PARTITION_SIZE}" ]
     then
-      echo "Current ${swap_file} : ${cur_size} NOT equal to expected ${SWAP_PARTITION_SIZE}"    
+      echo "Current ${swap_file} : ${cur_size}GB is less than the expected ${SWAP_PARTITION_SIZE}GB"    
       echo "Delete it"
       sudo rm ${swap_file}
       
-      echo "Create a file, ~/swapfile, with size ${SWAP_PARTITION_SIZE} as swap device."
-      sudo fallocate -l ${SWAP_PARTITION_SIZE} ${swap_file} 
+      echo "Create a file, ~/swapfile, with size ${SWAP_PARTITION_SIZE}GB as swap device."
+      sudo fallocate -l ${SWAP_PARTITION_SIZE}G ${swap_file} 
       sudo chmod 600 ${swap_file}
     fi
   else 
     # not exit, create a swapfile
-    echo "Create a file, ~/swapfile, with size ${SWAP_PARTITION_SIZE} as swap device."
-    sudo fallocate -l ${SWAP_PARTITION_SIZE} ${swap_file} 
+    echo "Create a file, ~/swapfile, with size ${SWAP_PARTITION_SIZE}GB as swap device."
+    sudo fallocate -l ${SWAP_PARTITION_SIZE}G ${swap_file} 
     sudo chmod 600 ${swap_file}
     du -sh ${swap_file}
   fi
@@ -130,8 +135,8 @@ then
 	echo "Close current swap partition"
 	close_swap_partition
 
-  # 2. Create a swapfile and mount it as swap device 
-  create_swap_file
+    # 2. Create a swapfile and mount it as swap device 
+    create_swap_file
 
 	# 2. load semeru module 
 	echo "insmod ~/linux-4.11-rc8/semeru/semeru_cpu_server.ko"

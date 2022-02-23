@@ -44,8 +44,9 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * Parameters:
  * 		type 1, 1-sided rdma read;  
- *    		type 2, 1-sided rdma data write;
- * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal.
+ *    		type 2, 1-sided rdma data write. Flush all the cached data, mapped & swap-cached, to memory servers;
+ * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal;
+		type 4, force swap out and unmap a range of user virtual address;
  * 		target_server : the id of memory server
  * 		start_addr,
  * 		size, 		4KB alignment
@@ -71,6 +72,8 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		}
 	} else if (type == 2) {
 		// rdma data write
+		// Flush the dirty data to specific memory servers
+		// Both mapped pages and pages within swap_cache are flushed
 		if (rdma_ops_in_kernel.rdma_write != NULL) {
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n", (uint64_t)rdma_ops_in_kernel.rdma_write);
@@ -92,13 +95,25 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n", (uint64_t)rdma_ops_in_kernel.rdma_write);
 #endif
+
+
+			// disable preempt and hold the core until finish cp writing
+			cpu = get_cpu(); 
+
+			// wait the exit of all the threads within swap zone
+			prepare_control_path_flush();
+
 			write_type = 0x1; // signal write
 			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr, size);
+			control_path_flush_done(); // reset cp flushing flag despite the write results
 			if (unlikely(ret == NULL)) {
 				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__,
 				       (unsigned long)start_addr, (unsigned long)(start_addr + size));
 				return -1;
 			}
+			
+			// enable preempt
+			put_cpu();
 
 		} else {
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
@@ -344,7 +359,7 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	struct mmu_gather tlb;
 	int ret = 0;
 
-	pr_warn("%s, Start entering force swap out for [0x%lx, 0x%lx) finished.\n",
+	pr_warn("%s, Start entering force swap out for [0x%lx, 0x%lx).\n",
 		__func__, start_addr, end_addr);
 
 	if (!can_do_swapout(vma))
