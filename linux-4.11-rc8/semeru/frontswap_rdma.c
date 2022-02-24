@@ -1246,6 +1246,8 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 {
 	uint64_t entries = 0; // mapped pages
 	size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	//size_t package_page_num_limit = 1; // InfiniBand hardware S/G limits, bytes
+
 	pte_t *pte_ptr;
 	struct page *buf_page;
 
@@ -1291,7 +1293,7 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 
 					// drop the refcount by one here.
 					put_page(buf_page);
-					goto find_page;
+					goto found_page;
 				} // find a swap-cached dirty page
 					
 				// skip thsi page
@@ -1299,24 +1301,17 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 				put_page(buf_page);
 			} // target page is in swap-cache
 
+			goto skip_page;
 		} // end of non-present
 
 		
-skip_page:
-		// Exit#1, Find a breaking point.
-		// Stop building the S/G buffer.
-		if (entries != 0) {
-			goto out; // Break RDMA buffer registration
-		} else {
-			// Skip the unmapped page at the beginning, update the iterator.
-			*addr_scan_ptr += PAGE_SIZE;
-			continue; // goto find the first mapped pte.
-		}
-
-		// 3) Page Walk the mapped pte.
+		// 3) Default-Path : Page Walk the mapped pte.
+		//
+		// TO be done: filter out the non-dirty pages. 
+		//
 		buf_page = pfn_to_page(pte_pfn(*pte_ptr));
 
-find_page:
+found_page:
 		// Assign a page to s/g. entire apge, offset in page is 0x0,.
 		sg_set_page(&(sgl[entries++]), buf_page, PAGE_SIZE, 0); 
 
@@ -1329,16 +1324,31 @@ find_page:
 		// Find a mapped page, update the interator pointer
 		*addr_scan_ptr += PAGE_SIZE;
 
-		// Exit#2, Find enough contiguous virtual pages.
+		// Exit#1, Find enough contiguous virtual pages.
 		if (entries >= package_page_num_limit) {
 			goto out;
 		}
+		
+		continue; // goto find the first mapped pte.
+
+
+skip_page:
+		// Exit#2, Find a breaking point.
+		// Stop building the S/G buffer.
+		if (entries != 0) {
+			goto out; // Break RDMA buffer registration
+		} else {
+			// Skip the unmapped page at the beginning, update the iterator.
+			*addr_scan_ptr += PAGE_SIZE;
+		}
+
 
 	} // end of while
 
 out:
 	return entries; // number of initialized ib_sge
 }
+
 
 /**
  * Control-Path, build a rdma wr for the RDMA read/write in CP.
