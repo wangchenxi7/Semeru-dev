@@ -1251,34 +1251,21 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 
 	// Scan and find several, at most package_len_limit, contiguous pages as RDMA buffer.
 	while (*addr_scan_ptr < end_addr) {
-		//[?] Will this walking cause too much overhead ?
+		// [?] Will this walking cause too much overhead ?
+		// [?] It's much safer to lock the pmd here. 
+		// Or the users need to guarantte there is no swap/user-modification to the page-table.
 		pte_ptr = walk_page_table(current->mm, (uint64_t)(*addr_scan_ptr)); 
 
-		if (pte_ptr == NULL || !pte_present(*pte_ptr)) {
-			// 1) not mapped pte, skip it.
-			//    NULL : means never being assigned a page
-			//		not present : means being swapped out.
-			//
-			//    Even if the unmapped physical page is in Swap Cache, it's clean.
-			//    All the pages will be written to remote memory server immedialte after being unmapped.
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-			if (pte_ptr == NULL) {
-				printk(KERN_WARNING "%s, Virt page 0x%llx  is NOT touched.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else if (page_in_swap_cache(*pte_ptr) != NULL) {
-				printk(KERN_WARNING "%s, Virt page 0x%llx ->  phys page is in Swap Cache.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else if (!pte_present(*pte_ptr)) {
-				// e.g. the page is swapped to swap partition && the swap_cache entry is freed.
-				printk(KERN_WARNING "%s, Virt page 0x%llx  is NOT present.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else {
-				printk(KERN_WARNING
-				       "%s, Virt page 0x%llx  is NOT mapped to physical page (unknown mode).\n",
-				       __func__, (uint64_t)(*addr_scan_ptr));
-			}
-#endif
+		// 1) Never touched, skip this page.
+		if(pte_ptr == NULL)
+			goto skip_page;
+
+		// 2)not present : the page is swapped out, OR it's being swapped out.
+		//
+		// if the page is dirty and stays in swap_cache, 
+		// we have to flush it to remote memory servesr.
+		if (!pte_present(*pte_ptr)) {
 
 			// if the page is unmapped, in swap cache and dirty
 			// control path need to write it to remote memory server
@@ -1287,38 +1274,49 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			// Warning : the try_to_find_page_in_swap_cache will get_page, 
 			// which increased the reference count of the page.
 			// if the data path is swapping out this page, this can cause race problem.
-			// Must pause the data path before checking swap cache.
+			// Must drop the page->_refcount via put_page after invoking the page_in_swap_cache()
 			//
-			// if(is_swap_pte(*pte_ptr)){
-			// 	swp_entry_t entry = pte_to_swp_entry(*pte_ptr);
-			// 	int type = swp_type(entry);
-			// 	pgoff_t offset = swp_offset(entry);
-			// 	if (!non_swap_entry(entry) && offset < SWAP_ARRAY_LENGTH) { // within heap range
-			// 		struct page *page = try_to_find_page_in_swap_cache(entry);
-			// 		if (page) { // page in swap cache
-			// 			unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
-			// 			pr_err("%s: Should write but not! swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx， write_back ? %d", 
-			// 			__func__, entry.val, type, offset, rvaddr, PageWriteback(page));
-			// 			put_page(page);
-			// 		}
-			// 	}
-			// }
+	
 
+			// flush the swap-cached dirty page to memory servers
+		
+			buf_page = page_in_swap_cache(*pte_ptr);
+			if ( buf_page != NULL  ) {
 
-			// Exit#1, Find a breaking point.
-			// Stop building the S/G buffer.
-			if (entries != 0) {
-				goto out; // Break RDMA buffer registration
-			} else {
-				// Skip the unmapped page at the beginning, update the iterator.
-				*addr_scan_ptr += PAGE_SIZE;
-				continue; // goto find the first mapped pte.
-			}
+				if(PageDirty(buf_page) ){
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
+				 	printk(KERN_WARNING "%s, Virt page 0x%llx -> (dirty) phys page is in Swap Cache. Flushed.\n", __func__,
+				        		(uint64_t)(*addr_scan_ptr));
+#endif						
 
-		} // end of if
+					// drop the refcount by one here.
+					put_page(buf_page);
+					goto find_page;
+				} // find a swap-cached dirty page
+					
+				// skip thsi page
+				// drop the refcount by one
+				put_page(buf_page);
+			} // target page is in swap-cache
 
-		// 2) Page Walk the mapped pte.
+		} // end of non-present
+
+		
+skip_page:
+		// Exit#1, Find a breaking point.
+		// Stop building the S/G buffer.
+		if (entries != 0) {
+			goto out; // Break RDMA buffer registration
+		} else {
+			// Skip the unmapped page at the beginning, update the iterator.
+			*addr_scan_ptr += PAGE_SIZE;
+			continue; // goto find the first mapped pte.
+		}
+
+		// 3) Page Walk the mapped pte.
 		buf_page = pfn_to_page(pte_pfn(*pte_ptr));
+
+find_page:
 		// Assign a page to s/g. entire apge, offset in page is 0x0,.
 		sg_set_page(&(sgl[entries++]), buf_page, PAGE_SIZE, 0); 
 
@@ -1336,7 +1334,7 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			goto out;
 		}
 
-	} // end of for
+	} // end of while
 
 out:
 	return entries; // number of initialized ib_sge
@@ -1373,8 +1371,10 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	rdma_cmd_ptr->seq_type = CONTROL_PATH_MEG; // means this is CP path data.
 	if (unlikely(rdma_cmd_ptr->nentry == 0)) {
 		// It's ok, the pte are not mapped to any physical pages.
+#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 		printk(KERN_INFO "%s, Find zero mapped pages, end at 0x%lx. Skip this wr. \n", __func__,
 		       (size_t)end_addr);
+#endif
 		mapped_pages = 0;
 		goto err; // return 0.
 	}
@@ -1384,8 +1384,9 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	//    CPU server RDMA buffer  registration.
 	// Inform PCI device the dma address of these scatterlist.
 	dma_entry = ib_dma_map_sg(ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry, dir);
-	if (unlikely(dma_entry == 0)) {
-		printk(KERN_ERR "ERROR in %s Registered 0 entries to rdma scatterlist \n", __func__);
+	if (unlikely(dma_entry != rdma_cmd_ptr->nentry)) {
+		printk(KERN_ERR "ERROR in %s. Registered %d entries to rdma scatterlist. Expected %llu \n", 
+			__func__, dma_entry, rdma_cmd_ptr->nentry);
 		mapped_pages = 0;
 		goto err;
 	}

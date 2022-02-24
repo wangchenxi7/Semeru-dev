@@ -44,8 +44,8 @@ EXPORT_SYMBOL(rdma_ops_wrapper);
  * 
  * Parameters:
  * 		type 1, 1-sided rdma read;  
- *    		type 2, 1-sided rdma data write;
- * 		type 3, 1-sided rdma signal write; Flush all the outstanding messages before issue signal.
+ *    		type 2, 1-sided rdma data write. Flush the dirty data to memory servers but keep data on CPU server;
+ * 		type 3, 1-sided rdma signal write. Flush all the outstanding messages before issue signal;
  * 		target_server : the id of memory server
  * 		start_addr,
  * 		size, 		4KB alignment
@@ -75,13 +75,20 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 			printk("rdma_ops_in_kernel.rdma_write is 0x%llx. \n", (uint64_t)rdma_ops_in_kernel.rdma_write);
 #endif
+			// wait the exit of all the threads within swap zone
+			prepare_control_path_flush();
+
 			write_type = 0x0; // data write
 			ret = rdma_ops_in_kernel.rdma_write(target_server, write_type, start_addr, size);
+			control_path_flush_done(); // reset cp flushing flag despite the write results
+
 			if (unlikely(ret == NULL)) {
 				printk(KERN_ERR "%s, rdma write [0x%lx, 0x%lx) failed. ", __func__,
 				       (unsigned long)start_addr, (unsigned long)(start_addr + size));
 				return -1;
 			}
+
+
 		} else {
 			printk("rdma_ops_in_kernel.rdma_write is NULL. Can't execute it. \n");
 		}

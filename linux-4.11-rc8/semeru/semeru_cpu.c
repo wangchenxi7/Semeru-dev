@@ -28,7 +28,7 @@ atomic_t rdma_read_to_mem_server[NUM_OF_MEMORY_SERVER];
 atomic_t rdma_write_to_mem_server[NUM_OF_MEMORY_SERVER];
 
 //char *mem_server_ip[] = { "10.0.0.2", "10.0.0.14" };
-char *mem_server_ip[] = { "10.0.0.51"};
+char *mem_server_ip[] = { "10.0.0.4"};
 
 uint16_t mem_server_port = 9400;
 
