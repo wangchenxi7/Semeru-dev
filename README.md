@@ -65,6 +65,13 @@ We ﬁrst discuss how to build and install the kernel.
   //#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
   #define RDMA_DATA_REGION_NUM 2UL  // default 32GB ->
   #define RDMA_DATA_REGION_NUM 8UL  // default 32GB
+  
+  // Scatter/Gather support
+  // Please confirm the max number of scatter-gather packets supported by your InfiniBand
+  // and update the macro MAX_REQUEST_SGL, defined in include/linux/swap_global_struct.h
+  // If you are not sure the exact number of the MAX_REQUEST_SGL, please set it to 3.
+  
+  #define MAX_REQUEST_SGL      32 
   ```
 
 - Install the kernel and restart the machine on both CPU server and memory servers:
