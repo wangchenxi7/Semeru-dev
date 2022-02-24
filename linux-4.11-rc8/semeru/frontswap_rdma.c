@@ -1113,21 +1113,20 @@ out:
  */
 void cp_rdma_write_done(struct ib_cq *cq, struct ib_wc *wc){
 	int ret = 0;
-  struct semeru_rdma_req_sg 	*rdma_cmd_ptr;
+  	struct semeru_rdma_req_sg 	*rdma_cmd_ptr;
 	struct semeru_rdma_queue	*rdma_queue;
   
 	// Get rdma_command  attached to wr->wr_id
 	// Reuse the rmem_rdam_command instance.
-  rdma_cmd_ptr	= container_of(wc->wr_cqe, struct semeru_rdma_req_sg, cqe); 
-  if(unlikely(rdma_cmd_ptr == NULL)){
-    printk(KERN_ERR "%s, get NULL rmem_rdma_command from wc \n", __func__);
+  	rdma_cmd_ptr	= container_of(wc->wr_cqe, struct semeru_rdma_req_sg, cqe); 
+  	if(unlikely(rdma_cmd_ptr == NULL)){
+    		printk(KERN_ERR "%s, get NULL rmem_rdma_command from wc \n", __func__);
 		ret = -1;
 		goto out;
-  }
+  	}
 
 	rdma_queue = rdma_cmd_ptr->rdma_queue;
 	
-
 
 	// unmap rdma buffer from device
 	// [?] if we keep this mapping ,will it batter for our re-map next time ?
@@ -1242,8 +1241,8 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			  char *end_addr)
 {
 	uint64_t entries = 0; // mapped pages
-	// size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
-	size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	//size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
 	pte_t *pte_ptr;
 	struct page *buf_page;
 
@@ -1281,6 +1280,28 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			}
 #endif
 
+			// Flush the swap_cached dirty pages to remote memory servers
+			// Warning : page->_refcount is increased by one here.
+			buf_page = page_in_swap_cache(*pte_ptr);
+			if ( buf_page != NULL  ) {
+
+				if(PageDirty(buf_page) ){
+				 	printk(KERN_WARNING "%s, Virt page 0x%llx -> (dirty) phys page is in Swap Cache. Flushed.\n", __func__,
+				        	(uint64_t)(*addr_scan_ptr));
+
+
+					// drop the refcount by one here.
+					put_page(buf_page);
+					goto find_page;
+				}
+					
+				// drop the refcount by one
+				put_page(buf_page);
+			}
+
+			// end of debug
+
+
 			// Exit#1, Find a breaking point.
 			// Stop building the S/G buffer.
 			if (entries != 0) {
@@ -1295,6 +1316,8 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 
 		// 2) Page Walk the mapped pte.
 		buf_page = pfn_to_page(pte_pfn(*pte_ptr));
+
+find_page:
 		// Assign a page to s/g. entire apge, offset in page is 0x0,.
 		sg_set_page(&(sgl[entries++]), buf_page, PAGE_SIZE, 0); 
 
@@ -1349,8 +1372,8 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	rdma_cmd_ptr->seq_type = CONTROL_PATH_MEG; // means this is CP path data.
 	if (unlikely(rdma_cmd_ptr->nentry == 0)) {
 		// It's ok, the pte are not mapped to any physical pages.
-		printk(KERN_INFO "%s, Find zero mapped pages, end at 0x%lx. Skip this wr. \n", __func__,
-		       (size_t)end_addr);
+		//printk(KERN_INFO "%s, Find zero mapped pages, end at 0x%lx. Skip this wr. \n", __func__,
+		 //      (size_t)end_addr);
 		mapped_pages = 0;
 		goto err; // return 0.
 	}
@@ -1360,8 +1383,9 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	//    CPU server RDMA buffer  registration.
 	// Inform PCI device the dma address of these scatterlist.
 	dma_entry = ib_dma_map_sg(ibdev, rdma_cmd_ptr->sgl, rdma_cmd_ptr->nentry, dir);
-	if (unlikely(dma_entry == 0)) {
-		printk(KERN_ERR "ERROR in %s Registered 0 entries to rdma scatterlist \n", __func__);
+	if (unlikely(dma_entry != rdma_cmd_ptr->nentry)) {
+		printk(KERN_ERR "ERROR in %s Registered %d entries to rdma scatterlist, less than expected %llu \n", 
+			__func__, dma_entry, rdma_cmd_ptr->nentry);
 		mapped_pages = 0;
 		goto err;
 	}
@@ -1618,9 +1642,9 @@ char *semeru_cp_rdma_write(int mem_server_id, int write_type, char __user *start
 	struct semeru_rdma_req_sg *rdma_req_sg;
 
 //#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-if((((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000)) || ((size_t)start_addr>=0x400500000000ULL && (size_t)start_addr <= 0x400508000000))
-	printk(KERN_INFO " %s, mem_server[%d] write_type 0x%x, start_addr : 0x%lx, size : 0x%lx \n", 
-		__func__, mem_server_id, write_type, (unsigned long)start_addr, size);
+//if((((size_t)start_addr>=0x400100000000ULL && (size_t)start_addr <= 0x400108000000)) || ((size_t)start_addr>=0x400500000000ULL && (size_t)start_addr <= 0x400508000000))
+	// printk(KERN_INFO " %s, mem_server[%d] write_type 0x%x, start_addr : 0x%lx, size : 0x%lx \n", 
+	// 	__func__, mem_server_id, write_type, (unsigned long)start_addr, size);
 //#endif
 
 	// #1 Do page alignment,

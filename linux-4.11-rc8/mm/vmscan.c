@@ -788,6 +788,114 @@ cannot_free:
 	return 0;
 }
 
+
+/**
+ * @brief Semeru debug - remove mapping.
+ *
+ * Same as remove_mapping, but if the page is removed from the mapping, it
+ * gets returned with a refcount of 0.
+ *
+ */
+
+static int __semeru_remove_mapping(struct address_space *mapping, struct page *page,
+			    bool reclaimed)
+{
+	unsigned long flags;
+
+	BUG_ON(!PageLocked(page));
+	BUG_ON(mapping != page_mapping(page));
+
+	spin_lock_irqsave(&mapping->tree_lock, flags);
+	/*
+	 * The non racy check for a busy page.
+	 *
+	 * Must be careful with the order of the tests. When someone has
+	 * a ref to the page, it may be possible that they dirty it then
+	 * drop the reference. So if PageDirty is tested before page_count
+	 * here, then the following race may occur:
+	 *
+	 * get_user_pages(&page);
+	 * [user mapping goes away]
+	 * write_to(page);
+	 *				!PageDirty(page)    [good]
+	 * SetPageDirty(page);
+	 * put_page(page);
+	 *				!page_count(page)   [good, discard it]
+	 *
+	 * [oops, our write_to data is lost]
+	 *
+	 * Reversing the order of the tests ensures such a situation cannot
+	 * escape unnoticed. The smp_rmb is needed to ensure the page->flags
+	 * load is not satisfied before that of page->_refcount.
+	 *
+	 * Note that if SetPageDirty is always performed via set_page_dirty,
+	 * and thus under tree_lock, then this ordering is not required.
+	 */
+
+	// ? going to free a page,
+	// it's current refrence must be 2 ?
+	if (!semeru_page_ref_freeze(page, 2)){
+		pr_err("%s:%d can not free page 0x%lx \n", __func__, __LINE__, (unsigned long)page );
+		goto cannot_free;
+	}
+	/* note: atomic_cmpxchg in page_freeze_refs provides the smp_rmb */
+	if (unlikely(PageDirty(page))) {
+		page_ref_unfreeze(page, 2);
+
+		pr_err("%s:%d can not free page 0x%lx \n", __func__, __LINE__, (unsigned long)page );
+
+		goto cannot_free;
+	}
+
+	if (PageSwapCache(page)) {
+		swp_entry_t swap = { .val = page_private(page) };
+		mem_cgroup_swapout(page, swap);
+		__delete_from_swap_cache(page);
+		spin_unlock_irqrestore(&mapping->tree_lock, flags);
+		swapcache_free(swap);
+	} else {
+		void (*freepage)(struct page *);
+		void *shadow = NULL;
+
+		freepage = mapping->a_ops->freepage;
+		/*
+		 * Remember a shadow entry for reclaimed file cache in
+		 * order to detect refaults, thus thrashing, later on.
+		 *
+		 * But don't store shadows in an address space that is
+		 * already exiting.  This is not just an optizimation,
+		 * inode reclaim needs to empty out the radix tree or
+		 * the nodes are lost.  Don't plant shadows behind its
+		 * back.
+		 *
+		 * We also don't store shadows for DAX mappings because the
+		 * only page cache pages found in these are zero pages
+		 * covering holes, and because we don't want to mix DAX
+		 * exceptional entries and shadow exceptional entries in the
+		 * same page_tree.
+		 */
+		if (reclaimed && page_is_file_cache(page) &&
+		    !mapping_exiting(mapping) && !dax_mapping(mapping))
+			shadow = workingset_eviction(mapping, page);
+		__delete_from_page_cache(page, shadow);
+		spin_unlock_irqrestore(&mapping->tree_lock, flags);
+
+		if (freepage != NULL)
+			freepage(page);
+	}
+
+	return 1;
+
+cannot_free:
+	spin_unlock_irqrestore(&mapping->tree_lock, flags);
+	return 0;
+}
+
+
+
+
+
+
 /*
  * Attempt to detach a locked page from its ->mapping.  If it is dirty or if
  * someone else has a ref on the page, abort and return 0.  If it was
@@ -1316,7 +1424,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 				{ // yifan added
 					unsigned long private = page_private(page);
 					swp_entry_t entry = { .val = private };
-					int type = swp_type(entry);
+					//int type = swp_type(entry);
 					pgoff_t offset = swp_offset(entry);
 					unsigned long rvaddr = 0;
 					if (offset < SWAP_ARRAY_LENGTH)
@@ -1333,7 +1441,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 				{ // yifan added
 					unsigned long private = page_private(page);
 					swp_entry_t entry = { .val = private };
-					int type = swp_type(entry);
+					//int type = swp_type(entry);
 					pgoff_t offset = swp_offset(entry);
 					unsigned long rvaddr = 0;
 					if (offset < SWAP_ARRAY_LENGTH)
@@ -1351,7 +1459,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 					{ // yifan added
 						unsigned long private = page_private(page);
 						swp_entry_t entry = { .val = private };
-						int type = swp_type(entry);
+						//int type = swp_type(entry);
 						pgoff_t offset = swp_offset(entry);
 						unsigned long rvaddr = 0;
 						if (offset < SWAP_ARRAY_LENGTH)
@@ -1369,7 +1477,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 					{ // yifan added
 						unsigned long private = page_private(page);
 						swp_entry_t entry = { .val = private };
-						int type = swp_type(entry);
+						//int type = swp_type(entry);
 						pgoff_t offset = swp_offset(entry);
 						unsigned long rvaddr = 0;
 						if (offset < SWAP_ARRAY_LENGTH)
@@ -1392,7 +1500,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 					{ // yifan added
 						unsigned long private = page_private(page);
 						swp_entry_t entry = { .val = private };
-						int type = swp_type(entry);
+						//int type = swp_type(entry);
 						pgoff_t offset = swp_offset(entry);
 						unsigned long rvaddr = 0;
 						if (offset < SWAP_ARRAY_LENGTH)
@@ -1410,7 +1518,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 					{ // yifan added
 						unsigned long private = page_private(page);
 						swp_entry_t entry = { .val = private };
-						int type = swp_type(entry);
+						//int type = swp_type(entry);
 						pgoff_t offset = swp_offset(entry);
 						unsigned long rvaddr = 0;
 						if (offset < SWAP_ARRAY_LENGTH)
@@ -1769,7 +1877,11 @@ static unsigned long ctl_shrink_page_list(struct list_head *page_list,
 				pr_err("%s:%d", __func__, __LINE__);
 				goto activate_locked;
 			}
-			lazyfree = true;
+			
+			// mako
+			// disable lazyfree.
+			//lazyfree = true;
+						
 			may_enter_fs = 1;
 
 			/* Adding to swap updated mapping */
@@ -1937,8 +2049,8 @@ static unsigned long ctl_shrink_page_list(struct list_head *page_list,
 		}
 
 lazyfree:
-		if (!mapping || !__remove_mapping(mapping, page, true)) {
-			pr_err("%s:%d", __func__, __LINE__);
+		if (!mapping || !__semeru_remove_mapping(mapping, page, true)) {
+			pr_err("%s:%d , mapping is NULL ? %d ", __func__, __LINE__, !mapping);
 			goto keep_locked;
 		}
 
@@ -5826,6 +5938,11 @@ unsigned long reclaim_pages(struct list_head *page_list)
 	}
 
 	if (!list_empty(&node_page_list)) {
+
+		//debug
+		// What leads to the failure of the first page-shrink?
+		//pr_err("%s, %d, Try to shink the page_list for a second time. \n", __func__, __LINE__);
+
 		// nr_reclaimed += shrink_page_list(&node_page_list,
 		// 				NODE_DATA(nid),
 		// 				&sc,
