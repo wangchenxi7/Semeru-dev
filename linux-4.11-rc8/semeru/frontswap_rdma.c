@@ -1241,83 +1241,73 @@ uint64_t meta_data_map_sg(struct rdma_session_context *rdma_session, struct scat
 			  char *end_addr)
 {
 	uint64_t entries = 0; // mapped pages
-	size_t package_page_num_limit = 1; // (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
-	//size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	size_t package_page_num_limit = (MAX_REQUEST_SGL - 2); // InfiniBand hardware S/G limits, bytes
+	//size_t package_page_num_limit = 1; // InfiniBand hardware S/G limits, bytes
+
 	pte_t *pte_ptr;
 	struct page *buf_page;
 
 	// Scan and find several, at most package_len_limit, contiguous pages as RDMA buffer.
 	while (*addr_scan_ptr < end_addr) {
-		//printk(KERN_INFO "%s, Current tomap Virt page 0x%lx\n", __func__,
-		//       (size_t)*addr_scan_ptr);
-
-		//[?] Will this walking cause too much overhead ?
+		// [?] Will this walking cause too much overhead ?
+		// [?] It's much safer to lock the pmd here. 
+		// Or the users need to guarantte there is no swap/user-modification to the page-table.
 		pte_ptr = walk_page_table(current->mm, (uint64_t)(*addr_scan_ptr)); 
 
-		if (pte_ptr == NULL || !pte_present(*pte_ptr)) {
-			// 1) not mapped pte, skip it.
-			//    NULL : means never being assigned a page
-			//		not present : means being swapped out.
+
+		// 1) Never touched, skip this page.
+		if(pte_ptr == NULL)
+			goto skip_page;
+
+		// 2)not present : the page is swapped out, OR it's being swapped out.
+		//
+		// if the page is dirty and stays in swap_cache, 
+		// we have to flush it to remote memory servesr.
+		if (!pte_present(*pte_ptr)) {
+
+			// if the page is unmapped, in swap cache and dirty
+			// control path need to write it to remote memory server
+			// Or the memory server tracing can be wrong.
 			//
-			//    Even if the unmapped physical page is in Swap Cache, it's clean.
-			//    All the pages will be written to remote memory server immedialte after being unmapped.
+			// Warning : the try_to_find_page_in_swap_cache will get_page, 
+			// which increased the reference count of the page.
+			// if the data path is swapping out this page, this can cause race problem.
+			// Must drop the page->_refcount via put_page after invoking the page_in_swap_cache()
+			//
+	
 
-#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-			if (pte_ptr == NULL) {
-				printk(KERN_WARNING "%s, Virt page 0x%llx  is NOT touched.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else if (page_in_swap_cache(*pte_ptr) != NULL) {
-				printk(KERN_WARNING "%s, Virt page 0x%llx ->  phys page is in Swap Cache.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else if (!pte_present(*pte_ptr)) {
-				// e.g. the page is swapped to swap partition && the swap_cache entry is freed.
-				printk(KERN_WARNING "%s, Virt page 0x%llx  is NOT present.\n", __func__,
-				       (uint64_t)(*addr_scan_ptr));
-			} else {
-				printk(KERN_WARNING
-				       "%s, Virt page 0x%llx  is NOT mapped to physical page (unknown mode).\n",
-				       __func__, (uint64_t)(*addr_scan_ptr));
-			}
-#endif
-
-			// Flush the swap_cached dirty pages to remote memory servers
-			// Warning : page->_refcount is increased by one here.
+			// flush the swap-cached dirty page to memory servers
+		
 			buf_page = page_in_swap_cache(*pte_ptr);
 			if ( buf_page != NULL  ) {
 
 				if(PageDirty(buf_page) ){
+//#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
 				 	printk(KERN_WARNING "%s, Virt page 0x%llx -> (dirty) phys page is in Swap Cache. Flushed.\n", __func__,
-				        	(uint64_t)(*addr_scan_ptr));
-
+				        		(uint64_t)(*addr_scan_ptr));
+//#endif						
 
 					// drop the refcount by one here.
 					put_page(buf_page);
-					goto find_page;
-				}
+					goto found_page;
+				} // find a swap-cached dirty page
 					
+				// skip thsi page
 				// drop the refcount by one
 				put_page(buf_page);
-			}
+			} // target page is in swap-cache
 
-			// end of debug
+			goto skip_page;
+		} // end of non-present
 
-
-			// Exit#1, Find a breaking point.
-			// Stop building the S/G buffer.
-			if (entries != 0) {
-				goto out; // Break RDMA buffer registration
-			} else {
-				// Skip the unmapped page at the beginning, update the iterator.
-				*addr_scan_ptr += PAGE_SIZE;
-				continue; // goto find the first mapped pte.
-			}
-
-		} // end of if
-
-		// 2) Page Walk the mapped pte.
+		
+		// 3) Default-Path : Page Walk the mapped pte.
+		//
+		// TO be done: filter out the non-dirty pages. 
+		//
 		buf_page = pfn_to_page(pte_pfn(*pte_ptr));
 
-find_page:
+found_page:
 		// Assign a page to s/g. entire apge, offset in page is 0x0,.
 		sg_set_page(&(sgl[entries++]), buf_page, PAGE_SIZE, 0); 
 
@@ -1330,16 +1320,33 @@ find_page:
 		// Find a mapped page, update the interator pointer
 		*addr_scan_ptr += PAGE_SIZE;
 
-		// Exit#2, Find enough contiguous virtual pages.
+		// Exit#1, Find enough contiguous virtual pages.
 		if (entries >= package_page_num_limit) {
 			goto out;
 		}
+		
+		continue; // goto find the first mapped pte.
 
-	} // end of for
+
+skip_page:
+		// Exit#2, Find a breaking point.
+		// Stop building the S/G buffer.
+		if (entries != 0) {
+			goto out; // Break RDMA buffer registration
+		} else {
+			// Skip the unmapped page at the beginning, update the iterator.
+			*addr_scan_ptr += PAGE_SIZE;
+		}
+
+
+	} // end of while
 
 out:
 	return entries; // number of initialized ib_sge
 }
+
+
+
 
 /**
  * Control-Path, build a rdma wr for the RDMA read/write in CP.
@@ -1361,8 +1368,8 @@ int cp_build_rdma_wr(struct rdma_session_context *rdma_session, struct semeru_rd
 	struct ib_device *ibdev = rdma_session->rdma_dev->dev; // get the ib_devices
 
 #if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
-	// printk(KERN_INFO "%s, build wr for range [0x%llx, 0x%llx)\n", __func__, (uint64_t)*addr_scan_ptr,
-	//        (uint64_t)end_addr);
+	 printk(KERN_INFO "%s, build wr for range [0x%llx, 0x%llx)\n", __func__, (uint64_t)*addr_scan_ptr,
+	        (uint64_t)end_addr);
 #endif
 
 	// 1) Register the CPU server's local RDMA buffer.
