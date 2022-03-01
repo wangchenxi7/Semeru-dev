@@ -1506,6 +1506,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 			if(within_range(pvmw.address)){
 
 				// Count the swap out page information
+				// All of the unmapped pages should be counted,
+				// even though he page is not paged out.
+				// 
 				swap_out_one_page_record((u64)pvmw.address);
 			
 				#ifdef DEBUG_SWAP_PATH_DETAIL

@@ -2822,24 +2822,10 @@ int do_swap_page(struct vm_fault *vmf)
 		goto out_page;
 	}
 
-
-	// Semeru CPU support  
-	// -- Record the number of swapin only when we need to map PTE-Page.
-	// -- The requested page hit on Swap Cache. or read directly from BD.
-	// 		Because kernel usually swaps in mutiple contiguous pages from Block Device.
-	// -- This variable record the pte <-> Page mapping number, not the actual swapin information.
-	#ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
-	if(within_range(vmf->address)){
-		swap_in_one_page_record(vmf->address); 
-	}
-	#endif
-
-	//printk(KERN_INFO"%s, on-demand swap in 0x%x \n", __func__, get_on_demand_swapin_number());
-	//printk(KERN_INFO"%s, hit on swap cache 0x%x \n", __func__, get_hit_on_swap_cache_number());
-
-
 	/*
 	 * Back out if somebody else already faulted in this pte.
+	 *
+	 * going to update the pte. Acquire the pmd lock to prevent further lock contention.
 	 */
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
 			&vmf->ptl);
@@ -2873,8 +2859,31 @@ int do_swap_page(struct vm_fault *vmf)
 	flush_icache_page(vma, page);
 	if (pte_swp_soft_dirty(vmf->orig_pte)) // If the original pte has _PAGE_SOFT_DIRTY, keep it.
 		pte = pte_mksoft_dirty(pte);
+	
+	// This thread acquired the pmd lock, we can update the pte now.
+	// ? this prevent further page-fault on this pte?
 	set_pte_at(vma->vm_mm, vmf->address, vmf->pte, pte);  // 4) Write new physical addr into pte.  pte --> vmf.pte
-	vmf->orig_pte = pte;
+	vmf->orig_pte = pte;  
+
+	// Semeru CPU support  
+	// 1) Record the number of swapin only when we need to map PTE-Page.
+	// 2) The requested page hit on Swap Cache. or read directly from swap-partition.
+	// 		Because kernel usually swaps in mutiple contiguous pages from Block Device.
+	// 3) This variable record the pte <-> Page mapping number, not the actual swapin information.
+	// 4) Multiple threads can fault on the same PTE. 
+	//    We need to confirm that we mapped the page.
+	//
+	#ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+	if(within_range(vmf->address)){
+		swap_in_one_page_record(vmf->address); 
+	}
+	#endif
+
+	//printk(KERN_INFO"%s, on-demand swap in 0x%x \n", __func__, get_on_demand_swapin_number());
+	//printk(KERN_INFO"%s, hit on swap cache 0x%x \n", __func__, get_hit_on_swap_cache_number());
+
+
+
 	if (page == swapcache) {		// Don't copy, use the swapped in page directly.
 		do_page_add_anon_rmap(page, vma, vmf->address, exclusive);
 		mem_cgroup_commit_charge(page, memcg, true, false);
@@ -2904,7 +2913,7 @@ int do_swap_page(struct vm_fault *vmf)
 		 * parallel locked swapcache.
 		 */
 		unlock_page(swapcache);
-		put_page(swapcache);    // [?] Drop the _refcount for what ?
+		put_page(swapcache);    // [] Drop the _refcount of the page? 
 	}
 
 	if (vmf->flags & FAULT_FLAG_WRITE) {

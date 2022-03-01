@@ -56,6 +56,10 @@
 #define REGION_SIZE_GB 4UL // RDMA manage granularity, not the Heap Region.
 #define RDMA_META_REGION_NUM 1UL
 
+// JVM configurations
+#define HEAP_REGION_BYTE_LOG	20UL // Update the value to log(heap_region_size) 
+#define HEAP_REGION_NUM		64*ONE_KB // The number of heap region
+
 
 #ifdef LARGE
 #define RDMA_DATA_REGION_NUM 16UL
@@ -129,6 +133,10 @@
 //
 // Basic Macro
 //
+
+#ifndef ONE_KB
+#define ONE_KB ((size_t)1024) // 1024 x 2014 bytes
+#endif
 
 #ifndef ONE_MB
 #define ONE_MB ((size_t)1048576) // 1024 x 2014 bytes
@@ -351,7 +359,7 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 // +512MB for bitmap
 
 #define INDIRECTION_OFFSET                    (size_t)(SATB_BUFFER_OFFSET + SATB_BUFFER_SIZE_LIMIT) //2048M, 0x400,080,000,000
-#define INDIRECTION_TABLE_SIZE_LIMIT                (size_t)(0 * (size_t)ONE_MB)
+#define INDIRECTION_TABLE_SIZE_LIMIT          (size_t)(0 * (size_t)ONE_MB)
 
 
 
