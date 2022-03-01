@@ -261,9 +261,9 @@ static inline void swap_out_one_page_record(u64 vaddr){
 	u64 entry_ind = (vaddr - SWAP_OUT_MONITOR_VADDR_START) >> SWAP_OUT_MONITOR_UNIT_LEN_LOG;
 	atomic_inc(&jvm_region_swap_out_counter[entry_ind]);
 
-	//#ifdef DEBUG_MODE_DETAIL
+	#ifdef DEBUG_MODE_DETAIL
 		printk("%s, swap out page, entry[0x%llx] vaddr 0x%llx \n", __func__, entry_ind, vaddr);
-	//#endif
+	#endif
 }
 
 // Cause we can't monitor the pages via prefeched path accurately. 
@@ -274,9 +274,9 @@ static inline void swap_in_one_page_record(u64 vaddr){
 	//jvm_region_swap_out_counter[entry_ind]--;
 	atomic_dec(&jvm_region_swap_out_counter[entry_ind]);
 
-	//#ifdef DEBUG_MODE_DETAIL
+	#ifdef DEBUG_MODE_DETAIL
 		printk("%s, swap in page, entry[0x%llx], vaddr 0x%llx \n", __func__, entry_ind, vaddr);
-	//#endif
+	#endif
 }
 
 /**
