@@ -187,8 +187,12 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 /**
  * Semeru CPU, reset array initial value to 0.
  * 
- * 	return 0 , succ,
- * 				-1 , error. 
+ * return 0 , succ,
+ * -1 , error. 
+ *
+ * Declared in arch/x86/entry/syscalls/syscall_64.tbl
+ * 335 common  swap_stat_reset_and_check   sys_swap_stat_reset_and_check
+ * 336 common  num_of_swap_out_pages       sys_num_of_swap_out_pages
  * 
  */
 asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len)
@@ -216,14 +220,14 @@ asmlinkage int sys_swap_stat_reset_and_check(u64 start_vaddr, u64 bytes_len)
 	if ((u64)start_vaddr >= SWAP_OUT_MONITOR_VADDR_START &&
 	    bytes_len <= (u64)(SWAP_OUT_MONITOR_ARRAY_LEN * (1 << SWAP_OUT_MONITOR_UNIT_LEN_LOG))) {
 		for (i = 0; i < SWAP_OUT_MONITOR_ARRAY_LEN; i++) {
-			//jvm_region_swap_out_counter[i] = 0;
+			// How about only reset the used range to save some initilization time?
 			atomic_set(&jvm_region_swap_out_counter[i], 0);
 		}
 
 		printk(KERN_INFO "%s, Region monitoring, reset jvm_region_swap_out_counter[] to 0 \n", __func__);
 
 		return 0;
-	} // end of if.
+	}
 #endif
 
 	printk(KERN_ERR "%s, [0x%llx, 0x%llx) exceed the swap out array range [0x%llx, 0x%llx),  ", __func__,

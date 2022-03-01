@@ -20,11 +20,11 @@
 //
 
 
-//#define SWAP_OUT_MONITOR_VADDR_START		(size_t)(SEMERU_START_ADDR+ RDMA_STRUCTURE_SPACE_SIZE)  // Start of Data Regions, 0x400,100,000,000
-#define SWAP_OUT_MONITOR_VADDR_START		(size_t)SEMERU_START_ADDR // Start of Meta Region, 0x400,000,000,000
-#define SWAP_OUT_MONITOR_UNIT_LEN_LOG		26 // 1<<26, recording granulairy is 64M per entry. The query can span multiple entries.
-#define SWAP_OUT_MONITOR_OFFSET_MASK		(u64)(~((1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG) -1))		//0xfffffffff0000000
-#define SWAP_OUT_MONITOR_ARRAY_LEN		(u64)2*1024*1024 //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
+#define SWAP_OUT_MONITOR_VADDR_START		(size_t)(SEMERU_START_ADDR+ RDMA_STRUCTURE_SPACE_SIZE)  // Start of Data Regions, 0x400,100,000,000
+//#define SWAP_OUT_MONITOR_VADDR_START		(size_t)SEMERU_START_ADDR // Start of Meta Region, 0x400,000,000,000
+#define SWAP_OUT_MONITOR_UNIT_LEN_LOG		HEAP_REGION_BYTE_LOG // e.g., 1<<20, recording granulairy is 1M per entry. The query can span multiple entries.
+#define SWAP_OUT_MONITOR_OFFSET_MASK		(u64)(~((1<<SWAP_OUT_MONITOR_UNIT_LEN_LOG) -1))		//0xffff,ffff,fff0,0000
+#define SWAP_OUT_MONITOR_ARRAY_LEN		(u64)HEAP_REGION_NUM //2M item, Coverred heap size: SWAP_OUT_MONITOR_ARRAY_LEN * (1<<SWAP_OUT_MONITOR_UNIT_LENG_LOG)
 
 
 
@@ -244,6 +244,13 @@ static inline int get_hit_on_swap_cache_number(void){
 }
 
 
+
+//
+// Please invoke the syscall sys_swap_stat_reset_and_check to initialize the parameters.
+//
+
+
+
 //
 // The swap out procedure is done by kernel.
 // 1) It should be 1-thread.
@@ -252,7 +259,6 @@ static inline int get_hit_on_swap_cache_number(void){
 //	  If it's swapped in, we already decrease it from the count.
 static inline void swap_out_one_page_record(u64 vaddr){
 	u64 entry_ind = (vaddr - SWAP_OUT_MONITOR_VADDR_START) >> SWAP_OUT_MONITOR_UNIT_LEN_LOG;
-	//jvm_region_swap_out_counter[entry_ind]++;
 	atomic_inc(&jvm_region_swap_out_counter[entry_ind]);
 
 	#ifdef DEBUG_MODE_DETAIL
@@ -282,8 +288,8 @@ static inline void swap_in_one_page_record(u64 vaddr){
  */
 static inline u64 swap_out_pages_for_range(u64 start_vaddr, u64 end_vaddr){
 	u64 entry_start = (start_vaddr - SWAP_OUT_MONITOR_VADDR_START)>> SWAP_OUT_MONITOR_UNIT_LEN_LOG;
-	u64 entry_end		=	(end_vaddr -1 - SWAP_OUT_MONITOR_VADDR_START)>> SWAP_OUT_MONITOR_UNIT_LEN_LOG;
-	u64 swap_out_total = 0;
+	u64 entry_end	= (end_vaddr -1 - SWAP_OUT_MONITOR_VADDR_START)>> SWAP_OUT_MONITOR_UNIT_LEN_LOG;
+	long swap_out_total = 0;
 	u32 i;
 
 	#if defined(DEBUG_MODE_BRIEF) || defined(DEBUG_MODE_DETAIL)
@@ -295,6 +301,13 @@ static inline u64 swap_out_pages_for_range(u64 start_vaddr, u64 end_vaddr){
 	for(i=entry_start; i<=entry_end; i++ ){
 		swap_out_total += (u64)atomic_read(&jvm_region_swap_out_counter[i]);
 	}
+
+	// saint check
+	if(swap_out_total < 0){
+		pr_err("%s, counter is wrong. swap_out_total is negative %ld. reset it to 0. RESET it to 0.", __func__, swap_out_total);
+		swap_out_total = 0;
+	}
+
 
 	return swap_out_total;
 }

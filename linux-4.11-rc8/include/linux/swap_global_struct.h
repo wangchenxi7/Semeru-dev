@@ -57,6 +57,10 @@
 // #define RDMA_META_REGION_NUM 1UL
 #define RDMA_META_REGION_NUM 2UL
 
+// JVM configurations
+#define HEAP_REGION_BYTE_LOG	20UL // Update the value to log(heap_region_size) 
+#define HEAP_REGION_NUM		64*ONE_KB // The number of heap region
+
 
 #ifdef LARGE
 #define RDMA_DATA_REGION_NUM 16UL
@@ -130,6 +134,10 @@
 //
 // Basic Macro
 //
+
+#ifndef ONE_KB
+#define ONE_KB ((size_t)1024) // 1024 x 2014 bytes
+#endif
 
 #ifndef ONE_MB
 #define ONE_MB ((size_t)1048576) // 1024 x 2014 bytes
