@@ -42,8 +42,8 @@
 //    frontswap path only supports one memory server now. We will add the supports of multiple memory servers later.
 #define SEMERU_FRONTSWAP_PATH 1
 
-// #define SMALL
-#define LARGE
+#define SMALL
+// #define LARGE
 
 
 //
