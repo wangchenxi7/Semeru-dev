@@ -60,15 +60,6 @@ We ﬁrst discuss how to build and install the kernel.
   + transparent_hugepage=madvise
   ```
 
-- Modify `Semeru/linux-4.11-rc8/include/linux/swap_global_struct.h` as desired, e.g.,
-
-  ```c++
-  #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1 ->
-  //#define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
-  #define RDMA_DATA_REGION_NUM 2UL  // default 32GB ->
-  #define RDMA_DATA_REGION_NUM 8UL  // default 32GB
-  ```
-
 - Install the kernel and restart the machine on both CPU server and memory servers:
 
   ```bash
@@ -95,7 +86,7 @@ We ﬁrst discuss how to build and install the kernel.
 
   After installing the OFED driver, please confirm the RDMA works well between the CPU server and memory servers.
 
-- Build and install *Semeru* RDMA module
+- Build and install *Semeru* RDMA module on the CPU server
 
   ```bash
   # Configure the number and memory resources of memory servers
@@ -127,38 +118,6 @@ sudo yum groupinstall "Development Tools" -y
 sudo yum install libXtst-devel libXt-devel libXrender-devel libXrandr-devel libXi-devel cups-devel fontconfig-devel alsa-lib-devel -y
 ```
 
-#### Install the CPU-Server JVM
-
-We next discuss the steps to build and install the CPU-server JVM.
-
-- Download Oracle JDK 12 to build *Semeru* JVM
-
-  ```bash
-  # Assume jdk 12.0.2 is under path: ${home_dir}/jdk-12.0.2 
-  # Or change the path in shell script, ~/Semeru/CPU-Server/build_cpu_server.sh
-  code ~/Semeru/CPU-Server/build_cpu_server.sh
-  boot_jdk="${home_dir}/jdk-12.0.2"
-  ```
-
-- Build the CPU-server JVM
-
-  ```bash
-  # ${build_mode} can be one of the three modes:
-  # slowdebug, fastdebug, or release.
-  # We recommend slowdebug mode to debug the JVM code 
-  # and release mode to test the performance.
-  # Please make sure both the CPU server and 
-  # memory servers use the same build mode.
-  cd ~/Semeru/CPU-Server/
-  ./build_cpu_server.sh ${build_mode}
-  ./build_cpu_server.sh release
-  ./build_cpu_server.sh build
-  # Take release mode as example — the compiled JVM will be in:
-  # ~/Semeru/CPU-Server/build/linux-x86_64-server-release/jdk
-  ```
-
-
-
 #### Install the Memory-Server LJVM
 
 The next step is to install the LJVM on each memory server.
@@ -172,13 +131,13 @@ The next step is to install the LJVM on each memory server.
   boot_jdk="${home_dir}/jdk-12.0.2"
   ```
 
-- Get source code for the modified version of memory server for branch `haoran_use`
+- Get source code for the memory server
 
   ```bash
   # ask Haoran for permissions
   git clone https://github.com/mahaoran1997/NewPauselessMemory.git
   cd NewPauselessMemory
-  git checkout compaction
+  git checkout 450aaeffb8047f2f5974ed0d72ec0c5490125bda
   ```
 
 - Change the IP addresses
@@ -188,7 +147,7 @@ The next step is to install the LJVM on each memory server.
   // Change the IP address and ID in ﬁle:
   // ~/NewPauselessMemory/src/hotspot/share/utilities/globalDefinitions.hpp
   // @Mem-server #0
-  #define NUM_OF_MEMORY_SERVER 2
+  #define NUM_OF_MEMORY_SERVER 1
   #define CUR_MEMORY_SERVER_ID 0
   static const char cur_mem_server_ip[] = "10.0.0.2";
   static const char cur_mem_server_port[]= "9400";
@@ -197,11 +156,10 @@ The next step is to install the LJVM on each memory server.
 - Build and install the LJVM
 
   ```bash
-  # Use the same ${build_mode} as the CPU-server JVM.
   cd ~/NewPauselessMemory
-  ~/Semeru/Memory-Server/build_memory_server.sh ${build_mode}
-  ~/Semeru/Memory-Server/build_memory_server.sh build
-  # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-${build_mode}/jdk
+  ~/Semeru/Memory-Server/build_memory_server.sh configure release
+  ~/Semeru/Memory-Server/build_memory_server.sh build release
+  # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-release/jdk
   ```
 
 
@@ -231,8 +189,6 @@ To run applications, we ﬁrst need to connect the CPU server with memory server
   # We don't recommend to change the Java heap size right now.
   # Please refer to the Known Issues chapter for more details.
   cd ~/Semeru/ShellScript/
-  ## modifiy `home_dir` in install_semeru_module.sh
-  code install_semeru_module.sh
   ./install_semeru_module.sh semeru
   # To close the swap partition, do the following:
   # @CPU server
