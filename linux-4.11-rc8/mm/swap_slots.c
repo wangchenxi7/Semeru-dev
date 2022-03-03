@@ -250,18 +250,67 @@ out_unlock:
 	return 0;
 }
 
-/* called with swap slot cache's alloc lock held */
+
+/**
+ * @brief reuse the stale swap slots
+ * 
+ */
+static inline void reuse_swap_slots_cache(struct swap_slots_cache *cache,
+       struct swap_slots_cache *victim)
+{
+ 	// append slot entries from slots_ret[] to the tail of slots[]
+ 	while (cache->cur + cache->nr < SWAP_SLOTS_CACHE_SIZE && victim->n_ret) {
+		victim->n_ret--;
+  		cache->slots[cache->cur + cache->nr] = victim->slots_ret[victim->n_ret];
+  		cache->nr++;
+ 	}
+
+ 	// append slot entries from slots_ret[] to the head of slots[]
+ 	while (cache->nr < SWAP_SLOTS_CACHE_SIZE && cache->cur && victim->n_ret) {
+  		victim->n_ret--;
+  		cache->cur--;
+  		cache->slots[cache->cur] = victim->slots_ret[victim->n_ret];
+  		cache->nr++;
+ 	}
+}
+
 static int refill_swap_slots_cache(struct swap_slots_cache *cache)
 {
-	if (!use_swap_slot_cache || cache->nr)
-		return 0;
+ 	if (!use_swap_slot_cache || cache->nr)
+  		return 0;
 
-	cache->cur = 0;
-	if (swap_slot_cache_active)
-		cache->nr = get_swap_pages(SWAP_SLOTS_CACHE_SIZE, cache->slots);
+ 	if (!spin_trylock_irq(&cache->free_lock))
+  		goto slowpath;
 
-	return cache->nr;
+ 	reuse_swap_slots_cache(cache, cache);
+ 	spin_unlock_irq(&cache->free_lock);
+ 
+ 	if (cache->nr)
+  		return cache->nr;
+
+slowpath:
+ 	cache->cur = 0;
+ 	if (swap_slot_cache_active)
+  		cache->nr = get_swap_pages(SWAP_SLOTS_CACHE_SIZE, cache->slots);
+
+ 	return cache->nr;
 }
+
+
+
+
+/* called with swap slot cache's alloc lock held */
+//static int refill_swap_slots_cache(struct swap_slots_cache *cache)
+//{
+//	if (!use_swap_slot_cache || cache->nr)
+//		return 0;
+//
+//	cache->cur = 0;
+//	if (swap_slot_cache_active)
+//		cache->nr = get_swap_pages(SWAP_SLOTS_CACHE_SIZE, cache->slots);
+//
+//	return cache->nr;
+//}
 
 int free_swap_slot(swp_entry_t entry)
 {
