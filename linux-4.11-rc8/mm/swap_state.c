@@ -423,8 +423,12 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 * that would confuse statistics.
 		 */
 		found_page = find_get_page(swapper_space, swp_offset(entry));
-		if (found_page)
+		if (found_page) {
+			#ifdef DEBUG_SHI_UNUSED
+				printk(KERN_ERR "*** %s: find_get_page succeeded \n", __func__);
+			#endif
 			break;
+		}
 
 		/*
 		 * Just skip read ahead for unused swap slot.
@@ -434,24 +438,36 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 * as SWAP_HAS_CACHE.  That's done in later part of code or
 		 * else swap_off will be aborted if we return NULL.
 		 */
-		if (!__swp_swapcount(entry) && swap_slot_cache_enabled)
+		if (!__swp_swapcount(entry) && swap_slot_cache_enabled) {
+			#ifdef DEBUG_SHI
+				printk(KERN_ERR "*** %s: wrong ref count: %d.\n", __func__, __swp_swapcount(entry));
+			#endif
 			break;
+		}
 
 		/*
 		 * Get a new page to read into from swap.
 		 */
 		if (!new_page) {
 			new_page = alloc_page_vma(gfp_mask, vma, addr);
-			if (!new_page)
+			if (!new_page) {
+				#ifdef DEBUG_SHI
+					printk(KERN_ERR "*** %s: alloc_page_vma failed.\n", __func__);
+				#endif
 				break;		/* Out of memory */
+			}
 		}
 
 		/*
 		 * call radix_tree_preload() while we can wait.
 		 */
 		err = radix_tree_maybe_preload(gfp_mask & GFP_KERNEL);
-		if (err)
+		if (err) {
+			#ifdef DEBUG_SHI
+				printk(KERN_ERR "*** %s: radix_tree_maybe_preload failed.\n", __func__);
+			#endif
 			break;
+		}
 
 		/*
 		 * Swap entry may have been freed since our caller observed it.
@@ -460,6 +476,9 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 */
 		err = swapcache_prepare(entry);
 		if (err == -EEXIST) {
+			#ifdef DEBUG_SHI
+				printk(KERN_ERR "*** %s: swapcache_prepare failed with EEXIST.\n", __func__);
+			#endif
 			radix_tree_preload_end();
 			/*
 			 * We might race against get_swap_page() and stumble
@@ -476,10 +495,14 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			 * scheduler here, if there are some more important
 			 * tasks to run.
 			 */
+			// Shi*: What does this mean?
 			cond_resched();
 			continue;    // retry ?
 		}
 		if (err) {		/* swp entry is obsolete ? */
+			#ifdef DEBUG_SHI
+				printk(KERN_ERR "*** %s: swapcache_prepare failed with other errors.\n", __func__);
+			#endif
 			radix_tree_preload_end();
 			break;
 		}
@@ -489,6 +512,9 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		__SetPageSwapBacked(new_page);
 		err = __add_to_swap_cache(new_page, entry);   // add the newly allocated physical page into swap_cache.
 		if (likely(!err)) {
+			#ifdef DEBUG_SHI_UNUSED
+				printk(KERN_ERR "*** %s: __add_to_swap_cache succeeded.\n", __func__);
+			#endif
 			radix_tree_preload_end();
 			/*
 			 * Initiate read into locked page and return.
@@ -505,6 +531,9 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 */
 		swapcache_free(entry);
 	} while (err != -ENOMEM);
+	#ifdef DEBUG_SHI_UNUSED
+		printk(KERN_ERR "*** %s: get out of the loop with err: %d \n", __func__, err);
+	#endif
 
 	if (new_page)
 		put_page(new_page);  // free physical page 

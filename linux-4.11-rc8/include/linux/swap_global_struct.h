@@ -129,6 +129,8 @@
 //#define DEBUG_RDMA_ONLY 1			// Only build and install RDMA modules.
 //#define DEBUG_FRONTSWAP_ONLY 1    // Use the local DRAM, not connect to RDMA
 
+#define DEBUG_SHI 1
+
 //#define ASSERT 1		// general debug
 
 //

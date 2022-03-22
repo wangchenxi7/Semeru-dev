@@ -273,7 +273,7 @@ bool __frontswap_test(struct swap_info_struct *sis,
 }
 EXPORT_SYMBOL(__frontswap_test);
 
-static inline void __frontswap_set(struct swap_info_struct *sis,
+inline void __frontswap_set(struct swap_info_struct *sis,
 				   pgoff_t offset)
 {
 	set_bit(offset, sis->frontswap_map);

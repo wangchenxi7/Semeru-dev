@@ -2358,7 +2358,7 @@ static unsigned long semeru_shrink_page_list(struct list_head *page_list,
 			if (!add_to_swap(page, page_list))   // if succ, return 1. Anonymous Page 1) Add the anonymous page into swap_cache.
 				goto activate_locked;
 			//lazyfree = true;				// [?] for the flush-page-list, we need to reset this ??
-		 lazyfree = false;		// Free immediate.
+			lazyfree = false;		// Free immediate.
 			may_enter_fs = 1;
 
 			/* Adding to swap updated mapping */

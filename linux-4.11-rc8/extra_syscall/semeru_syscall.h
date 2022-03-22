@@ -59,3 +59,4 @@ struct semeru_rdma_ops  rdma_ops_in_kernel;
 
 
 int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr);
+int semeru_set_ptes_to_swap_entries(unsigned long start_addr, unsigned long end_addr);

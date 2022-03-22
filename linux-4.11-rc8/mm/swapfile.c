@@ -1041,11 +1041,43 @@ static unsigned char __swap_entry_free(struct swap_info_struct *p,
 	//				 [?] if invoked after deleting the Swap Cache, p->swap_map[offset] value is also setted as SWAP_HAS_CACHE ??
 	//         
 	//     2） if count!=0, usage != 0, then assign count to the p->swap_map[offset].
-	p->swap_map[offset] = usage ? : SWAP_HAS_CACHE;   
+	// Shi*: Why does it set swap_map to SWAP_HAS_CACHE when there is no usage??
+	// Shi*: This may be the reason of the infinite loop waiting on the swap cache to be freed when swapping in
+	p->swap_map[offset] = usage ? : SWAP_HAS_CACHE;  
+	#ifdef DEBUG_SHI_UNUSED
+		if (has_cache == 0) {
+			printk("%s, swap_map[%lx] = %lx \n", __func__, offset, p->swap_map[offset]);
+		}
+	#endif
 
 	unlock_cluster_or_swap_info(p, ci);
 
 	return usage;  // If any process is referencing this swap_entry_t, not free it.
+}
+
+void swap_entry_clear_map(swp_entry_t entry) {
+	struct swap_info_struct *p = __swap_info_get(entry);
+	struct swap_cluster_info *ci;
+	unsigned long offset = swp_offset(entry);
+	unsigned char count;
+	ci = lock_cluster(p, offset);
+	count = p->swap_map[offset];
+	VM_BUG_ON(count != SWAP_HAS_CACHE);
+	p->swap_map[offset] = 0;
+	unlock_cluster(ci);
+}
+
+void swap_entry_clear_cache_bit(swp_entry_t entry) {
+	struct swap_info_struct *p = __swap_info_get(entry);
+	struct swap_cluster_info *ci;
+	unsigned long offset = swp_offset(entry);
+	unsigned char count;
+	ci = lock_cluster(p, offset);
+	count = p->swap_map[offset];
+	bool has_cache = count & SWAP_HAS_CACHE;
+	VM_BUG_ON(!has_cache);
+	p->swap_map[offset] = count & ~SWAP_HAS_CACHE;
+	unlock_cluster(ci);
 }
 
 static void swap_entry_free(struct swap_info_struct *p, swp_entry_t entry)
@@ -1062,7 +1094,10 @@ static void swap_entry_free(struct swap_info_struct *p, swp_entry_t entry)
 
 	ci = lock_cluster(p, offset);
 	count = p->swap_map[offset];
+	// Shi: swap_map is set to SWAP_HAS_CACHE when reference | SWAP_HAS_CACHE reaches 0, see __swap_entry_free(p, entry, SWAP_HAS_CACHE)
 	VM_BUG_ON(count != SWAP_HAS_CACHE);
+	// Shi: swap_map[offset] in returned slot cache is not set to 0 when calling free_swap_slot(),
+	// Shi: until here or reuse_swap_slots_cache() when calling swap_entry_clear_map()
 	p->swap_map[offset] = 0;
 	dec_cluster_info_page(p, p->cluster_info, offset);
 	unlock_cluster(ci);
@@ -1382,8 +1417,10 @@ int free_swap_and_cache(swp_entry_t entry)
 	if (p) {
 		count = __swap_entry_free(p, entry, 1);
 		if (count == SWAP_HAS_CACHE) {
+			// Shi: find page, add increment page ref
 			page = find_get_page(swap_address_space(entry),
 					     swp_offset(entry));
+			// Shi: if lock page failed, decrement page ref and don't process it
 			if (page && !trylock_page(page)) {
 				put_page(page);
 				page = NULL;
@@ -1396,12 +1433,17 @@ int free_swap_and_cache(swp_entry_t entry)
 		 * Not mapped elsewhere, or swap space full? Free it!
 		 * Also recheck PageSwapCache now page is locked (above).
 		 */
+		// Shi: if page is in swap cache and not mapped anymore
 		if (PageSwapCache(page) && !PageWriteback(page) &&
 		    (!page_mapped(page) || mem_cgroup_swap_full(page))) {
+			#ifdef DEBUG_SHI_UNUSED
+				printk("%s, free swap cache for page 0x%llx \n", __func__, (u64)page);
+			#endif
 			delete_from_swap_cache(page);  // Delete from Swap Cache && decrease the _refcount 
 			SetPageDirty(page);
 		}
 		unlock_page(page);
+		// Shi: remove our ref to the page
 		put_page(page);	// Try to free the page.
 	}
 	return p != NULL;

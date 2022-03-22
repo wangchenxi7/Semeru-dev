@@ -42,6 +42,8 @@
 #include <linux/swap_global_struct_bd_layer.h>
 #include <linux/swap_global_struct_mem_layer.h>
 #include <linux/swapops.h>
+#include <linux/swapfile.h>
+#include <linux/frontswap.h>
 #include <asm/tlb.h>
 
 
@@ -2021,6 +2023,14 @@ static int semeru_test_walk(unsigned long start, unsigned long end, struct mm_wa
  return 0;
 }
 
+static int semeru_set_pte_hole(unsigned long addr, unsigned long next, struct mm_walk *walk)
+{
+#ifdef DEBUG_SHI
+	printk("*** semeru_set_pte_hole: addr=%lx, next=%lx\n", addr, next);
+#endif
+	return 0;
+}
+
 // define the swap out operations for each level
 static struct mm_walk semeru_swapout_walk_ops = {
  .pmd_entry = semeru_swapout_pmd_range,
@@ -2344,6 +2354,132 @@ if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000UL
 	return 0;
 }
 
+
+static struct mm_walk semeru_set_pte_walk_ops = {
+ .pmd_entry = semeru_set_pte_pmd_range,
+ .test_walk = semeru_test_walk,
+ .pte_hole  = semeru_set_pte_hole
+};
+
+/**
+ * @brief 
+ * 
+ * @param tlb : record the TLB flusing information. 
+ * @param vma : the vma to be swapped out.
+ * @param addr : start virt addr
+ * @param end  : end virt addr
+ * 
+ * @return ret : 
+ * 	0 : success.
+ * 	non-zero : error code
+ */
+int semeru_set_pte_page_range(struct mmu_gather *tlb,
+			     struct mm_struct *mm,
+			     unsigned long addr, unsigned long end)
+{
+	struct semeru_swapout_walk_private walk_private = {
+		.pageout = true,
+		.tlb = tlb,
+	};
+
+	int ret;
+
+	// initialize the mm_walk
+	semeru_set_pte_walk_ops.mm = mm;
+	semeru_set_pte_walk_ops.private = &walk_private;
+
+	tlb_start_vma(tlb, vma);
+	ret = sb_walk_page_range(addr, end, &semeru_set_pte_walk_ops);
+	tlb_end_vma(tlb, vma);
+
+	return ret;
+}
+
+/*
+ * @brief Swap out all the pages of a pmd entry.
+ * 
+ * @param pmd 
+ * @param addr : the start virt addr. Used to limit the swap out range of this pmd.
+ * @param end  : the end virt addr. Used to limit the swap out range of this pmd.
+ * @param walk 
+ * @return int 
+ * 	0 : success
+ * 	positive value: the page skipped.
+ * 	negative : error
+ */
+int semeru_set_pte_pmd_range(pmd_t *pmd,
+				unsigned long addr, unsigned long end,
+				struct mm_walk *walk)
+{
+	struct semeru_swapout_walk_private *private = walk->private;
+	struct mmu_gather *tlb = private->tlb;
+	struct mm_struct *mm = tlb->mm;
+	struct vm_area_struct *vma = walk->vma;
+	pte_t *orig_pte, *pte, ptent;
+	spinlock_t *ptl;
+	size_t skipped_page = 0;
+	size_t reclaimed_page = 0;
+
+#if defined(DEBUG_MODE_BRIEF)
+	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
+	pr_warn("%s, setting PTEs for range [0x%lx, 0x%lx)\n",
+		__func__, addr, end);
+#endif
+
+#ifdef CONFIG_TRANSPARENT_HUGEPAGE
+	if (pmd_trans_huge(*pmd)) {
+		pr_warn("%s, !! Disable transparanet huge page in madvise!!. not support yet.\n", __func__);
+		return 0;
+	}
+	if (pmd_trans_unstable(pmd))
+		return 0;
+#endif  // end CONFIG_TRANSPARENT_HUGEPAGE
+
+	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
+
+	// Shi: lazy mode is nop in non-virtualized environment
+	// arch_enter_lazy_mmu_mode();
+	for (; addr < end; pte++, addr += PAGE_SIZE) {
+		ptent = *pte;
+		if (pte_none(ptent)){
+			swp_entry_t entry = get_swap_page();
+			int type = swp_type(entry);
+			struct swap_info_struct *sis = swap_info[type];
+			unsigned long offset = swp_offset(entry);
+			swp_entry_to_virtual_remapping[offset] = ((addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT);
+			#ifdef DEBUG_SHI
+				if (addr >= 0x400300000000 + 1073741824UL && addr < 0x400300000000 + 1073741824UL + (5UL << PAGE_SHIFT))
+					printk("*** semeru_set_pte_pmd_range, remapping = %lx\n", swp_entry_to_virtual_remapping[offset]);
+			#endif
+			set_pte_at(mm, addr, pte, swp_entry_to_pte(entry));
+			swap_duplicate(entry);
+			// similar to swapcache_free, remove SWAP_HAS_CACHE flag
+			swap_entry_clear_cache_bit(entry);
+			inc_mm_counter(mm, MM_SWAPENTS);
+			__frontswap_set(sis, offset);
+		}
+	} // end of for
+
+	//arch_leave_lazy_mmu_mode();
+	pte_unmap_unlock(orig_pte, ptl);
+
+// #if defined(DEBUG_MODE_BRIEF)
+// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
+	// pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
+	// 	__func__, reclaimed_page, skipped_page );
+// #endif
+
+	cond_resched();
+	
+// #if defined(DEBUG_MODE_BRIEF)
+// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
+	// pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
+	// 	__func__, reclaimed_page);
+// #endif
+
+	// return skipped_page;
+	return 0;
+} // semeru_set_pte_pmd_range
 
 // yifan: debug
 #include <linux/vmalloc.h>

@@ -172,6 +172,11 @@ asmlinkage int sys_do_semeru_rdma_ops(int type, int target_server, char __user *
 		get_page_status(start_addr);
 	} else if (type == 11) { // set swap in window. 0 for kernel default, 1 for disable
 		prefetch_win = (int)size;
+	} else if (type == 12) { // unmap and discard pages within a vaddr range
+		//madvise(start_addr, size, MADV_DONTNEED);
+		printk("cannot syscall inside syscall, use madvise directly instead!\n");
+	} else if (type == 13) { // set zeroed PTE to swap entries.
+		semeru_set_ptes_to_swap_entries((size_t)start_addr, (size_t)(start_addr + size));
 	} else {
 		// wrong types
 		printk("%s, wrong type. \n", __func__);
@@ -376,6 +381,40 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	tlb_finish_mmu(&tlb,start_addr, end_addr);
 
 	pr_warn("%s, Force swap out for [0x%lx, 0x%lx) finished.\n",
+		__func__, start_addr, end_addr);
+
+	return ret;
+}
+
+/**
+ * @brief Force swapping out the spcificed virtual address range
+ * 
+ * @param vma 
+ * @param prev 
+ * @param start_addr 
+ * @param end_addr 
+ * @return int 
+ * 	0: all the spcificed pages are paged out
+ * 	negative value : error code
+ * 	positive value : the number of pages are not paged out 
+ */
+int semeru_set_ptes_to_swap_entries(unsigned long start_addr, unsigned long end_addr)
+{
+	struct mm_struct *mm = current->mm; // current points to the the caller process.
+	struct vm_area_struct *vma = find_vma(mm, start_addr);
+	struct mmu_gather tlb;
+	int ret = 0;
+
+	pr_warn("%s, Start setting PTEs for [0x%lx, 0x%lx).\n",
+		__func__, start_addr, end_addr);
+
+	// Shi*: call to `lru_add_drain_all`, `tlb_gather_mmu` and `tlb_finish_mmu` may be unnecessary.
+	lru_add_drain_all(); // release the cpu local physical pages
+	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
+	ret = semeru_set_pte_page_range(&tlb, mm, start_addr, end_addr);
+	tlb_finish_mmu(&tlb, start_addr, end_addr);
+
+	pr_warn("%s, Setting PTEs for [0x%lx, 0x%lx) finished.\n",
 		__func__, start_addr, end_addr);
 
 	return ret;

@@ -343,6 +343,7 @@ int walk_page_range(unsigned long start, unsigned long end,
 	return err;
 }
 
+// Shi: same as walk_page_range, only with printk
 int sb_walk_page_range(unsigned long start, unsigned long end,
 		    struct mm_walk *walk)
 {
