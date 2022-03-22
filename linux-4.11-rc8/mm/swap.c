@@ -2042,7 +2042,7 @@ static struct mm_walk semeru_swapout_walk_ops = {
  * @brief 
  * 
  * @param tlb : record the TLB flusing information. 
- * @param vma : the vma to be swapped out.
+ * @param mm
  * @param addr : start virt addr
  * @param end  : end virt addr
  * 
@@ -2362,16 +2362,16 @@ static struct mm_walk semeru_set_pte_walk_ops = {
 };
 
 /**
- * @brief 
+ * @brief start the page table walk of remap primitive
  * 
  * @param tlb : record the TLB flusing information. 
- * @param vma : the vma to be swapped out.
+ * @param mm
  * @param addr : start virt addr
  * @param end  : end virt addr
  * 
  * @return ret : 
  * 	0 : success.
- * 	non-zero : error code
+ * 	-1 : error that one PMD is a transparent huge page PMD, which is not supported
  */
 int semeru_set_pte_page_range(struct mmu_gather *tlb,
 			     struct mm_struct *mm,
@@ -2395,17 +2395,19 @@ int semeru_set_pte_page_range(struct mmu_gather *tlb,
 	return ret;
 }
 
-/*
- * @brief Swap out all the pages of a pmd entry.
+/**
+ * @brief Remap all none PTEs of a pmd entry within addr range to remote memory.
  * 
  * @param pmd 
- * @param addr : the start virt addr. Used to limit the swap out range of this pmd.
- * @param end  : the end virt addr. Used to limit the swap out range of this pmd.
+ * @param addr : the start virt addr. Used to limit the remap range of this pmd.
+ * @param end  : the end virt addr.   Used to limit the remap range of this pmd.
  * @param walk 
  * @return int 
- * 	0 : success
- * 	positive value: the page skipped.
- * 	negative : error
+ * 	0 : success, or skipped if pmd_trans_unstable(pmd)
+ *  -1: error that pmd is a transparent huge page PMD, which is not supported
+ * 
+ * The remap is done by allocate a swap entry and setting the PTE to it.
+ * The counters and flags are updated as if a page has been swapped out.
  */
 int semeru_set_pte_pmd_range(pmd_t *pmd,
 				unsigned long addr, unsigned long end,
@@ -2417,8 +2419,6 @@ int semeru_set_pte_pmd_range(pmd_t *pmd,
 	struct vm_area_struct *vma = walk->vma;
 	pte_t *orig_pte, *pte, ptent;
 	spinlock_t *ptl;
-	size_t skipped_page = 0;
-	size_t reclaimed_page = 0;
 
 #if defined(DEBUG_MODE_BRIEF)
 	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
@@ -2429,7 +2429,7 @@ int semeru_set_pte_pmd_range(pmd_t *pmd,
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 	if (pmd_trans_huge(*pmd)) {
 		pr_warn("%s, !! Disable transparanet huge page in madvise!!. not support yet.\n", __func__);
-		return 0;
+		return -1;
 	}
 	if (pmd_trans_unstable(pmd))
 		return 0;
@@ -2447,15 +2447,17 @@ int semeru_set_pte_pmd_range(pmd_t *pmd,
 			struct swap_info_struct *sis = swap_info[type];
 			unsigned long offset = swp_offset(entry);
 			swp_entry_to_virtual_remapping[offset] = ((addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT);
-			#ifdef DEBUG_SHI
+			#ifdef DEBUG_SHI_UNUSED
 				if (addr >= 0x400300000000 + 1073741824UL && addr < 0x400300000000 + 1073741824UL + (5UL << PAGE_SHIFT))
 					printk("*** semeru_set_pte_pmd_range, remapping = %lx\n", swp_entry_to_virtual_remapping[offset]);
 			#endif
 			set_pte_at(mm, addr, pte, swp_entry_to_pte(entry));
+			// increment entry ref count
 			swap_duplicate(entry);
-			// similar to swapcache_free, remove SWAP_HAS_CACHE flag
+			// similar to swapcache_free(), remove SWAP_HAS_CACHE flag
 			swap_entry_clear_cache_bit(entry);
 			inc_mm_counter(mm, MM_SWAPENTS);
+			// set frontswap map, so it thinks that a page has been swapped out via frontswap.
 			__frontswap_set(sis, offset);
 		}
 	} // end of for
@@ -2463,21 +2465,8 @@ int semeru_set_pte_pmd_range(pmd_t *pmd,
 	//arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(orig_pte, ptl);
 
-// #if defined(DEBUG_MODE_BRIEF)
-// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
-	// pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
-	// 	__func__, reclaimed_page, skipped_page );
-// #endif
-
 	cond_resched();
-	
-// #if defined(DEBUG_MODE_BRIEF)
-// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
-	// pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
-	// 	__func__, reclaimed_page);
-// #endif
 
-	// return skipped_page;
 	return 0;
 } // semeru_set_pte_pmd_range
 

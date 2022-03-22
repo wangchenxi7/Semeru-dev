@@ -1474,6 +1474,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 			 */
 			VM_BUG_ON_PAGE(!PageSwapCache(page), page);
 
+			// Shi: How can an anonymous page be clean?
+			// Shi: An anonymous page is clean if it is never written or not written since last swap in,
+			// Shi: when the swap partition holds its latest data so there's no need to write back.
 			if (!PageDirty(page) && (flags & TTU_LZFREE)) {
 				/* It's a freeable page by MADV_FREE */
 				dec_mm_counter(mm, MM_ANONPAGES);

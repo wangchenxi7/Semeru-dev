@@ -2752,8 +2752,9 @@ int do_swap_page(struct vm_fault *vmf)
 			if (likely(pte_same(*vmf->pte, vmf->orig_pte))){
 				ret = VM_FAULT_OOM;
 
-				//debug
-				//printk(KERN_ERR"%s, error in #1.", __func__);
+				#ifdef DEBUG_SHI
+					printk(KERN_ERR"*** %s, error after swapin_readahead return NULL", __func__);
+				#endif
 			}
 
 			delayacct_clear_flag(DELAYACCT_PF_SWAPIN);
@@ -2808,6 +2809,10 @@ int do_swap_page(struct vm_fault *vmf)
 	page = ksm_might_need_to_copy(page, vma, vmf->address);  // Allocate and copy the value to the new page.
 	if (unlikely(!page)) {
 		ret = VM_FAULT_OOM;
+		goto out_page;
+		#ifdef DEBUG_SHI
+			printk(KERN_ERR"*** %s, error after ksm_might_need_to_copy return NULL", __func__);
+		#endif
 					
 		page = swapcache;
 		goto out_page;
@@ -2818,6 +2823,10 @@ int do_swap_page(struct vm_fault *vmf)
 	if (mem_cgroup_try_charge(page, vma->vm_mm, GFP_KERNEL,
 				&memcg, false)) {
 		ret = VM_FAULT_OOM;
+
+		#ifdef DEBUG_SHI
+			printk(KERN_ERR"*** %s, error aftermem_cgroup_try_charge return non-0", __func__);
+		#endif
 
 		goto out_page;
 	}
@@ -3871,12 +3880,20 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 
 	pgd = pgd_offset(mm, address);
 	p4d = p4d_alloc(mm, pgd, address);
-	if (!p4d)
+	if (!p4d) {
+#ifdef DEBUG_SHI
+		printk(KERN_ERR "*** %s: p4d_alloc failed\n", __func__);
+#endif
 		return VM_FAULT_OOM;
+	}
 
 	vmf.pud = pud_alloc(mm, p4d, address);
-	if (!vmf.pud)
+	if (!vmf.pud) {
+#ifdef DEBUG_SHI
+		printk(KERN_ERR "*** %s: pud_alloc failed\n", __func__);
+#endif
 		return VM_FAULT_OOM;
+	}
 	if (pud_none(*vmf.pud) && transparent_hugepage_enabled(vma)) {
 		ret = create_huge_pud(&vmf);
 		if (!(ret & VM_FAULT_FALLBACK))
@@ -3902,8 +3919,12 @@ static int __handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	}
 
 	vmf.pmd = pmd_alloc(mm, vmf.pud, address);
-	if (!vmf.pmd)
+	if (!vmf.pmd) {
+#ifdef DEBUG_SHI
+		printk(KERN_ERR "*** %s: pmd_alloc failed\n", __func__);
+#endif
 		return VM_FAULT_OOM;
+	}
 	if (pmd_none(*vmf.pmd) && transparent_hugepage_enabled(vma)) {
 		ret = create_huge_pmd(&vmf);
 		if (!(ret & VM_FAULT_FALLBACK))

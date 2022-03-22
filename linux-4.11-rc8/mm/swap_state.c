@@ -439,7 +439,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 * else swap_off will be aborted if we return NULL.
 		 */
 		if (!__swp_swapcount(entry) && swap_slot_cache_enabled) {
-			#ifdef DEBUG_SHI
+			#ifdef DEBUG_SHI_UNUSED
 				printk(KERN_ERR "*** %s: wrong ref count: %d.\n", __func__, __swp_swapcount(entry));
 			#endif
 			break;

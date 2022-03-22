@@ -1041,8 +1041,8 @@ static unsigned char __swap_entry_free(struct swap_info_struct *p,
 	//				 [?] if invoked after deleting the Swap Cache, p->swap_map[offset] value is also setted as SWAP_HAS_CACHE ??
 	//         
 	//     2） if count!=0, usage != 0, then assign count to the p->swap_map[offset].
-	// Shi*: Why does it set swap_map to SWAP_HAS_CACHE when there is no usage??
-	// Shi*: This may be the reason of the infinite loop waiting on the swap cache to be freed when swapping in
+	// Shi: swap_map seems to be set to SWAP_HAS_CACHE when there is no ref or swap cache ref.
+	// Shi: swap_map is not set to 0 until the it is freed in a full returned entry buffer when calling swap_entry_free(), see below
 	p->swap_map[offset] = usage ? : SWAP_HAS_CACHE;  
 	#ifdef DEBUG_SHI_UNUSED
 		if (has_cache == 0) {
@@ -1053,18 +1053,6 @@ static unsigned char __swap_entry_free(struct swap_info_struct *p,
 	unlock_cluster_or_swap_info(p, ci);
 
 	return usage;  // If any process is referencing this swap_entry_t, not free it.
-}
-
-void swap_entry_clear_map(swp_entry_t entry) {
-	struct swap_info_struct *p = __swap_info_get(entry);
-	struct swap_cluster_info *ci;
-	unsigned long offset = swp_offset(entry);
-	unsigned char count;
-	ci = lock_cluster(p, offset);
-	count = p->swap_map[offset];
-	VM_BUG_ON(count != SWAP_HAS_CACHE);
-	p->swap_map[offset] = 0;
-	unlock_cluster(ci);
 }
 
 void swap_entry_clear_cache_bit(swp_entry_t entry) {
@@ -1094,10 +1082,9 @@ static void swap_entry_free(struct swap_info_struct *p, swp_entry_t entry)
 
 	ci = lock_cluster(p, offset);
 	count = p->swap_map[offset];
-	// Shi: swap_map is set to SWAP_HAS_CACHE when reference | SWAP_HAS_CACHE reaches 0, see __swap_entry_free(p, entry, SWAP_HAS_CACHE)
+	// Shi: swap_map is set to SWAP_HAS_CACHE when reference | SWAP_HAS_CACHE reaches 0, see __swap_entry_free(p, entry, SWAP_HAS_CACHE) above
 	VM_BUG_ON(count != SWAP_HAS_CACHE);
-	// Shi: swap_map[offset] in returned slot cache is not set to 0 when calling free_swap_slot(),
-	// Shi: until here or reuse_swap_slots_cache() when calling swap_entry_clear_map()
+	// Shi: swap_map[offset] in returned slot cache is not set to 0 when calling free_swap_slot(), until here
 	p->swap_map[offset] = 0;
 	dec_cluster_info_page(p, p->cluster_info, offset);
 	unlock_cluster(ci);

@@ -500,6 +500,9 @@ int swap_readpage(struct page *page)
 	ret = 0;
 	//bio = get_swap_bio(GFP_KERNEL, page, end_swap_bio_read);  // Original, build the bio for this swap operation.
 	bio = semeru_get_swap_bio(GFP_KERNEL, page, end_swap_bio_read);  // build the bio for this swap operation.
+	#ifdef DEBUG_SHI
+		printk("*** Should not reach here! frontswap load failed.\n");
+	#endif
 
 	if (bio == NULL) {
 		unlock_page(page);
