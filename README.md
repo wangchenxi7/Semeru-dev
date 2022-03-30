@@ -42,7 +42,7 @@ git clone https://github.com/uclasystem/Semeru.git
 # if the repo name is different, e.g. `Semeru-dev`, change it to `Semeru` to easily run following commands
 mv Semeru-dev Semeru
 cd Semeru
-git checkout haoran_use
+git checkout mako-baseline
 ```
 
 When deploying *Semeru*, install the three components in the following order: the kernel on the CPU server, the *Semeru* JVM on the CPU server, and the LJVM on each memory server. Finally, connect the CPU server with memory servers before running applications.
@@ -118,18 +118,30 @@ sudo yum groupinstall "Development Tools" -y
 sudo yum install libXtst-devel libXt-devel libXrender-devel libXrandr-devel libXi-devel cups-devel fontconfig-devel alsa-lib-devel -y
 ```
 
+Also, a java executable needs to be in `$PATH` to make the configure script find the boot JDK. Download a jdk-12.0.2 binary and do the following to install it in `$PATH`:
+
+```bash
+sudo alternatives --install /usr/bin/java java ${HOME}/jdk-12.0.2/bin/java 1
+sudo alternatives --config java
+# alternatively (no pun intended), add the following lines to ~/.bashrc or ~/.zshrc
+export JAVA_HOME=${HOME}/jdk-12.0.2
+export PATH=${JAVA_HOME}/bin:${PATH}
+```
+
+#### Install CPU Server JVM (baseline: unmodified JVM)
+
+The JDK version we use as the baseline is jdk13+22.
+
+```bash
+git clone --depth=1 --branch jdk-13+22 https://github.com/openjdk/jdk.git jdk-13+22
+cd jdk-13+22
+bash ./configure --with-debug-level=release --with-target-bits=64 --disable-dtrace
+make CONF=linux-x86_64-server-release
+```
+
 #### Install the Memory-Server LJVM
 
 The next step is to install the LJVM on each memory server.
-
-- Download OpenJDK 12 and build the LJVM
-
-  ```bash
-  # Assume OpenJDK12 is under the path: ${home_dir}/jdk-12.0.2
-  # Or you can change the path in the script  
-  # ~/Semeru/Memory-Server/build_memory_server.sh
-  boot_jdk="${home_dir}/jdk-12.0.2"
-  ```
 
 - Get source code for the memory server
 
@@ -157,8 +169,8 @@ The next step is to install the LJVM on each memory server.
 
   ```bash
   cd ~/NewPauselessMemory
-  ~/Semeru/Memory-Server/build_memory_server.sh configure release
-  ~/Semeru/Memory-Server/build_memory_server.sh build release
+  bash ./configure --with-debug-level=release --with-extra-cxxflags="-lrdmacm -libverbs" --with-extra-ldflags="-lrdmacm -libverbs" --disable-dtrace
+  make CONF=linux-x86_64-server-release
   # the JDK is under now under ${home_dir}/NewPauselessMemory/build/linux-x86_64-server-release/jdk
   ```
 
