@@ -43,6 +43,9 @@
 #define SEMERU_FRONTSWAP_PATH 1
 
 
+// #define SMALL
+#define LARGE
+
 //
 // ##################### Parameters configuration  ###################### 
 //
@@ -54,7 +57,14 @@
 #define RDMA_META_REGION_NUM 1UL
 // #define RDMA_META_REGION_NUM 4UL
 // #define RDMA_DATA_REGION_NUM 8UL
+
+#ifdef LARGE
 #define RDMA_DATA_REGION_NUM 16UL
+#endif
+#ifdef SMALL
+#define RDMA_DATA_REGION_NUM 8UL
+#endif
+
 #define SEMERU_START_ADDR 0x400000000000UL
 // #define NUM_OF_MEMORY_SERVER 2UL
 #define NUM_OF_MEMORY_SERVER 1UL
@@ -195,7 +205,8 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 //
 
 #define ALIVE_BITMAP_OFFSET      (size_t)0
-#define ALIVE_BITMAP_SIZE        (size_t)(512 * (size_t)ONE_MB)
+// #define ALIVE_BITMAP_SIZE        (size_t)(512 * (size_t)ONE_MB)
+#define ALIVE_BITMAP_SIZE        (size_t)(1024 * (size_t)ONE_MB)
 
 // 1. Klass instance space.
 //    Used for store klass instance, class loader related information.
@@ -224,30 +235,30 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 //     The structure of SemeruHeapRegion. 4K for each Region is enough.
 //     [x] precommit all the space.
 #define HEAP_REGION_MANAGER_OFFSET           (size_t)(MEM_REF_Q_OFFSET+MEM_REF_Q_SIZE_LIMIT) // (KLASS_INSTANCE_OFFSET + KLASS_INSTANCE_OFFSET_SIZE_LIMIT)  // +832MB,  0x400,034,000,000
-#define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(4*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
+#define HEAP_REGION_MANAGER_SIZE_LIMIT       (size_t)(8*ONE_MB) // each SemeruHeapRegion should less than 4K, this is enough for 1024 HeapRegion.
 
 
 // 3.1.1 CPU Server To Memory server, Initialization
 // [x] precommit
 #define CPU_TO_MEMORY_INIT_OFFSET     (size_t)(HEAP_REGION_MANAGER_OFFSET + HEAP_REGION_MANAGER_SIZE_LIMIT) // +836MB, 0x400,034,400,000
-#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 4*ONE_MB    //
+#define CPU_TO_MEMORY_INIT_SIZE_LIMIT (size_t) 8*ONE_MB    //
 
 // 3.1.2 CPU Server To Memory server, GC
 // [x] precommit
 #define CPU_TO_MEMORY_GC_OFFSET       (size_t)(CPU_TO_MEMORY_INIT_OFFSET + CPU_TO_MEMORY_INIT_SIZE_LIMIT) // +840MB, 0x400,034,800,000
-#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define CPU_TO_MEMORY_GC_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 3.1.3 Memory server To CPU server 
 // [x] precommit
 #define MEMORY_TO_CPU_GC_OFFSET       (size_t)(CPU_TO_MEMORY_GC_OFFSET + CPU_TO_MEMORY_GC_SIZE_LIMIT) // +844MB, 0x400,034,C00,000
-#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define MEMORY_TO_CPU_GC_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 3.1.4 Synchonize between CPU server and memory server
 // [x] precommit
 #define SYNC_MEMORY_AND_CPU_OFFSET       (size_t)(MEMORY_TO_CPU_GC_OFFSET + MEMORY_TO_CPU_GC_SIZE_LIMIT) // +848MB, 0x400,035,000,000
-#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 4*ONE_MB    //
+#define SYNC_MEMORY_AND_CPU_SIZE_LIMIT   (size_t) 8*ONE_MB    //
 
 
 // 5. JVM global flags.
@@ -306,43 +317,50 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 #define COMPACTED_MAP_SIZE                     (size_t)(1 * (size_t)ONE_MB)
 
 
+#define SYNC_PAGE_OFFSET                      (size_t)(COMPACTED_MAP_OFFSET + COMPACTED_MAP_SIZE)     // +855MB, 0x400,035,700,000
+#define SYNC_PAGE_SIZE_LIMIT                  (size_t)(8 * (size_t)ONE_MB)
+
+
 // 6. Cross-Region reference update queue For use of root object
 // Record the <old_addr, new_addr > for the target object queue.
 // [?] Not sure how much space is needed for the cross-region-reference queue, give all the rest space to it. Need to shrink it latter.
 //
-#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(COMPACTED_MAP_OFFSET + COMPACTED_MAP_SIZE)    // +855MB, 0x400,035,700,000
-#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(169 * (size_t)ONE_MB)
-#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(44300000) // 170M * 1024/4
+#define CROSS_REGION_REF_UPDATE_Q_OFFSET      (size_t)(SYNC_PAGE_OFFSET + SYNC_PAGE_SIZE_LIMIT)    // +863MB, 0x400,035,f00,000
+#define CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT  (size_t)(1 * (size_t)ONE_MB)
+#define CROSS_REGION_REF_UPDATE_PADDING       (size_t)(161 * (size_t)ONE_MB)
+#define CROSS_REGION_REF_UPDATE_Q_LEN         (size_t)(100000) // 1M * 1024/8
 
 
 
-#define SATB_BUFFER_OFFSET                    (size_t)(CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_Q_SIZE_LIMIT) //1024M, 0x400,040,000,000
+#define SATB_BUFFER_OFFSET                    (size_t)(CROSS_REGION_REF_UPDATE_Q_OFFSET + CROSS_REGION_REF_UPDATE_PADDING) //1024M, 0x400,040,000,000
 #define SATB_BUFFER_SIZE_LIMIT                (size_t)(/*256*/1024 * (size_t)ONE_MB)
 
 
+// +512MB for bitmap
+
 #define INDIRECTION_OFFSET                    (size_t)(SATB_BUFFER_OFFSET + SATB_BUFFER_SIZE_LIMIT) //2048M, 0x400,080,000,000
-// #define INDIRECTION_SIZE_LIMIT                (size_t)(512/*2048*/ * (size_t)ONE_MB)
+#define INDIRECTION_TABLE_SIZE_LIMIT                (size_t)(0 * (size_t)ONE_MB)
 
 
 
 // ----------------------------------Indirection Table Related MetaData----------------------------------
 
-#define MAX_NUM_REGIONS 2048
+// #define MAX_NUM_REGIONS 2048
 
-#define HEAP_SIZE (size_t)(32 * ONE_GB)
-#define HEAP_REGION_SIZE (size_t)(64 * ONE_MB) // 64MB, 0x4000000
-#define LOG_HEAP_REGION_SIZE (int)(log2_long(HEAP_REGION_SIZE)) // 0x4000000 = 1 << 26
+// #define HEAP_SIZE (size_t)(32 * ONE_GB)
+// #define HEAP_REGION_SIZE (size_t)(64 * ONE_MB) // 64MB, 0x4000000
+// #define LOG_HEAP_REGION_SIZE (int)(log2_long(HEAP_REGION_SIZE)) // 0x4000000 = 1 << 26
 
 #define INDIRECTION_TABLE_START_ADDR (size_t)(SEMERU_START_ADDR + INDIRECTION_OFFSET)
-#define INDIRECTION_TABLE_INIT_SIZE (size_t)(16 * ONE_MB) // 16MB, 0x1000000
-#define INDIRECTION_TABLE_INCREMENT (size_t)(16 * ONE_MB) // 16MB, 0x1000000
-#define INDIRECTION_TABLE_SIZE (size_t)(16 * ONE_MB) // 64MB, 0x4000000
-//***** end of which is subject to change with different size options *****
+// #define INDIRECTION_TABLE_INIT_SIZE (size_t)(16 * ONE_MB) // 16MB, 0x1000000
+// #define INDIRECTION_TABLE_INCREMENT (size_t)(16 * ONE_MB) // 16MB, 0x1000000
+// #define INDIRECTION_TABLE_SIZE (size_t)(16 * ONE_MB) // 64MB, 0x4000000
+// //***** end of which is subject to change with different size options *****
 
-#define LOG_INDIRECTION_TABLE_SIZE (int)(log2_long(INDIRECTION_TABLE_SIZE)) // 0x4000000 = 1 << 26
-// only half of the heap is used at most, only need half the number of tables
-#define INDIRECTION_TABLE_NUM (int)(HEAP_SIZE / HEAP_REGION_SIZE / 2)
-#define INDIRECTION_TABLE_SIZE_LIMIT  (size_t)(INDIRECTION_TABLE_NUM * INDIRECTION_TABLE_SIZE) // 4GB, 0x100000000
+// #define LOG_INDIRECTION_TABLE_SIZE (int)(log2_long(INDIRECTION_TABLE_SIZE)) // 0x4000000 = 1 << 26
+// // only half of the heap is used at most, only need half the number of tables
+// #define INDIRECTION_TABLE_NUM (int)(HEAP_SIZE / HEAP_REGION_SIZE / 2)
+// #define INDIRECTION_TABLE_SIZE_LIMIT  (size_t)(INDIRECTION_TABLE_NUM * INDIRECTION_TABLE_SIZE) // 4GB, 0x100000000
 
 
 #define INDIRECTION_TABLE_END_ADDR (size_t)(INDIRECTION_TABLE_START_ADDR + INDIRECTION_TABLE_SIZE_LIMIT)
@@ -358,22 +376,44 @@ extern uint64_t RMEM_SIZE_IN_PHY_SECT;			// [?] Where is it defined ?
 
 
 
+// Padding:
+
+#define RDMA_RESERVE_PADDING_OFFSET (size_t)(INDIRECTION_OFFSET+INDIRECTION_TABLE_SIZE_LIMIT)
+#define RDMA_RESERVE_PADDING_SIZE  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - RDMA_RESERVE_PADDING_OFFSET)
+
+
+// Semeru specific meta data end
+
+// Semeru G1 specific meta data complement:
+// #define ALIVE_BITMAP_OFFSET      (size_t)0x3f3f3f3f
+// #define ALIVE_BITMAP_SIZE        (size_t)0x3f3f3f3f
+
+#define CROSS_REGION_REF_TARGET_Q_OFFSET        (size_t)0x3f3f3f3f
+#define CROSS_REGION_REF_TARGET_Q_LEN           (size_t)0x3f3f3f3f
+#define CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT    (size_t)0x3f3f3f3f
+#define BOT_GLOBAL_STRUCT_OFFSET            (size_t)0x3f3f3f3f
+#define BOT_GLOBAL_STRUCT_SIZE_LIMIT        (size_t)0x3f3f3f3f
+
+#define BLOCK_OFFSET_TABLE_OFFSET             (size_t)0x3f3f3f3f
+#define BLOCK_OFFSET_TABLE_OFFSET_SIZE_LIMIT  (size_t)0x3f3f3f3f
+
+
+
+
+
+// Pauseless specific meta data start
+
+
+
+
+
+
+
+
 struct AddrPair{
   char* st;
   char* ed;
 };
-
-
-// x Padding the rest space of the RDMA Region.
-//     Make it easier to register RDMA buffer.
-//     Commit a contiguous space for RDMA Meta Space.
-//     Points to the last item.
-// #define RDMA_PADDING_OFFSET       (size_t)(CROSS_REGION_REF_TARGET_Q_OFFSET + CROSS_REGION_REF_TARGET_Q_SIZE_LIMIT) 
-// #define RDMA_PADDING_SIZE_LIMIT   (size_t)(RDMA_STRUCTURE_SPACE_SIZE - RDMA_PADDING_OFFSET > 0 ? RDMA_STRUCTURE_SPACE_SIZE - RDMA_PADDING_OFFSET : 0 )
-#define RDMA_PADDING_OFFSET (size_t)(INDIRECTION_OFFSET+INDIRECTION_TABLE_SIZE_LIMIT)
-#define RDMA_PADDING_SIZE  (size_t)(RDMA_STRUCTURE_SPACE_SIZE - RDMA_PADDING_OFFSET)
-
-
 
 
 //
