@@ -25,6 +25,7 @@
 //
 // Semeru
 #include <linux/swap_global_struct_mem_layer.h>
+#include <linux/swap_global_struct_bd_layer.h>
 int prefetch_win = 0;
 
 
@@ -264,11 +265,30 @@ int add_to_swap(struct page *page, struct list_head *list)
 {
 	swp_entry_t entry;
 	int err;
+	unsigned long vaddr;
 
 	VM_BUG_ON_PAGE(!PageLocked(page), page);
 	VM_BUG_ON_PAGE(!PageUptodate(page), page);
 
-	entry = get_swap_page();	// acquire a available swap slot from swap area(or per-cpu swap slot cache), a swp_entry_t
+	// Shi: do a quick rmap check to get the virtual address page is mapped to.
+	vaddr = get_vaddr_via_page(page);
+
+	// Shi: cannot acquire rmap lock, fail to allocate swap entry
+	if (!vaddr) return 0;
+
+	// vaddr is not within_range(), allocate normally
+	if (vaddr == 1) {
+		entry = get_swap_page();	// acquire a available swap slot from swap area(or per-cpu swap slot cache), a swp_entry_t
+	} else {
+		entry = get_swap_entry_via_vaddr(vaddr);
+		if (non_swap_entry(entry)) {
+			entry = get_swap_page();
+			set_swap_entry_via_vaddr(vaddr, entry);
+		}
+		insert_swp_entry_direct(entry, vaddr);
+	}
+
+	// Shi: looks like 0 entry is unused
 	if (!entry.val)		// [x] the entry.val must be calculated well !
 		return 0;
 
@@ -476,7 +496,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		 */
 		err = swapcache_prepare(entry);
 		if (err == -EEXIST) {
-			#ifdef DEBUG_SHI
+			#ifdef DEBUG_SHI_UNUSED
 				printk(KERN_ERR "*** %s: swapcache_prepare failed with EEXIST.\n", __func__);
 			#endif
 			radix_tree_preload_end();
@@ -500,7 +520,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 			continue;    // retry ?
 		}
 		if (err) {		/* swp entry is obsolete ? */
-			#ifdef DEBUG_SHI
+			#ifdef DEBUG_SHI_UNUSED
 				printk(KERN_ERR "*** %s: swapcache_prepare failed with other errors.\n", __func__);
 			#endif
 			radix_tree_preload_end();

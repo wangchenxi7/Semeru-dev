@@ -466,6 +466,8 @@ extern void swapcache_free_batch(swp_entry_t *entries, int n);
 // Semeru CPU
 extern sector_t semeru_map_swap_page(struct page *, struct block_device **);
 
+// Shi: rmap.c
+unsigned long get_vaddr_via_page(struct page *page);
 
 
 #else /* CONFIG_SWAP */

@@ -1141,19 +1141,10 @@ void swap_free(swp_entry_t entry)
 		if (!__swap_entry_free(p, entry, 1)){  // if return non-zero value, means this swp_entry is using by PTE or Swap Cache Entry.
 			free_swap_slot(entry);
 		
-			// The the swp_entry_t is freed, unmap the swp_entry_t <---> virtual page index.
- 			// Clear the swp_entry_t to virtual address remapping.
-			if(retrieve_swap_remmaping_virt_addr(entry) != INITIAL_VALUE){  // [?] the swp_entry_t.val may belong to
-		
-				#ifdef DEBUG_SWAP_PATH_DETAIL
-					if(retrieve_swap_remmaping_virt_addr(entry) != 0){
-						printk(" Reset swp_entry_t[0x%llx] to virt addr[0x%llx] remapping to 0. \n", 
-																		(u64)swp_offset(entry),		(u64)retrieve_swap_remmaping_virt_addr(entry));
-					}
-				#endif
-
-				reset_swap_remamping_virt_addr(entry);
-			}// unmap swp_entry_t <---> virtual page index.
+			// Shi: No need to reset the remapping, mapping is static now
+			//if(retrieve_swap_remmaping_virt_addr(entry) != INITIAL_VALUE){  // [?] the swp_entry_t.val may belong to
+				//reset_swap_remamping_virt_addr(entry);
+			//}// unmap swp_entry_t <---> virtual page index.
 
 		} // Free the swap slot
 	} // p != NULL
@@ -1848,6 +1839,16 @@ int try_to_unuse(unsigned int type, bool frontswap,
 		 */
 		swap_map = &si->swap_map[i];
 		entry = swp_entry(type, i);
+
+		if (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) != INITIAL_VALUE) {
+			// Shi: entry is within range
+			// We assume that there is no in-use swap entry when swapoff is called
+			// So this kind of entries can be directly freed.
+			// Shi*: There may be errors here
+			free_swap_slot_within_range(entry);
+			continue;
+		}
+
 		page = read_swap_cache_async(entry,
 					GFP_HIGHUSER_MOVABLE, NULL, 0);
 		if (!page) {
@@ -3008,6 +3009,13 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	// Semeru
 	// initialize the control path support conter
 	enable_control_path();
+	// Shi: initialize entry to vaddr map and vaddr to entry map, respectively to (unsigned long)-1 and a non-swap-entry, see non_swap_entry(). So readers can distinguish between used and unused map elements.
+	int i = 0;
+	swp_entry_t dummy;
+	for(i = 0; i < SWAP_ARRAY_LENGTH; ++i) {
+		swp_entry_to_virtual_remapping[i] = INITIAL_VALUE;
+		vaddr_to_swap_entry_mapping[i].val = (unsigned long)(MAX_SWAPFILES) << SWP_TYPE_SHIFT(dummy);
+	}
 
 	pr_info("Adding %uk swap on %s.  Priority:%d extents:%d across:%lluk %s%s%s%s%s\n",
 		p->pages<<(PAGE_SHIFT-10), name->name, p->prio,

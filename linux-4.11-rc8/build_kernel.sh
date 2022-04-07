@@ -130,9 +130,9 @@ then
 	sleep 1
 #	make oldconfig
 
-	echo "make LOCALVERSION=${localVersion}  -j${num_cores}"
+	echo "make LOCALVERSION=${LocalVersion}  -j${num_cores}"
 	sleep 1
-	make LOCALVERSION="${localVersion}"  -j${num_cores}
+	make LOCALVERSION="${LocalVersion}"  -j${num_cores}
 
 elif [ "${op}" = "install" ]
 then

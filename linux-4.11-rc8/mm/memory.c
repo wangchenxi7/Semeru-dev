@@ -81,6 +81,7 @@
 
 // Semeru
 #include "linux/swap_global_struct_mem_layer.h"
+#include "linux/swap_global_struct_bd_layer.h"
 
 
 #ifdef LAST_CPUPID_NOT_IN_PAGE_FLAGS
@@ -2907,7 +2908,7 @@ int do_swap_page(struct vm_fault *vmf)
 	 //   But if the page is in Swap Cache, we will not Free the swap slot.
 	 //   PTE -- Page(swp_entry_t) -- Swap Cache.
 	 //   Then for next clean swap out, no need to page out the page. Just unmap PTE --Page  is ok.
-	swap_free(entry);  
+	swap_free(entry);
 	if (mem_cgroup_swap_full(page) ||
 	    (vma->vm_flags & VM_LOCKED) || PageMlocked(page))
 		try_to_free_swap(page);  // 6) if swap partition is full, delete the page from Swap Cache.

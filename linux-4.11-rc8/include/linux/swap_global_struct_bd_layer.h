@@ -60,10 +60,18 @@
 // warning : global variable doesn't support dynamic memory allocation.
 extern  unsigned long swp_entry_to_virtual_remapping[];   // defined in swap.c
 
+// Shi: zero swap entry seems to be not used, see add_to_swap().
+// But we use non_swap_entry() to identify unused element now.
+extern swp_entry_t vaddr_to_swap_entry_mapping[];   // defined in swap.c
+
+swp_entry_t get_swap_entry_via_vaddr(unsigned long vaddr);
+
+void set_swap_entry_via_vaddr(unsigned long vaddr, swp_entry_t entry);
 
 
 // insert item: (swp_off, virtual_page_index)
 void insert_swp_entry( struct page *page  , unsigned long virt_addr  );
+void insert_swp_entry_direct(swp_entry_t entry, unsigned long virt_addr);
 
 static inline void reset_swap_remamping_virt_addr(swp_entry_t entry){
 	VM_BUG_ON(swp_offset(entry) < SWAP_ARRAY_LENGTH);

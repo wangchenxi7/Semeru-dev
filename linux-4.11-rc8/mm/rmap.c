@@ -1521,6 +1521,8 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 
 				// test anonymoust page
 				// [!!!!] Disable the swp_entry ---> virtual address remapping.
+				// Shi*: No need to insert here, already inserted in add_to_swap()
+				// Shi*: But no harm to do it anyway, for correctness check
 				insert_swp_entry(page, pvmw.address);
 			}
 			#endif
@@ -1742,6 +1744,100 @@ static int rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	if (!locked)
 		anon_vma_unlock_read(anon_vma);
 	return ret;
+}
+
+/**
+ * @brief Get the vaddr via page object by doing a rmap walk.
+ * 
+ * @param page 
+ * @return if the address is within_range(), return it; 
+ * if the address if not within_range(), return 1;
+ * if rmap_walk_anon_lock failed, return 0.
+ * 
+ * Shi: We assume that there is only one virtual address if the address is within_range()
+ * This function is only called by add_to_swap()
+ */
+unsigned long get_vaddr_via_page(struct page *page) {
+
+	struct anon_vma *anon_vma;
+	pgoff_t pgoff_start, pgoff_end;
+	struct anon_vma_chain *avc;
+	struct rmap_private rp = {
+		.flags = TTU_UNMAP | TTU_BATCH_FLUSH | TTU_LZFREE,
+		.lazyfreed = 0,
+	};
+	unsigned long found_address = 0;
+
+	struct rmap_walk_control rwc = {
+		.rmap_one = try_to_unmap_one,
+		.arg = &rp,
+		.done = page_mapcount_is_zero,
+		.anon_lock = page_lock_anon_vma_read,
+	};
+
+	anon_vma = rmap_walk_anon_lock(page, &rwc);
+	if (!anon_vma) {
+		printk("*** %s: lock failed for page %lx\n", __func__, (unsigned long)page);
+		return found_address;
+	}
+
+	pgoff_start = page_to_pgoff(page);
+	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
+	#ifdef DEBUG_SHI
+	bool in_range = false;
+	unsigned long addresses[10];
+	int ite = 0, in_range_ite = -1;
+	#endif
+	// Shi: we assume that if vaddr of page in within range
+	// Shi: we should get it as the addr of first VMA.
+	// Otherwise, vaddr is not within range
+	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
+			pgoff_start, pgoff_end) {
+		struct vm_area_struct *vma = avc->vma;
+		found_address = vma_address(page, vma);
+		#ifndef DEBUG_SHI
+		break;
+		#else
+		addresses[ite++] = found_address;
+		if (within_range(found_address)) {
+			in_range = true;
+			if (in_range_ite == -1)
+				in_range_ite = ite-1;
+		}
+		if (ite == 10) {
+			break;
+		}
+		#endif
+	}
+	anon_vma_unlock_read(anon_vma);
+
+	#ifdef DEBUG_SHI
+	if (!in_range) {
+		found_address = 1;
+		return found_address;
+	}
+	found_address = addresses[in_range_ite];
+	if (in_range_ite != 0) {
+		printk(KERN_ERR "*** %s: in_range_ite = %d for page %lx\n", __func__, in_range_ite, (unsigned long)page);
+		printk(KERN_ERR "*** %s: addr[0] = %lx, addr[in_range_ite] = %lx\n", __func__, addresses[0], addresses[in_range_ite]);
+	}
+	int i;
+	for (i = 0; i < ite; i++) {
+		if (addresses[i] != addresses[in_range_ite]) {
+			printk(KERN_ERR "*** %s: address not equal for page %lx\n", __func__, (unsigned long)page);
+			printk(KERN_ERR "*** %s: addr[%d] = %lx, addr[in_range_ite] = %lx\n", __func__, i, addresses[i], addresses[in_range_ite]);
+		}
+	}
+	#else
+	// Shi: if vaddr is not within range
+	// This page will be put into unevictable list
+	// let the caller know, so it can normally allocate swap entry for it.
+	if (!within_range(found_address)) {
+		found_address = 1;
+	}
+	#endif
+
+	return found_address;
 }
 
 /*

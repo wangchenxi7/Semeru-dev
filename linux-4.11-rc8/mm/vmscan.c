@@ -1653,7 +1653,14 @@ keep:
 	return nr_reclaimed;
 }
 
-
+// Shi: an modified shrink_page_list() solely used by control path eviction
+// called by mm/vmscan.c:reclaim_pages()
+// differences from shrink_page_list():
+// 1. This does not enter and leave swap zone as shrink_page_list() does.
+// 2. lazyfree is disabled here.
+// 3. __semeru_remove_mapping() is called here, instead of __remove_mapping().
+// 4. Various prints are added here.
+// 5. switch (pageout(page, mapping, sc)) has different prints.
 static unsigned long ctl_shrink_page_list(struct list_head *page_list,
 				      struct pglist_data *pgdat,
 				      struct scan_control *sc,

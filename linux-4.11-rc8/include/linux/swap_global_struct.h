@@ -35,6 +35,17 @@
 // The memory range not in the RANGE will be not swapped out by adding them into unevictable list.
 #define ENABLE_SWP_ENTRY_VIRT_REMAPPING 1
 
+// #1.1 option to enable static mapping of swp_entry_t to virtual address within_range()
+// Shi: with static mapping, the mapping between swp_entry_t and virtual address is fixed,
+// which is decided when a swp_entry_t is allocated for a page mapped to a virtual address for the first time
+// In this way, swp_entry_t can be reused without allocation overhead, and does not need locks for reallocation.
+// To get the virtual address information of a struct page during entry allocation,
+// a rmap walk is done at entry allocation, see add_to_swap().
+// Shi*: To-Do: option not added yet, static mapping is always enabled now.
+#ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
+//#define ENABLE_SWP_ENTRY_VIRT_STATIC_MAPPING
+#endif
+
 // #2 This sync is uselesss. Because all the unmapped dirty page will be writteen to swap partition immediately.
 //#define SYNC_PAGE_OUT
 

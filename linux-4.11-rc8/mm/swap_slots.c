@@ -32,6 +32,8 @@
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
 
+#include <linux/swap_global_struct_bd_layer.h>
+
 #ifdef CONFIG_SWAP
 
 static DEFINE_PER_CPU(struct swap_slots_cache, swp_slots);
@@ -314,6 +316,24 @@ slowpath:
 
 int free_swap_slot(swp_entry_t entry)
 {
+	// Shi: if swap entry is for addr within range, do not free it
+	if (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) != INITIAL_VALUE) {
+		#ifdef DEBUG_SHI
+		unsigned long vaddr = (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) << PAGE_SHIFT) + RDMA_DATA_SPACE_START_ADDR;
+		if (!within_range(vaddr)) {
+			printk("*** %s: vaddr not in range! entry: %lx, vaddr: %lx\n", __func__, entry.val, vaddr);
+			goto end;
+		}
+		swp_entry_t entry_in_array = get_swap_entry_via_vaddr(vaddr);
+		if (entry_in_array.val != entry.val) {
+			printk(KERN_ERR "*** %s: wrong vaddr to entry value!! entry in array: %lx; entry using: %lx\n", __func__,
+				entry_in_array.val, entry.val);
+		}
+		#endif
+end:
+		return 0;
+	}
+
 	struct swap_slots_cache *cache;
 
 	cache = &get_cpu_var(swp_slots);
@@ -342,6 +362,16 @@ direct_free:
 	}
 	put_cpu_var(swp_slots);
 
+	return 0;
+}
+
+// Shi: free_swap_slot() with no within_range() check,
+// So it can free swap entries within_range()
+// Only called by try_to_unuse() during swapoff
+// Swap slot cache is disabled so directly free
+int free_swap_slot_within_range(swp_entry_t entry)
+{
+	swapcache_free_entries(&entry, 1);
 	return 0;
 }
 

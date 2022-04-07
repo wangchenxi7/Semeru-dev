@@ -205,6 +205,11 @@ struct page {
 	struct mem_cgroup *mem_cgroup;
 #endif
 
+	// Shi: all fields above has made a struct page 64B big, which is the upper bound
+	// Shi: for performance and correction under our settings.
+	// Shi: Do not add memory usage above 64B!
+	// Shi: All fields below are not enabled under our settings.
+
 	/*
 	 * On machines where all RAM is mapped into kernel address space,
 	 * we can simply calculate the virtual address. On machines with

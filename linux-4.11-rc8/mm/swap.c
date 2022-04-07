@@ -58,8 +58,12 @@
 // 64 bits per tiem.
 //unsigned long *swp_entry_to_virtual_remapping = (unsigned long*)kzalloc(SWAP_ARRAY_LENGTH, GFP_KERNEL);
 
-unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH];
+// Shi*: this mapping is still needed now as the mapping is only static, not linear!!
+// Shi: array[swp_offset()] = (unsigned long)-1 or vaddr page offset starting from RDMA_DATA_SPACE_START_ADDR
+unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH] = {0};
 
+// Shi: array[vaddr page offset starting from RDMA_DATA_SPACE_START_ADDR] = swap entry
+swp_entry_t vaddr_to_swap_entry_mapping[SWAP_ARRAY_LENGTH] = {{0}};
 
 // Record the swap out ratio for the JVM Heap Region
 // 1) Reset it to 0 before using by a process.
@@ -139,6 +143,14 @@ static pte_t* walk_page_table(struct mm_struct *mm, u64 addr){
  return ptep;
 }
 
+swp_entry_t get_swap_entry_via_vaddr(unsigned long vaddr) {
+	return vaddr_to_swap_entry_mapping[(vaddr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT];
+}
+
+void set_swap_entry_via_vaddr(unsigned long vaddr, swp_entry_t entry) {
+	vaddr_to_swap_entry_mapping[(vaddr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT] = entry;
+}
+
 /**
  * Insert a (swp_entry_offset, virtual address) pair into the array.
  * 
@@ -157,8 +169,7 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 	// Change the swp_offset to the full value.
 	// swp_offset is not arch specific
 	// Virtual page offset is count from the Data region.
-	swp_entry_to_virtual_remapping[swp_offset(entry)] = ((virt_addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT);
-
+	insert_swp_entry_direct(entry, virt_addr);
 	// enable the swap-out of Meta Region
 	//swp_entry_to_virtual_remapping[swp_offset(entry)] = ( (virt_addr -  SEMERU_START_ADDR) >> PAGE_SHIFT );
 // if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
@@ -169,6 +180,23 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
 	       __func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
 #endif
+}
+
+void insert_swp_entry_direct(swp_entry_t entry, unsigned long virt_addr)
+{
+	#ifdef DEBUG_SHI
+	if (swp_entry_to_virtual_remapping[swp_offset(entry)] != INITIAL_VALUE &&
+		swp_entry_to_virtual_remapping[swp_offset(entry)] != ((virt_addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT)) {
+			printk(KERN_ERR "*** %s: wrong entry to vaddr value!! value: %lx; vaddr offset: %lx\n", __func__,
+				swp_entry_to_virtual_remapping[swp_offset(entry)], (virt_addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT);
+			printk(KERN_ERR "*** %s: (cont.) entry: %lx", __func__, entry.val);
+	}
+	if (get_swap_entry_via_vaddr(virt_addr).val != entry.val) {
+		printk(KERN_ERR "*** %s: wrong vaddr to entry value!! entry in array: %lx; entry using: %lx\n", __func__,
+				(get_swap_entry_via_vaddr(virt_addr)).val, entry.val);
+	}
+	#endif
+	swp_entry_to_virtual_remapping[swp_offset(entry)] = ((virt_addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT);
 }
 
 // inline it 
@@ -2442,7 +2470,12 @@ int semeru_set_pte_pmd_range(pmd_t *pmd,
 	for (; addr < end; pte++, addr += PAGE_SIZE) {
 		ptent = *pte;
 		if (pte_none(ptent)){
-			swp_entry_t entry = get_swap_page();
+			swp_entry_t entry = get_swap_entry_via_vaddr(addr);
+			if (non_swap_entry(entry)) {
+				entry = get_swap_page();
+				set_swap_entry_via_vaddr(addr, entry);
+			}
+			insert_swp_entry_direct(entry, addr);
 			int type = swp_type(entry);
 			struct swap_info_struct *sis = swap_info[type];
 			unsigned long offset = swp_offset(entry);
