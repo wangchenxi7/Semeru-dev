@@ -2739,8 +2739,11 @@ int do_swap_page(struct vm_fault *vmf)
 		// Debug, count the number of on-demand swapin
 		// If the page is read from swap cache, ignore it.
 		on_demand_swapin_inc();  // on-demand,
-
-
+		#ifdef DEBUG_SHI
+		if (__swp_swapcount(entry) > 1) {
+			printk( KERN_ERR "*** swap count is %d; entry: %d\n", __swp_swapcount(entry), swp_offset(entry));
+		}
+		#endif
 		page = swapin_readahead(entry, GFP_HIGHUSER_MOVABLE, vma,
 					vmf->address);
 		if (!page) {
@@ -2762,6 +2765,13 @@ int do_swap_page(struct vm_fault *vmf)
 
 			goto unlock;
 		}
+		#ifdef DEBUG_SHI
+			if (entry_states[swp_offset(entry)] != 6) {
+				//entry_states[swp_offset(entry)] = 5;
+				pages_in_swap_cache[swp_offset(entry)] = page;
+			}
+			newly_allocated_page[swp_offset(entry)] = page;
+		#endif
 
 		/* Had to read the page from swap area: Major fault */
 		ret = VM_FAULT_MAJOR;
@@ -2810,7 +2820,6 @@ int do_swap_page(struct vm_fault *vmf)
 	page = ksm_might_need_to_copy(page, vma, vmf->address);  // Allocate and copy the value to the new page.
 	if (unlikely(!page)) {
 		ret = VM_FAULT_OOM;
-		goto out_page;
 		#ifdef DEBUG_SHI
 			printk(KERN_ERR"*** %s, error after ksm_might_need_to_copy return NULL", __func__);
 		#endif
@@ -2818,6 +2827,13 @@ int do_swap_page(struct vm_fault *vmf)
 		page = swapcache;
 		goto out_page;
 	}
+
+	#ifdef DEBUG_SHI_UNUSED
+	//if (page != swapcache && entry_states[swp_offset(entry)] != 6) {
+	if (page != swapcache) {
+		newly_allocated_page[swp_offset(entry)] = page;
+	}
+	#endif
 
 	// Count the page into cgroup before mapping into process
 	// but after hitting on the swapcache.
@@ -2839,10 +2855,17 @@ int do_swap_page(struct vm_fault *vmf)
 	 */
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
 			&vmf->ptl);
-	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte)))
+	if (unlikely(!pte_same(*vmf->pte, vmf->orig_pte))) {
+		#ifdef DEBUG_SHI
+			printk(KERN_ERR"*** %s, pte not the same error. entry: %lu", __func__, swp_offset(entry));
+		#endif
 		goto out_nomap;
+	}	
 
 	if (unlikely(!PageUptodate(page))) {
+		#ifdef DEBUG_SHI
+			printk(KERN_ERR"*** %s, page not up to date error", __func__);
+		#endif
 		ret = VM_FAULT_SIGBUS;
 		goto out_nomap;
 	}
@@ -2873,6 +2896,9 @@ int do_swap_page(struct vm_fault *vmf)
 	// This thread acquired the pmd lock, we can update the pte now.
 	// ? this prevent further page-fault on this pte?
 	set_pte_at(vma->vm_mm, vmf->address, vmf->pte, pte);  // 4) Write new physical addr into pte.  pte --> vmf.pte
+	#ifdef DEBUG_SHI
+		entry_states[swp_offset(entry)] = 6;
+	#endif
 	vmf->orig_pte = pte;  
 
 	// Semeru CPU support  
@@ -2909,7 +2935,13 @@ int do_swap_page(struct vm_fault *vmf)
 	 //   PTE -- Page(swp_entry_t) -- Swap Cache.
 	 //   Then for next clean swap out, no need to page out the page. Just unmap PTE --Page  is ok.
 	swap_free(entry);
+	// Shi*: force free of swap slots.
+	// Shi*: may be useful to see the error eariler.
+	#ifdef DEBUG_SHI
+	if (true ||
+	#else
 	if (mem_cgroup_swap_full(page) ||
+	#endif
 	    (vma->vm_flags & VM_LOCKED) || PageMlocked(page))
 		try_to_free_swap(page);  // 6) if swap partition is full, delete the page from Swap Cache.
 	unlock_page(page);

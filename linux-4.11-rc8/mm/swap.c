@@ -43,6 +43,7 @@
 #include <linux/swap_global_struct_mem_layer.h>
 #include <linux/swapops.h>
 #include <linux/swapfile.h>
+#include <linux/vmalloc.h>
 #include <linux/frontswap.h>
 #include <asm/tlb.h>
 
@@ -55,15 +56,54 @@
 // Semeru support
 //
 
-// 64 bits per tiem.
-//unsigned long *swp_entry_to_virtual_remapping = (unsigned long*)kzalloc(SWAP_ARRAY_LENGTH, GFP_KERNEL);
-
 // Shi*: this mapping is still needed now as the mapping is only static, not linear!!
 // Shi: array[swp_offset()] = (unsigned long)-1 or vaddr page offset starting from RDMA_DATA_SPACE_START_ADDR
-unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH] = {0};
+unsigned long *swp_entry_to_virtual_remapping = NULL;
 
 // Shi: array[vaddr page offset starting from RDMA_DATA_SPACE_START_ADDR] = swap entry
-swp_entry_t vaddr_to_swap_entry_mapping[SWAP_ARRAY_LENGTH] = {{0}};
+swp_entry_t *vaddr_to_swap_entry_mapping = NULL;
+
+// Shi: index with swap slot offset, denoting whether each swap slot is in use.
+// Set in add_to_swap(), and cleared in free_swap_slot()
+// Used as a quick fix to a bug, that when trying to allocate swap slot for a page,
+// sometimes another struct page is in swap cache, referencing the swap slot, 
+// so the swap slot is still in use, leading to failure of adding page to swap cache.
+// With this array, we can check whether the swap slot is still in use, and allocate a new one if so.
+// We still don't know why this happens, or if it is an expected behavior.
+// May change later.
+bool *swap_entry_in_use = NULL;
+
+#ifdef DEBUG_SHI
+// array to denote state of entries, index by entry offset
+// 0: in global pool
+// 1: filled in per cpu buffer
+// 2: allocated to a page
+// 3: page PTE is unmapped
+// 4: page is swapped out (skipped)
+// 5: page is swapped in (skipped)
+// 6: PTE is mapped again
+// 7: entry is returned to per cpu return buffer
+// 8: entry in range is unused
+// 9: undefined
+// 10+: specific for debug, search for entry_states
+unsigned char *entry_states = NULL;
+
+struct page ** pages_in_swap_cache = NULL;
+struct page ** newly_allocated_page = NULL;
+#endif
+
+int __init entry_vaddr_map_init(void) {
+	swp_entry_to_virtual_remapping = (unsigned long*)vzalloc(sizeof(unsigned long) * SWAP_ARRAY_LENGTH);
+	vaddr_to_swap_entry_mapping = (swp_entry_t*)vzalloc(sizeof(swp_entry_t) * SWAP_ARRAY_LENGTH);
+	swap_entry_in_use = (bool*)vzalloc(sizeof(bool) * SWAP_ARRAY_LENGTH);
+	#ifdef DEBUG_SHI
+		entry_states = (unsigned char*)vzalloc(sizeof(unsigned char) * SWAP_ARRAY_LENGTH);
+		pages_in_swap_cache = (struct page **)vzalloc(sizeof(struct page*) * SWAP_ARRAY_LENGTH);
+		newly_allocated_page = (struct page **)vzalloc(sizeof(struct page*) * SWAP_ARRAY_LENGTH);
+	#endif
+	return 0;
+}
+__initcall(entry_vaddr_map_init);
 
 // Record the swap out ratio for the JVM Heap Region
 // 1) Reset it to 0 before using by a process.
@@ -148,6 +188,12 @@ swp_entry_t get_swap_entry_via_vaddr(unsigned long vaddr) {
 }
 
 void set_swap_entry_via_vaddr(unsigned long vaddr, swp_entry_t entry) {
+	#ifdef DEBUG_SHI
+		swp_entry_t entry_in_array = get_swap_entry_via_vaddr(vaddr);
+		if (!non_swap_entry(entry_in_array) && entry_in_array.val != entry.val) {
+			printk("*** %s: vaddr=%lx, entry=%lx, entry_in_array=%lx\n", __func__, vaddr, entry.val, entry_in_array.val);
+		}
+	#endif
 	vaddr_to_swap_entry_mapping[(vaddr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT] = entry;
 }
 
@@ -185,6 +231,10 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 void insert_swp_entry_direct(swp_entry_t entry, unsigned long virt_addr)
 {
 	#ifdef DEBUG_SHI
+	if (!within_range(virt_addr)) {
+		printk(KERN_ERR "*** %s, virt_addr 0x%lx is out of range.\n", __func__, virt_addr);
+		return;
+	}
 	if (swp_entry_to_virtual_remapping[swp_offset(entry)] != INITIAL_VALUE &&
 		swp_entry_to_virtual_remapping[swp_offset(entry)] != ((virt_addr - RDMA_DATA_SPACE_START_ADDR) >> PAGE_SHIFT)) {
 			printk(KERN_ERR "*** %s: wrong entry to vaddr value!! value: %lx; vaddr offset: %lx\n", __func__,

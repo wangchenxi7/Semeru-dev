@@ -374,11 +374,16 @@ int semeru_force_swapout(unsigned long start_addr, unsigned long end_addr)
 	if (!can_do_swapout(vma))
 		return 0;
 
+	// Shi: caller of walk_page_range() should hold lock of mm->mmap_sem.
+	// Shi: get write lock for safety.
+	down_write(&mm->mmap_sem);
 	// lru_add_drain(); // release the cpu local physical pages
 	lru_add_drain_all(); // release the cpu local physical pages
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_swapout_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb,start_addr, end_addr);
+	// Shi: walk_page_range() ends, release mm->mmap_sem.
+	up_write(&mm->mmap_sem);
 
 	pr_warn("%s, Force swap out for [0x%lx, 0x%lx) finished.\n",
 		__func__, start_addr, end_addr);
@@ -408,11 +413,16 @@ int semeru_set_ptes_to_swap_entries(unsigned long start_addr, unsigned long end_
 	pr_warn("%s, Start setting PTEs for [0x%lx, 0x%lx).\n",
 		__func__, start_addr, end_addr);
 
+	// Shi: caller of walk_page_range() should hold lock of mm->mmap_sem.
+	// Shi: get write lock for safety.
+	down_write(&mm->mmap_sem);
 	// Shi*: call to `lru_add_drain_all`, `tlb_gather_mmu` and `tlb_finish_mmu` may be unnecessary.
 	lru_add_drain_all(); // release the cpu local physical pages
 	tlb_gather_mmu(&tlb, mm, start_addr, end_addr); // prepare TLB flushing info
 	ret = semeru_set_pte_page_range(&tlb, mm, start_addr, end_addr);
 	tlb_finish_mmu(&tlb, start_addr, end_addr);
+	// Shi: walk_page_range() ends, release mm->mmap_sem.
+	up_write(&mm->mmap_sem);
 
 	pr_warn("%s, Setting PTEs for [0x%lx, 0x%lx) finished.\n",
 		__func__, start_addr, end_addr);

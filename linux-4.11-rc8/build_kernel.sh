@@ -128,7 +128,7 @@ if [ "${op}" = "build" ]
 then
 	echo "make oldconfig"
 	sleep 1
-#	make oldconfig
+	make oldconfig
 
 	echo "make LOCALVERSION=${LocalVersion}  -j${num_cores}"
 	sleep 1

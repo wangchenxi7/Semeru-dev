@@ -699,6 +699,13 @@ checks:
 		spin_unlock(&swap_avail_lock);
 	}
 	si->swap_map[offset] = usage;
+	#ifdef DEBUG_SHI
+	if (usage == SWAP_HAS_CACHE) {
+		entry_states[offset] = 1;
+	} else {
+		entry_states[offset] = 9;
+	}
+	#endif
 	inc_cluster_info_page(si, si->cluster_info, offset);
 	unlock_cluster(ci);
 	si->cluster_next = offset + 1;
@@ -1086,6 +1093,9 @@ static void swap_entry_free(struct swap_info_struct *p, swp_entry_t entry)
 	VM_BUG_ON(count != SWAP_HAS_CACHE);
 	// Shi: swap_map[offset] in returned slot cache is not set to 0 when calling free_swap_slot(), until here
 	p->swap_map[offset] = 0;
+	#ifdef DEBUG_SHI
+		entry_states[offset] = 0;
+	#endif
 	dec_cluster_info_page(p, p->cluster_info, offset);
 	unlock_cluster(ci);
 
@@ -3015,6 +3025,12 @@ SYSCALL_DEFINE2(swapon, const char __user *, specialfile, int, swap_flags)
 	for(i = 0; i < SWAP_ARRAY_LENGTH; ++i) {
 		swp_entry_to_virtual_remapping[i] = INITIAL_VALUE;
 		vaddr_to_swap_entry_mapping[i].val = (unsigned long)(MAX_SWAPFILES) << SWP_TYPE_SHIFT(dummy);
+		swap_entry_in_use[i] = false;
+		#ifdef DEBUG_SHI
+			entry_states[i] = 0;
+			pages_in_swap_cache[i] = NULL;
+			newly_allocated_page[i] = NULL;
+		#endif
 	}
 
 	pr_info("Adding %uk swap on %s.  Priority:%d extents:%d across:%lluk %s%s%s%s%s\n",
@@ -3086,6 +3102,20 @@ void si_swapinfo(struct sysinfo *val)
 	val->totalswap = total_swap_pages + nr_to_be_unused;
 	spin_unlock(&swap_lock);
 }
+
+#ifdef DEBUG_SHI
+unsigned char get_swap_map(swp_entry_t entry) {
+	struct swap_info_struct *p;
+	struct swap_cluster_info *ci;
+	unsigned long type = swp_type(entry);
+	p = swap_info[type];
+	unsigned long offset = swp_offset(entry);
+	ci = lock_cluster_or_swap_info(p, offset);
+	unsigned char count = p->swap_map[offset];
+	unlock_cluster_or_swap_info(p, ci);
+	return count;
+}
+#endif
 
 /*
  * Verify that a swap entry is valid and increment its swap map count.

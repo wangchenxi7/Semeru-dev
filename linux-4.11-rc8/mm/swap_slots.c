@@ -319,20 +319,35 @@ int free_swap_slot(swp_entry_t entry)
 	// Shi: if swap entry is for addr within range, do not free it
 	if (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) != INITIAL_VALUE) {
 		#ifdef DEBUG_SHI
-		unsigned long vaddr = (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) << PAGE_SHIFT) + RDMA_DATA_SPACE_START_ADDR;
-		if (!within_range(vaddr)) {
-			printk("*** %s: vaddr not in range! entry: %lx, vaddr: %lx\n", __func__, entry.val, vaddr);
-			goto end;
-		}
-		swp_entry_t entry_in_array = get_swap_entry_via_vaddr(vaddr);
-		if (entry_in_array.val != entry.val) {
-			printk(KERN_ERR "*** %s: wrong vaddr to entry value!! entry in array: %lx; entry using: %lx\n", __func__,
-				entry_in_array.val, entry.val);
-		}
+			unsigned long vaddr = (retrieve_swap_remmaping_virt_addr_via_offset(swp_offset(entry)) << PAGE_SHIFT) + RDMA_DATA_SPACE_START_ADDR;
+			if (!within_range(vaddr)) {
+				printk("*** %s: vaddr not in range! entry: %lx, vaddr: %lx\n", __func__, entry.val, vaddr);
+				if (swap_entry_in_use[swp_offset(entry)]) {
+					printk(KERN_ERR "*** %s: entry for vaddr not in range is in use! entry: %lx, vaddr: %lx\n", __func__, entry.val, vaddr);
+				}
+				entry_states[swp_offset(entry)] = 13;
+				return 0;
+			}
+			swp_entry_t entry_in_array = get_swap_entry_via_vaddr(vaddr);
+			if (entry_in_array.val != entry.val) {
+				printk(KERN_ERR "*** %s: wrong vaddr to entry value!! entry in array: %lx; entry using: %lx\n", __func__,
+					entry_in_array.val, entry.val);
+			}
+			if (!swap_entry_in_use[swp_offset(entry)]) {
+				printk(KERN_ERR "*** %s: swap entry with offset %lu already not used\n", __func__, swp_offset(entry));
+			}
+			entry_states[swp_offset(entry)] = 8;
 		#endif
-end:
+		swap_entry_in_use[swp_offset(entry)] = false;
 		return 0;
 	}
+	#ifdef DEBUG_SHI
+		if(swap_entry_in_use[swp_offset(entry)]) {
+			printk(KERN_ERR "*** %s: not-in-range entry %lu is used\n", __func__, swp_offset(entry));
+		}
+		entry_states[swp_offset(entry)] = 7;
+	#endif
+	swap_entry_in_use[swp_offset(entry)] = false;
 
 	struct swap_slots_cache *cache;
 

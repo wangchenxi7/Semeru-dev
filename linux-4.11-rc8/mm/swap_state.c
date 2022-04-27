@@ -282,11 +282,43 @@ int add_to_swap(struct page *page, struct list_head *list)
 	} else {
 		entry = get_swap_entry_via_vaddr(vaddr);
 		if (non_swap_entry(entry)) {
+reallocate:
 			entry = get_swap_page();
 			set_swap_entry_via_vaddr(vaddr, entry);
 		}
 		insert_swp_entry_direct(entry, vaddr);
+		#ifdef DEBUG_SHI
+			if (swap_entry_in_use[swp_offset(entry)]) {
+				printk(KERN_ERR "*** %s: swap entry with offset %lu already in use\n", __func__, swp_offset(entry));
+				printk(KERN_ERR "*** %s: entry state: %u\n", __func__, (unsigned)(entry_states[swp_offset(entry)]));
+				printk(KERN_ERR "*** %s: page argument: %lx\n", __func__, (unsigned long)page);
+				printk(KERN_ERR "*** %s: page in swap cache: %lx; newly allocated page: %lx\n", __func__, (unsigned long)pages_in_swap_cache[swp_offset(entry)], (unsigned long)newly_allocated_page[swp_offset(entry)]);
+				struct page *the_page_in_swap_cache = lookup_swap_cache(entry);
+				if (the_page_in_swap_cache) {
+					printk(KERN_ERR "*** %s: the page in swap cache: %lx\n", __func__, (unsigned long)the_page_in_swap_cache);
+					put_page(the_page_in_swap_cache);
+				}
+				unsigned char count = get_swap_map(entry);
+				unsigned char has_cache = count & SWAP_HAS_CACHE;
+				count &= ~SWAP_HAS_CACHE;
+				if (has_cache == 0) {
+					printk(KERN_ERR "*** %s: SWAP_HAS_CACHE not set for swap entry %lu\n", __func__, swp_offset(entry));
+				}
+				if (count != 0) {
+					printk(KERN_ERR "*** %s: swap entry %lu has %u references\n", __func__, swp_offset(entry), count);
+				}
+				goto reallocate;
+			}
+		#else
+			if (swap_entry_in_use[swp_offset(entry)]) {
+				goto reallocate;
+			}
+		#endif
+		swap_entry_in_use[swp_offset(entry)] = true;
 	}
+	#ifdef DEBUG_SHI
+		entry_states[swp_offset(entry)] = 2;
+	#endif
 
 	// Shi: looks like 0 entry is unused
 	if (!entry.val)		// [x] the entry.val must be calculated well !
@@ -717,6 +749,9 @@ struct page *swapin_readahead(swp_entry_t entry, gfp_t gfp_mask,
 						gfp_mask, vma, addr);
 		if (!page)
 			continue;
+		#ifdef DEBUG_SHI
+			entry_states[offset] = 10;
+		#endif
 		if (offset != entry_offset){
 			SetPageReadahead(page);
 			// prefetched page

@@ -56,13 +56,22 @@
 #define INITIAL_VALUE (unsigned long)-1  // the max value 
 
 
-// 64 bits per tiem.
+// 64 bits per item.
 // warning : global variable doesn't support dynamic memory allocation.
-extern  unsigned long swp_entry_to_virtual_remapping[];   // defined in swap.c
+extern  unsigned long *swp_entry_to_virtual_remapping;   // defined in swap.c
 
 // Shi: zero swap entry seems to be not used, see add_to_swap().
 // But we use non_swap_entry() to identify unused element now.
-extern swp_entry_t vaddr_to_swap_entry_mapping[];   // defined in swap.c
+extern swp_entry_t *vaddr_to_swap_entry_mapping;   // defined in swap.c
+
+extern bool *swap_entry_in_use;
+
+#ifdef DEBUG_SHI
+	extern unsigned char *entry_states;
+	extern struct page ** pages_in_swap_cache;
+	extern struct page ** newly_allocated_page;
+	unsigned char get_swap_map(swp_entry_t entry);
+#endif
 
 swp_entry_t get_swap_entry_via_vaddr(unsigned long vaddr);
 

@@ -213,6 +213,9 @@ static int swapin_walk_pmd_entry(pmd_t *pmd, unsigned long start,
 								vma, index);
 		if (page)
 			put_page(page);
+		#ifdef DEBUG_SHI
+			entry_states[swp_offset(entry)] = 11;
+		#endif
 	}
 
 	return 0;
@@ -254,6 +257,9 @@ static void force_shm_swapin_readahead(struct vm_area_struct *vma,
 								NULL, 0);
 		if (page)
 			put_page(page);
+		#ifdef DEBUG_SHI
+			entry_states[swp_offset(swap)] = 12;
+		#endif
 	}
 
 	lru_add_drain();	/* Push any new pages onto the LRU now */

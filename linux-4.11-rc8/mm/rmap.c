@@ -1490,6 +1490,9 @@ static int try_to_unmap_one(struct page *page, struct vm_area_struct *vma,
 				page_vma_mapped_walk_done(&pvmw);
 				break;
 			}
+			#ifdef DEBUG_SHI
+				entry_states[swp_offset(entry)] = 3;
+			#endif
 			if (list_empty(&mm->mmlist)) {
 				spin_lock(&mmlist_lock);
 				if (list_empty(&mm->mmlist))
@@ -1815,6 +1818,9 @@ unsigned long get_vaddr_via_page(struct page *page) {
 	if (!in_range) {
 		found_address = 1;
 		return found_address;
+	}
+	if(ite > 1) {
+		printk("*** %s: page %lx has %d vmas, second one is %lx\n", __func__, (unsigned long)page, ite, addresses[1]);
 	}
 	found_address = addresses[in_range_ite];
 	if (in_range_ite != 0) {

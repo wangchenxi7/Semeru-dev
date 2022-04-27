@@ -317,6 +317,13 @@ size_t translate_to_mem_server_addr(struct mem_server_addr * mem_addr, pgoff_t s
 #ifdef ENABLE_SWP_ENTRY_VIRT_REMAPPING
 	// byte address offset to the RDMA_DATA_SPACE_START_ADDR 
 	size_t start_addr = retrieve_swap_remmaping_virt_addr_via_offset(swap_entry_offset) << PAGE_SHIFT; 
+#ifdef DEBUG_SHI_UNUSED
+	unsigned long actual_vaddr = start_addr + RDMA_DATA_SPACE_START_ADDR;
+	unsigned long offset_of_entry_in_map = swp_offset(get_swap_entry_via_vaddr(actual_vaddr));
+	if (swap_entry_offset != offset_of_entry_in_map) {
+		printk(KERN_ERR "*** %s: Inconsistent entry offset! swap_entry_offset 0x%lx, offset_of_entry_in_map 0x%lx, at 0x%lx\n", __func__, swap_entry_offset, offset_of_entry_in_map, actual_vaddr);
+	}
+#endif
 #else
 	// For the default kernel, no need to do the swp_offset -> virt translation
 	size_t start_addr = swap_entry_offset << PAGE_SHIFT;
