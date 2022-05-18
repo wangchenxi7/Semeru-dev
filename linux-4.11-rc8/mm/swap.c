@@ -37,17 +37,14 @@
 
 #include "internal.h"
 
-
 //semeru
 #include <linux/swap_global_struct_bd_layer.h>
 #include <linux/swap_global_struct_mem_layer.h>
 #include <linux/swapops.h>
 #include <asm/tlb.h>
 
-
 #define CREATE_TRACE_POINTS
 #include <trace/events/pagemap.h>
-
 
 //
 // Semeru support
@@ -58,10 +55,9 @@
 
 unsigned long swp_entry_to_virtual_remapping[SWAP_ARRAY_LENGTH];
 
-
 // Record the swap out ratio for the JVM Heap Region
 // 1) Reset it to 0 before using by a process.
-// 2) Can only be used by one process at one time. 
+// 2) Can only be used by one process at one time.
 atomic_t jvm_region_swap_out_counter[SWAP_OUT_MONITOR_ARRAY_LEN];
 
 atomic_t on_demand_swapin_number;
@@ -74,13 +70,9 @@ atomic_t cp_path_prepare_to_flush;
 atomic_t enter_swap_zone_counter;
 int control_path_control_enabled;
 
-
-
 //
 // static functions
 //
-
-
 
 /**
  * Get the pte_t value  of the user space virtual address.
@@ -108,33 +100,34 @@ int control_path_control_enabled;
  * 
  * 
  */
-static pte_t* walk_page_table(struct mm_struct *mm, u64 addr){
- pgd_t *pgd;
- p4d_t *p4d;
- pud_t *pud;
- pmd_t *pmd;
- pte_t *ptep;
+static pte_t *walk_page_table(struct mm_struct *mm, u64 addr)
+{
+	pgd_t *pgd;
+	p4d_t *p4d;
+	pud_t *pud;
+	pmd_t *pmd;
+	pte_t *ptep;
 
- pgd = pgd_offset(mm, addr);
+	pgd = pgd_offset(mm, addr);
 
- if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd)))  // [?] What's the purpose of bad bit ?
-   return NULL;
+	if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd))) // [?] What's the purpose of bad bit ?
+		return NULL;
 
- p4d = p4d_offset(pgd, addr);
- if (p4d_none(*p4d) || unlikely(p4d_bad(*p4d)))
-   return NULL;
+	p4d = p4d_offset(pgd, addr);
+	if (p4d_none(*p4d) || unlikely(p4d_bad(*p4d)))
+		return NULL;
 
- pud = pud_offset(p4d, addr);
- if (pud_none(*pud) || unlikely(pud_bad(*pud)))
-   return NULL;
+	pud = pud_offset(p4d, addr);
+	if (pud_none(*pud) || unlikely(pud_bad(*pud)))
+		return NULL;
 
- pmd = pmd_offset(pud, addr);
- if (pmd_none(*pmd))
-   return NULL;
+	pmd = pmd_offset(pud, addr);
+	if (pmd_none(*pmd))
+		return NULL;
 
- ptep = pte_offset_map(pmd, addr);
+	ptep = pte_offset_map(pmd, addr);
 
- return ptep;
+	return ptep;
 }
 
 /**
@@ -159,9 +152,9 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 
 	// enable the swap-out of Meta Region
 	//swp_entry_to_virtual_remapping[swp_offset(entry)] = ( (virt_addr -  SEMERU_START_ADDR) >> PAGE_SHIFT );
-// if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
-// 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
-// 		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
+	// if(((size_t)virt_addr>=0x400100000000ULL && (size_t)virt_addr < 0x400108000000) || ((size_t)virt_addr>=0x400500000000ULL && (size_t)virt_addr < 0x400508000000))
+	// 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
+	// 		__func__, (u64)entry.val, (u64)swp_type(entry), (u64)swp_offset(entry), (u64)(virt_addr >> PAGE_SHIFT));
 
 #ifdef DEBUG_SWAP_PATH
 	printk("%s,Build Remap from swp_entry_t[0x%llx] (type: 0x%llx, offset: 0x%llx) to virt_addr 0x%llx pages\n",
@@ -169,52 +162,39 @@ void insert_swp_entry(struct page *page, unsigned long virt_addr)
 #endif
 }
 
-// inline it 
+// inline it
 // unsigned long retrieve_swap_remmaping_virt_addr(swp_entry_t entry){
 // 	return swp_entry_to_virtual_remapping[swp_offset(entry)];
 // }
 
-
 // To be used by kernel module.
-unsigned long retrieve_swap_remmaping_virt_addr_via_offset(pgoff_t offset){
+unsigned long retrieve_swap_remmaping_virt_addr_via_offset(pgoff_t offset)
+{
 	return swp_entry_to_virtual_remapping[offset];
 }
 EXPORT_SYMBOL(retrieve_swap_remmaping_virt_addr_via_offset);
-
-
-
 
 //
 // Page IO debug functions
 // Invokation scope is within this .cpp file.
 //
 
-void print_swap_entry_t_and_sector_addr(struct page * page, const char* message){
+void print_swap_entry_t_and_sector_addr(struct page *page, const char *message)
+{
 	swp_entry_t swap = { .val = page_private(page) };
 
 	// Page basic information
-	printk("%s Start, Page info : page 0x%llx, physical address 0x%llx \n", message,
-																			(u64)page,
-																			(u64)page_to_phys(page));
+	printk("%s Start, Page info : page 0x%llx, physical address 0x%llx \n", message, (u64)page,
+	       (u64)page_to_phys(page));
 
 	// swap_entry_t information
-	printk(" Swap entry info : swap_entry_t.val 0x%llx, swap_type 0x%llx, swap_offset 0x%llx \n",
-																					(u64)swap.val,
-																					(u64)swp_type(swap),
-																					(u64)swp_offset(swap));
+	printk(" Swap entry info : swap_entry_t.val 0x%llx, swap_type 0x%llx, swap_offset 0x%llx \n", (u64)swap.val,
+	       (u64)swp_type(swap), (u64)swp_offset(swap));
 
 	// sector address information
-	printk("%s End, Sector info: swap out sector addr : 0x%llx (sector size 512 B)\n\n", message, 
-															(u64)((sector_t)__page_file_index(page) << (PAGE_SHIFT - 9)) );
-
-
+	printk("%s End, Sector info: swap out sector addr : 0x%llx (sector size 512 B)\n\n", message,
+	       (u64)((sector_t)__page_file_index(page) << (PAGE_SHIFT - 9)));
 }
-
-
-
-
-
-
 
 //
 // Debug function
@@ -231,21 +211,22 @@ bool within_range(u64 val)
 {
 	// 1) normal swap, for swp_entry_t --> virtual remap
 	//    Only data Region can be swapped out.
-	if( val >= (u64)RDMA_DATA_SPACE_START_ADDR && val < (u64)(RDMA_DATA_SPACE_START_ADDR + (size_t)MAX_SWAP_MEM_GB*ONE_GB )  ){
+	if (val >= (u64)RDMA_DATA_SPACE_START_ADDR &&
+	    val < (u64)(RDMA_DATA_SPACE_START_ADDR + (size_t)MAX_SWAP_MEM_GB * ONE_GB)) {
 		return 1;
 	}
 
 	// Enable the swap-out of Meta Region.
-// 	if (val >= (u64)(SEMERU_START_ADDR + RDMA_META_REGION_SWAP_PART_OSSFET) &&
-// 	    val < (u64)(SEMERU_START_ADDR + (u64)MAX_REGION_NUM * REGION_SIZE_GB * ONE_GB)) {
-// #ifdef DEBUG_SWAP_PATH_DETAIL
-// 		printk(KERN_INFO "%s, virt page 0x%llx is within swapped out range[ 0x%llx, 0x%llx]\n", __func__, val,
-// 		       (u64)(SEMERU_START_ADDR + RDMA_META_REGION_SWAP_PART_OSSFET),
-// 		       (u64)(SEMERU_START_ADDR + (u64)MAX_REGION_NUM * REGION_SIZE_GB * ONE_GB));
-// #endif
+	// 	if (val >= (u64)(SEMERU_START_ADDR + RDMA_META_REGION_SWAP_PART_OSSFET) &&
+	// 	    val < (u64)(SEMERU_START_ADDR + (u64)MAX_REGION_NUM * REGION_SIZE_GB * ONE_GB)) {
+	// #ifdef DEBUG_SWAP_PATH_DETAIL
+	// 		printk(KERN_INFO "%s, virt page 0x%llx is within swapped out range[ 0x%llx, 0x%llx]\n", __func__, val,
+	// 		       (u64)(SEMERU_START_ADDR + RDMA_META_REGION_SWAP_PART_OSSFET),
+	// 		       (u64)(SEMERU_START_ADDR + (u64)MAX_REGION_NUM * REGION_SIZE_GB * ONE_GB));
+	// #endif
 
-// 		return 1;
-// 	}
+	// 		return 1;
+	// 	}
 
 #ifdef DEBUG_SWAP_PATH_DETAIL
 	printk(KERN_INFO "%s, virt page 0x%llx is NOT within swapped out range[ 0x%llx, 0x%llx]\n", __func__, val,
@@ -278,11 +259,8 @@ bool print_swapped_annoymous_page_info(struct page *page, struct page_vma_mapped
 }
 
 //
-// LRU list debug 
+// LRU list debug
 //
-
-
-
 
 /**
  * Get the page's corresponding virtual address via the  reverse mapping.
@@ -296,34 +274,34 @@ bool print_swapped_annoymous_page_info(struct page *page, struct page_vma_mapped
  * 
  */
 
-int page_to_user_virt_addr(struct page* page, unsigned long virt[]){
-
+int page_to_user_virt_addr(struct page *page, unsigned long virt[])
+{
 	struct anon_vma *anon_vma;
 	pgoff_t pgoff_start, pgoff_end;
 	struct anon_vma_chain *avc;
 	int count = 0;
 	//struct rmap_walk_control rwc; // not specify any special control
-		
+
 	anon_vma = page_anon_vma(page);
-	if (!anon_vma){
+	if (!anon_vma) {
 		printk(KERN_ERR "%s, anno_vma is empty. page 0x%llx \n", __func__, (u64)page);
-		goto err;	
+		goto err;
 	}
 
 	// [?] is this lock necessary ??
 	//anon_vma_lock_read(anon_vma);
 
-	
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
-	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
-			pgoff_start, pgoff_end) {
+	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root, pgoff_start, pgoff_end)
+	{
 		struct vm_area_struct *vma = avc->vma;
 		unsigned long address = vma_address(page, vma);
 
 		// store the found virtual addres
-		if(unlikely(count > 7)){
-			printk(KERN_ERR "%s, too many mapped virtual address. skip vrit_addr 0x%llx. \n",__func__, (u64)address );
+		if (unlikely(count > 7)) {
+			printk(KERN_ERR "%s, too many mapped virtual address. skip vrit_addr 0x%llx. \n", __func__,
+			       (u64)address);
 			continue;
 		}
 		virt[count++] = address;
@@ -333,10 +311,6 @@ err:
 	return count;
 }
 
-
-
-
-
 /**
  * Print the lru-list via the user virtual address.
  * 	virt addr -> struct page -> mem_cgroup ->  lru set. 
@@ -345,87 +319,83 @@ err:
  * 		 And then we can get the corresponding LRU list set.
  * 		 We get the struct page via the a user space virt addr.
  */
-void print_lru_flush_list_via_virt(unsigned long addr, const char* message){
+void print_lru_flush_list_via_virt(unsigned long addr, const char *message)
+{
 	struct lruvec *lruvec;
-	struct list_head* list_ptr;
+	struct list_head *list_ptr;
 	unsigned long count = 0;
 	int number_of_mapped_virt, i;
 	unsigned long virt_addr[8];
 	struct page *page = NULL;
 	// pagelist NODE specific management data
 	struct pglist_data *pagepgdat;
-	pte_t* 		pte_ptr;
-
+	pte_t *pte_ptr;
 
 	// Prepare functions.
 	// Flush the CPU local variables
-	// Better to develop a separate flush function for lru-flush-page 
+	// Better to develop a separate flush function for lru-flush-page
 	lru_flush_list_drain_all();
 
-
 	//1) Get the struct page
-	pte_ptr = walk_page_table(current->mm, (u64)addr );
+	pte_ptr = walk_page_table(current->mm, (u64)addr);
 	page = pfn_to_page(pte_pfn(*pte_ptr));
-	if(page == NULL){
+	if (page == NULL) {
 		printk(KERN_ERR " %s, empty page. \n", message);
 		goto err;
 	}
-	#ifdef DEBUG_FLUSH_LIST
-	else{
-		printk(KERN_INFO "%s Get mem_zone via vird addr 0x%llx,  page 0x%llx \n", message, (u64)addr, (u64)page);
+#ifdef DEBUG_FLUSH_LIST
+	else {
+		printk(KERN_INFO "%s Get mem_zone via vird addr 0x%llx,  page 0x%llx \n", message, (u64)addr,
+		       (u64)page);
 	}
-	#endif
+#endif
 
-
-	//2) traverse all the online NODE's memory 
+	//2) traverse all the online NODE's memory
 	// for_each_online_pgdat(pagepgdat){
 
+	pagepgdat = page_pgdat(page);
+	if (pagepgdat == NULL) {
+		printk(KERN_ERR "%s, This pagepgdat is NULL, skip it. \n", message);
+		goto err;
+	}
 
-		pagepgdat = page_pgdat(page);
-		if (pagepgdat == NULL){
-			printk(KERN_ERR "%s, This pagepgdat is NULL, skip it. \n", message);
-			goto err;
+	// Get the lru-list set for this node, cgroup.
+	// lru list set is per-cgroup. we have to  get hte memory cgroup information via a struct page.
+	lruvec = mem_cgroup_page_lruvec(page, pagepgdat); //page can't be null;  pglist_data->lruvec
+
+	printk(KERN_INFO "&lruvec->lists[SEMERU_LRU_FLUSH_LIST], list_head 0x%llx  \n",
+	       (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST]);
+
+	// 3) Check the flush page list.
+	list_for_each (list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST]) {
+		page = lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
+		number_of_mapped_virt = page_to_user_virt_addr(page, virt_addr);
+
+		if (number_of_mapped_virt == 0) {
+			printk(KERN_INFO "	Entry [0x%llx], virtual page addr 0x%llx, page 0x%llx \n",
+			       (u64)(count++), (u64)0, (u64)page);
+
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+			printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr,
+			       (u64)list_ptr->prev, (u64)list_ptr->next);
+#endif
+		} else {
+			for (i = 0; i < number_of_mapped_virt; i++)
+				printk(KERN_INFO "	Entry [0x%llx], virtual page addr[%d] 0x%llx, page 0x%llx \n",
+				       (u64)(count++), i, (u64)virt_addr[i], (u64)page);
+
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+			printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr,
+			       (u64)list_ptr->prev, (u64)list_ptr->next);
+#endif
 		}
 
-
-		// Get the lru-list set for this node, cgroup.
-		// lru list set is per-cgroup. we have to  get hte memory cgroup information via a struct page.
-		lruvec = mem_cgroup_page_lruvec(page, pagepgdat);  //page can't be null;  pglist_data->lruvec
-	
-		printk(KERN_INFO "&lruvec->lists[SEMERU_LRU_FLUSH_LIST], list_head 0x%llx  \n", (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST]);
-
-		// 3) Check the flush page list.
-		list_for_each(list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST] )
-		{
-			page =	lru_to_page(list_ptr->next);  // get  struct page containing list_ptr->prev
-			number_of_mapped_virt = page_to_user_virt_addr(page, virt_addr);
-
-			if(number_of_mapped_virt == 0 ){
-				printk(KERN_INFO "	Entry [0x%llx], virtual page addr 0x%llx, page 0x%llx \n", (u64)(count++), (u64)0, (u64)page);
-
-				#ifdef DEBUG_FLUSH_LIST_DETAIL
-					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );
-				#endif
-			}else{
-				for(i=0; i< number_of_mapped_virt; i++)
-					printk(KERN_INFO "	Entry [0x%llx], virtual page addr[%d] 0x%llx, page 0x%llx \n", (u64)(count++), i, (u64)virt_addr[i], (u64)page);
-				
-				#ifdef DEBUG_FLUSH_LIST_DETAIL
-					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );
-				#endif
-			}
-
-		}// traverse each entry of the lru list.
-
+	} // traverse each entry of the lru list.
 
 	//}// each pglist_data
 err:
 	printk(KERN_INFO "%s END  \n \n", message);
 }
-
-
-
-
 
 /**
  * Print the lru-list of a mem_cgroup.
@@ -436,9 +406,10 @@ err:
  * 2) scan all the online NODE's  LRU list set.
  * 
  */
-void print_lru_flush_list_via_memcgroup(const char* message){
+void print_lru_flush_list_via_memcgroup(const char *message)
+{
 	struct lruvec *lruvec;
-	struct list_head* list_ptr;
+	struct list_head *list_ptr;
 	unsigned long count = 0;
 	int number_of_mapped_virt, i;
 	unsigned long virt_addr[8];
@@ -447,91 +418,84 @@ void print_lru_flush_list_via_memcgroup(const char* message){
 	struct pglist_data *pagepgdat;
 	struct mem_cgroup *memcg;
 
-
 	// Prepare functions.
 	// Flush the CPU local variables
-	// Better to develop a separate flush function for lru-flush-page 
+	// Better to develop a separate flush function for lru-flush-page
 	lru_flush_list_drain_all();
 
 	// 1) get the caller process's mem_cgroup
 	memcg = mem_cgroup_from_task(current); // get current process't mem_cgroup
 
-	//2) traverse all the online NODE's memory 
-	for_each_online_pgdat(pagepgdat){
-
+	//2) traverse all the online NODE's memory
+	for_each_online_pgdat (pagepgdat) {
 		// 2.1 Get the mem_cgroup_per_node[]->lruvec
 		lruvec = mem_cgroup_lruvec(pagepgdat, memcg);
 
-		printk(KERN_INFO " \n Node[%d],  &lruvec->lists[SEMERU_LRU_FLUSH_LIST], list_head 0x%llx  \n", 
-																					pagepgdat->node_id, (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST]);
+		printk(KERN_INFO " \n Node[%d],  &lruvec->lists[SEMERU_LRU_FLUSH_LIST], list_head 0x%llx  \n",
+		       pagepgdat->node_id, (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST]);
 
 		// 3) Check the flush page list.
-		list_for_each(list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST] )
-		{
-			page =	lru_to_page(list_ptr->next);  // get  struct page containing list_ptr->prev
+		list_for_each (list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST]) {
+			page = lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
 			number_of_mapped_virt = page_to_user_virt_addr(page, virt_addr);
 
-			if(number_of_mapped_virt == 0 ){
-				printk(KERN_INFO "%s,	Entry [0x%llx], virtual page addr 0x%llx, page 0x%llx \n", message, (u64)(count++), (u64)0, (u64)page);
+			if (number_of_mapped_virt == 0) {
+				printk(KERN_INFO "%s,	Entry [0x%llx], virtual page addr 0x%llx, page 0x%llx \n",
+				       message, (u64)(count++), (u64)0, (u64)page);
 
-				// debug page flags 
-				printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d \n", PageSwapCache(page), PageAnon(page),PageLRU(page));
+				// debug page flags
+				printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d \n",
+				       PageSwapCache(page), PageAnon(page), PageLRU(page));
 
-				#ifdef DEBUG_FLUSH_LIST_DETAIL
-					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );
-				#endif
-			}else{
-				for(i=0; i< number_of_mapped_virt; i++){
-					printk(KERN_INFO "%s,	Entry [0x%llx], virtual page addr[%d] 0x%llx, page 0x%llx \n", message, (u64)(count++), i, (u64)virt_addr[i], (u64)page);
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+				printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n",
+				       (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next);
+#endif
+			} else {
+				for (i = 0; i < number_of_mapped_virt; i++) {
+					printk(KERN_INFO
+					       "%s,	Entry [0x%llx], virtual page addr[%d] 0x%llx, page 0x%llx \n",
+					       message, (u64)(count++), i, (u64)virt_addr[i], (u64)page);
 				}
-					// debug page flags 
-					printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d, PageDirty %d\n", 
-						PageSwapCache(page), PageAnon(page),PageLRU(page), PageDirty(page) );
-				
-				#ifdef DEBUG_FLUSH_LIST_DETAIL
-					printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n", (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next );
-				#endif
+				// debug page flags
+				printk(KERN_INFO "	in swapcache ? %d, anony ? %d, PageLRU %d, PageDirty %d\n",
+				       PageSwapCache(page), PageAnon(page), PageLRU(page), PageDirty(page));
+
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+				printk(KERN_INFO "		list_ptr 0x%llx ,prev 0x%llx, next 0x%llx \n\n",
+				       (u64)list_ptr, (u64)list_ptr->prev, (u64)list_ptr->next);
+#endif
 			}
 
-		}// traverse each entry of the lru list.
+		} // traverse each entry of the lru list.
 
-
-
-	}// each pglist_data
-//err:
+	} // each pglist_data
+	//err:
 	printk(KERN_INFO "%s END  \n \n", message);
 }
-
 
 //
 // Check PageTable Entry, pte.
 //
 
-
-
-
-
-
-
 /**
  * Print the value of pte.
  *  
  */
-void print_pte_flags(pte_t pte, enum check_mode mode,  const char* message){
-
+void print_pte_flags(pte_t pte, enum check_mode mode, const char *message)
+{
 	printk(KERN_INFO "\n %s START \n", message);
 
-	switch(mode){
-		case CHECK_FLUSH_MOD:
-			if(!pte_none(pte)){
-				printk(KERN_INFO "	pte_t.pte 0x%llx, none 0.  present %d, dirty %d, pte_young %d \n", 
-												 (u64)pte.pte,  pte_present(pte), pte_dirty(pte), pte_young(pte));
-			}else{
-				printk(KERN_INFO "	pte_t.pte 0x%llx, none ? 1. \n", 
-													 (u64)pte.pte );
-			}
+	switch (mode) {
+	case CHECK_FLUSH_MOD:
+		if (!pte_none(pte)) {
+			printk(KERN_INFO "	pte_t.pte 0x%llx, none 0.  present %d, dirty %d, pte_young %d \n",
+			       (u64)pte.pte, pte_present(pte), pte_dirty(pte), pte_young(pte));
+		} else {
+			printk(KERN_INFO "	pte_t.pte 0x%llx, none ? 1. \n", (u64)pte.pte);
+		}
 
-			break;
+		break;
 
 	default:
 		//nothong to check
@@ -539,14 +503,10 @@ void print_pte_flags(pte_t pte, enum check_mode mode,  const char* message){
 	}
 
 	printk(KERN_INFO "%s END \n\n", message);
-
 }
 
-
-
-
-void print_pte_flags_virt_range(unsigned long start, unsigned long end, enum check_mode print_mode,  const char* message){
-
+void print_pte_flags_virt_range(unsigned long start, unsigned long end, enum check_mode print_mode, const char *message)
+{
 	struct mm_struct *mm = current->mm;
 	unsigned long page_iter; // 4K default.
 	unsigned long count;
@@ -554,127 +514,117 @@ void print_pte_flags_virt_range(unsigned long start, unsigned long end, enum che
 	struct page *page = NULL;
 
 	count = 0;
-	for( page_iter = start; page_iter < end; page_iter += PAGE_SIZE){
-		pte = walk_page_table(mm, (u64)page_iter );
+	for (page_iter = start; page_iter < end; page_iter += PAGE_SIZE) {
+		pte = walk_page_table(mm, (u64)page_iter);
 		page = pfn_to_page(pte_pfn(*pte));
-		printk(KERN_INFO "%s, virt_page[0x%lx] 0x%llx, pte_t.pte 0x%llx , page 0x%llx \n", message, count++, (u64)page_iter, (u64)pte->pte, (u64)page );
+		printk(KERN_INFO "%s, virt_page[0x%lx] 0x%llx, pte_t.pte 0x%llx , page 0x%llx \n", message, count++,
+		       (u64)page_iter, (u64)pte->pte, (u64)page);
 		print_pte_flags(*pte, print_mode, message);
-		print_page_flags(page, print_mode, message ); // debug
+		print_page_flags(page, print_mode, message); // debug
 	}
-
 }
 
-
-
-
 //
-// Check physical memory flags 
+// Check physical memory flags
 //
-
 
 /**
  * print all the necesaary flags, 
  * we can divide them into several groups according the needs.
  *  
  */
-void print_page_flags(struct page *page, enum check_mode mode, const char* message){
+void print_page_flags(struct page *page, enum check_mode mode, const char *message)
+{
+	switch (mode) {
+	case CHECK_FLUSH_MOD:
+		printk(KERN_INFO
+		       "%s,	page 0x%llx, swapcache %d, anony %d, PageLRU %d, PageDirty %d, PageWriteback %d . page_mapcount(+1) %d, page->_refcount(the value) %d \n",
+		       message, (u64)page, PageSwapCache(page), PageAnon(page), PageLRU(page), PageDirty(page),
+		       PageWriteback(page), page_mapcount(page), page_count(page));
 
-	switch(mode){
-
-		case CHECK_FLUSH_MOD:
-			printk(KERN_INFO "%s,	page 0x%llx, swapcache %d, anony %d, PageLRU %d, PageDirty %d, PageWriteback %d . page_mapcount(+1) %d, page->_refcount(the value) %d \n", 
-												message,	(u64)page,  PageSwapCache(page), PageAnon(page),PageLRU(page), PageDirty(page), PageWriteback(page), page_mapcount(page), page_count(page) );
-
-			break;
+		break;
 
 	default:
 		// Print the message at the head.
-		printk(KERN_INFO "%s,	page 0x%llx, swapcache %d, anony %d, PageLRU %d, PageDirty %d, PageWriteback %d . page_mapped(>=0?) %d, page->_refcount(the value) %d \n", 
-												message,(u64)page,  PageSwapCache(page), PageAnon(page),PageLRU(page), PageDirty(page), PageWriteback(page), page_mapped(page), page_count(page) );
+		printk(KERN_INFO
+		       "%s,	page 0x%llx, swapcache %d, anony %d, PageLRU %d, PageDirty %d, PageWriteback %d . page_mapped(>=0?) %d, page->_refcount(the value) %d \n",
+		       message, (u64)page, PageSwapCache(page), PageAnon(page), PageLRU(page), PageDirty(page),
+		       PageWriteback(page), page_mapped(page), page_count(page));
 	}
 }
-
-
-
 
 /**
  * Not flush any per-cpu local variables,
  * only print current contents of the lru_flush_list
  *  
  */
-void print_lru_flush_list_via_lruvec(struct lruvec *lruvec, const char* message){
-		struct page *page;
-		struct list_head* list_ptr;
-		int count =0;
+void print_lru_flush_list_via_lruvec(struct lruvec *lruvec, const char *message)
+{
+	struct page *page;
+	struct list_head *list_ptr;
+	int count = 0;
 
-		printk(KERN_INFO "%s Start \n", message);
+	printk(KERN_INFO "%s Start \n", message);
 
-		list_for_each(list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST] )
-		{
-			page =	lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
-			printk(KERN_INFO "	entry[%d] page 0x%llx \n", count++, (u64)page);
-	
-		}// traverse each entry of the lru list.
+	list_for_each (list_ptr, &lruvec->lists[SEMERU_LRU_FLUSH_LIST]) {
+		page = lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
+		printk(KERN_INFO "	entry[%d] page 0x%llx \n", count++, (u64)page);
 
-		printk(KERN_INFO "%s END \n\n", message);
+	} // traverse each entry of the lru list.
+
+	printk(KERN_INFO "%s END \n\n", message);
 }
-
 
 /**
  * Print the entries of the passed in list_head.
  *  
  */
-void print_lru_flush_list_via_list(struct list_head *head, const char* message){
-		struct page *page;
-		struct list_head* list_ptr;
-		u64 count =0;
+void print_lru_flush_list_via_list(struct list_head *head, const char *message)
+{
+	struct page *page;
+	struct list_head *list_ptr;
+	u64 count = 0;
 
-		printk(KERN_INFO "\n %s Start \n", message);
+	printk(KERN_INFO "\n %s Start \n", message);
 
-		list_for_each(list_ptr, head )
-		{
-			page =	lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
-			printk(KERN_INFO "	%s, entry[0x%llx] page 0x%llx \n", message, count++, (u64)page);
-			print_page_flags( page, CHECK_FLUSH_MOD, message);
-	
-		}// traverse each entry of the lru list.
+	list_for_each (list_ptr, head) {
+		page = lru_to_page(list_ptr->next); // get  struct page containing list_ptr->prev
+		printk(KERN_INFO "	%s, entry[0x%llx] page 0x%llx \n", message, count++, (u64)page);
+		print_page_flags(page, CHECK_FLUSH_MOD, message);
 
-		printk(KERN_INFO "%s END \n\n", message);
+	} // traverse each entry of the lru list.
+
+	printk(KERN_INFO "%s END \n\n", message);
 }
-
-
-
 
 // Debug for BIO / I/O Request
 //
 
-void print_bio_info(struct bio * bio_ptr, const char* message){
+void print_bio_info(struct bio *bio_ptr, const char *message)
+{
+	struct bio_vec bv; // iterate the struct page attached to the bio.
+	struct bvec_iter iter;
+	u64 phys_addr;
 
-  struct bio_vec    bv;     // iterate the struct page attached to the bio.
-	struct bvec_iter  iter;
-  u64 phys_addr;
+	if (message != NULL)
+		printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
 
-  if(message != NULL)
-    printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
-  
 	// This may be a bio list.
-  for_each_bio(bio_ptr){
-		
-		printk(KERN_INFO "	bio->bi_iter sector addr: 0x%llx, (virt addr 0x%llx) ,  byte len 0x%llx \n", 
-															(u64)bio_ptr->bi_iter.bi_sector, 	(u64)(bio_ptr->bi_iter.bi_sector << 9), (u64)bio_ptr->bi_iter.bi_size );
-		
-		bio_for_each_segment(bv, bio_ptr, iter) {
-      struct page *page = bv.bv_page;   
-      phys_addr = page_to_phys(page);
-      printk(KERN_INFO "	handle struct page: 0x%llx , physical address : 0x%llx \n", 
-                           (u64)page, (u64)phys_addr );
-    }
+	for_each_bio (bio_ptr) {
+		printk(KERN_INFO "	bio->bi_iter sector addr: 0x%llx, (virt addr 0x%llx) ,  byte len 0x%llx \n",
+		       (u64)bio_ptr->bi_iter.bi_sector, (u64)(bio_ptr->bi_iter.bi_sector << 9),
+		       (u64)bio_ptr->bi_iter.bi_size);
 
+		bio_for_each_segment (bv, bio_ptr, iter) {
+			struct page *page = bv.bv_page;
+			phys_addr = page_to_phys(page);
+			printk(KERN_INFO "	handle struct page: 0x%llx , physical address : 0x%llx \n", (u64)page,
+			       (u64)phys_addr);
+		}
 	}
 
-  if(message != NULL)
-    printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
-  
+	if (message != NULL)
+		printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
 }
 
 /**
@@ -687,7 +637,7 @@ void print_bio_within_range(struct bio *bio_ptr, const char *message)
 
 	if ((void *)bio_ptr != NULL) {
 		// request->_sector. Sector start address, change to bytes.
-		start_addr = (u64)bio_ptr->bi_iter.bi_sector << 9; 
+		start_addr = (u64)bio_ptr->bi_iter.bi_sector << 9;
 
 		if (within_range(start_addr)) {
 			print_bio_info(bio_ptr, message);
@@ -695,107 +645,80 @@ void print_bio_within_range(struct bio *bio_ptr, const char *message)
 	}
 }
 
-void print_io_request_info(struct request *io_rq, const char* message){
+void print_io_request_info(struct request *io_rq, const char *message)
+{
+	struct bio *bio_ptr = io_rq->bio;
+	struct bio_vec bv; // iterate the struct page attached to the bio.
+	struct bvec_iter iter;
+	u64 phys_addr;
 
-  struct bio        *bio_ptr = io_rq->bio;
-  struct bio_vec    bv;     // iterate the struct page attached to the bio.
-	struct bvec_iter  iter;
-  u64 phys_addr;
+	if (message != NULL)
+		printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
 
-  if(message != NULL)
-    printk(KERN_INFO "\n  %s invoked in %s , Start\n", __func__, message);
-  
+	for_each_bio (bio_ptr) {
+		printk(KERN_INFO
+		       "	bio->bi_iter sector addr : 0x%llx, (remapped virt_addr) 0x%llx , byte len 0x%llx \n",
+		       (u64)bio_ptr->bi_iter.bi_sector, (u64)(bio_ptr->bi_iter.bi_sector << 9),
+		       (u64)bio_ptr->bi_iter.bi_size);
 
-  for_each_bio(bio_ptr){
-		printk(KERN_INFO "	bio->bi_iter sector addr : 0x%llx, (remapped virt_addr) 0x%llx , byte len 0x%llx \n", 
-															(u64)bio_ptr->bi_iter.bi_sector, (u64)(bio_ptr->bi_iter.bi_sector<< 9), (u64)bio_ptr->bi_iter.bi_size );
-
-		bio_for_each_segment(bv, bio_ptr, iter) {
-      struct page *page = bv.bv_page;   
-      phys_addr = page_to_phys(page);
-      printk(KERN_INFO "%s: handle struct page: 0x%llx , physical address : 0x%llx \n", 
-                          __func__,  (u64)page, (u64)phys_addr );
-    }
+		bio_for_each_segment (bv, bio_ptr, iter) {
+			struct page *page = bv.bv_page;
+			phys_addr = page_to_phys(page);
+			printk(KERN_INFO "%s: handle struct page: 0x%llx , physical address : 0x%llx \n", __func__,
+			       (u64)page, (u64)phys_addr);
+		}
 	}
 
-  printk(KERN_INFO " %s, request->tag %d. \n\n", __func__, io_rq->tag );
+	printk(KERN_INFO " %s, request->tag %d. \n\n", __func__, io_rq->tag);
 
-  if(message != NULL)
-    printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
-  
+	if (message != NULL)
+		printk(KERN_INFO "\n  %s invoked in %s , End\n", __func__, message);
 }
-
-
-
 
 /**
  * Print the i/o request information only when it's in the specific range.
  *  
  */
-void print_io_request_within_range(struct request *rq, const char* message){
+void print_io_request_within_range(struct request *rq, const char *message)
+{
+	u64 start_addr = blk_rq_pos(rq) << 9; // request->_sector. Sector start address, change to bytes.
 
-  u64  start_addr      = blk_rq_pos(rq) << 9;    // request->_sector. Sector start address, change to bytes.
-
-	if(within_range(start_addr)){
+	if (within_range(start_addr)) {
 		print_io_request_info(rq, message);
 	}
 }
 
-
-
-
-
-bool sector_within_range(struct bio * bio_ptr){
+bool sector_within_range(struct bio *bio_ptr)
+{
 	sector_t sector_addr;
 	u64 virt_addr;
 
-	if(bio_ptr == NULL)
+	if (bio_ptr == NULL)
 		return 0;
 
-	sector_addr = bio_ptr->bi_iter.bi_sector;  // count in sector
+	sector_addr = bio_ptr->bi_iter.bi_sector; // count in sector
 	virt_addr = sector_addr << 9; // 512 bytes/sector
 
 	// 1) normal swap, for swp_entry_t --> virtual remap
-	if( virt_addr >= (u64)0x400000000000 && virt_addr < (u64)0x400080000000  ){
+	if (virt_addr >= (u64)0x400000000000 && virt_addr < (u64)0x400080000000) {
 		return 1;
 	}
 
 	// 2) madvise  [1GB, 2GB)
-	if( virt_addr >= (u64)0x40000000 && virt_addr < (u64)0x80000000  ){
+	if (virt_addr >= (u64)0x40000000 && virt_addr < (u64)0x80000000) {
 		return 1;
 	}
 
 	return 0;
 }
 
-
-
-
-
-
-
 //
 // Debug function end
 //
 
-
-
-
-
-
-
-
-
-
-
-
 //
 // end of Semeru
 //
-
-
-
-
 
 /* How many pages do we try to swap or page in/out together? */
 int page_cluster;
@@ -803,15 +726,15 @@ int page_cluster;
 static DEFINE_PER_CPU(struct pagevec, lru_add_pvec);
 static DEFINE_PER_CPU(struct pagevec, lru_rotate_pvecs);
 static DEFINE_PER_CPU(struct pagevec, lru_deactivate_file_pvecs);
-static DEFINE_PER_CPU(struct pagevec, lru_deactivate_pvecs);		//batch. enqueue pages into pagevec first, and then enqueue the active/inactive list.
+static DEFINE_PER_CPU(
+	struct pagevec,
+	lru_deactivate_pvecs); //batch. enqueue pages into pagevec first, and then enqueue the active/inactive list.
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct pagevec, activate_page_pvecs);
 #endif
 
 // Semeru CPU
 static DEFINE_PER_CPU(struct pagevec, lru_flush_to_remote_pvecs); // cpu local cache for flush-page-list.
-
-
 
 /*
  * This path almost never happens for VM activity - pages are normally
@@ -898,8 +821,7 @@ EXPORT_SYMBOL(put_pages_list);
  * were pinned, returns -errno. Each page returned must be released
  * with a put_page() call when it is finished with.
  */
-int get_kernel_pages(const struct kvec *kiov, int nr_segs, int write,
-		struct page **pages)
+int get_kernel_pages(const struct kvec *kiov, int nr_segs, int write, struct page **pages)
 {
 	int seg;
 
@@ -928,15 +850,11 @@ EXPORT_SYMBOL_GPL(get_kernel_pages);
  */
 int get_kernel_page(unsigned long start, int write, struct page **pages)
 {
-	const struct kvec kiov = {
-		.iov_base = (void *)start,
-		.iov_len = PAGE_SIZE
-	};
+	const struct kvec kiov = { .iov_base = (void *)start, .iov_len = PAGE_SIZE };
 
 	return get_kernel_pages(&kiov, 1, write, pages);
 }
 EXPORT_SYMBOL_GPL(get_kernel_page);
-
 
 /**
  * Flush pages in pagevec to the corresponding lru list.
@@ -951,11 +869,10 @@ EXPORT_SYMBOL_GPL(get_kernel_page);
  * 
  */
 static void pagevec_lru_move_fn(struct pagevec *pvec,
-	void (*move_fn)(struct page *page, struct lruvec *lruvec, void *arg),
-	void *arg)
+				void (*move_fn)(struct page *page, struct lruvec *lruvec, void *arg), void *arg)
 {
 	int i;
-	struct pglist_data *pgdat = NULL;		// zone based page swap management data structure.
+	struct pglist_data *pgdat = NULL; // zone based page swap management data structure.
 	struct lruvec *lruvec;
 	unsigned long flags = 0;
 
@@ -971,16 +888,15 @@ static void pagevec_lru_move_fn(struct pagevec *pvec,
 		}
 
 		lruvec = mem_cgroup_page_lruvec(page, pgdat); // Get the lru list structure for this node, cgroup.
-		(*move_fn)(page, lruvec, arg);			// apply the move_fn to this page and lrulist.
+		(*move_fn)(page, lruvec, arg); // apply the move_fn to this page and lrulist.
 	}
 	if (pgdat)
 		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
-	release_pages(pvec->pages, pvec->nr, pvec->cold);		// [?] free the pages, left in the pvec ?
-	pagevec_reinit(pvec);		// reset current pagevec.
+	release_pages(pvec->pages, pvec->nr, pvec->cold); // [?] free the pages, left in the pvec ?
+	pagevec_reinit(pvec); // reset current pagevec.
 }
 
-static void pagevec_move_tail_fn(struct page *page, struct lruvec *lruvec,
-				 void *arg)
+static void pagevec_move_tail_fn(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	int *pgmoved = arg;
 
@@ -1011,8 +927,7 @@ static void pagevec_move_tail(struct pagevec *pvec)
  */
 void rotate_reclaimable_page(struct page *page)
 {
-	if (!PageLocked(page) && !PageDirty(page) &&
-	    !PageUnevictable(page) && PageLRU(page)) {
+	if (!PageLocked(page) && !PageDirty(page) && !PageUnevictable(page) && PageLRU(page)) {
 		struct pagevec *pvec;
 		unsigned long flags;
 
@@ -1031,8 +946,7 @@ void rotate_reclaimable_page(struct page *page)
  * [?] What's the meaning of rotated ?
  *  
  */
-static void update_page_reclaim_stat(struct lruvec *lruvec,
-				     int file, int rotated)
+static void update_page_reclaim_stat(struct lruvec *lruvec, int file, int rotated)
 {
 	struct zone_reclaim_stat *reclaim_stat = &lruvec->reclaim_stat;
 
@@ -1041,8 +955,7 @@ static void update_page_reclaim_stat(struct lruvec *lruvec,
 		reclaim_stat->recent_rotated[file]++;
 }
 
-static void __activate_page(struct page *page, struct lruvec *lruvec,
-			    void *arg)
+static void __activate_page(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	if (PageLRU(page) && !PageActive(page) && !PageUnevictable(page)) {
 		int file = page_is_file_cache(page);
@@ -1153,9 +1066,7 @@ static void __lru_cache_activate_page(struct page *page)
 void mark_page_accessed(struct page *page)
 {
 	page = compound_head(page);
-	if (!PageActive(page) && !PageUnevictable(page) &&
-			PageReferenced(page)) {
-
+	if (!PageActive(page) && !PageUnevictable(page) && PageReferenced(page)) {
 		/*
 		 * If the page is on the LRU, queue it for activation via
 		 * activate_page_pvecs. Otherwise, assume the page is on a
@@ -1263,8 +1174,7 @@ void add_page_to_unevictable_list(struct page *page)
  * directly back onto it's zone's unevictable list, it does NOT use a
  * per cpu pagevec.
  */
-void lru_cache_add_active_or_unevictable(struct page *page,
-					 struct vm_area_struct *vma)
+void lru_cache_add_active_or_unevictable(struct page *page, struct vm_area_struct *vma)
 {
 	VM_BUG_ON_PAGE(PageLRU(page), page);
 
@@ -1280,8 +1190,7 @@ void lru_cache_add_active_or_unevictable(struct page *page,
 		 * counter is not modified from interrupt context, and the pte
 		 * lock is held(spinlock), which implies preemption disabled.
 		 */
-		__mod_zone_page_state(page_zone(page), NR_MLOCK,
-				    hpage_nr_pages(page));
+		__mod_zone_page_state(page_zone(page), NR_MLOCK, hpage_nr_pages(page));
 		count_vm_event(UNEVICTABLE_PGMLOCKED);
 	}
 	add_page_to_unevictable_list(page);
@@ -1308,8 +1217,7 @@ void lru_cache_add_active_or_unevictable(struct page *page,
  * be write it out by flusher threads as this is much more effective
  * than the single-page writeout from reclaim.
  */
-static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
-			      void *arg)
+static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	int lru, file;
 	bool active;
@@ -1359,23 +1267,24 @@ static void lru_deactivate_file_fn(struct page *page, struct lruvec *lruvec,
  * lruvec is current memor zone, e.g. NODE, cgroup,'s lru list set.
  *  
  */
-static void lru_deactivate_fn(struct page *page, struct lruvec *lruvec,
-			    void *arg)
+static void lru_deactivate_fn(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	if (PageLRU(page) && PageActive(page) && !PageUnevictable(page)) {
 		int file = page_is_file_cache(page);
-		int lru = page_lru_base_type(page);  // return the inactive list BASE type. LRU_INACTIVE_ANON, or  LRU_INACTIVE_FILE.
+		int lru = page_lru_base_type(
+			page); // return the inactive list BASE type. LRU_INACTIVE_ANON, or  LRU_INACTIVE_FILE.
 
-		del_page_from_lru_list(page, lruvec, lru + LRU_ACTIVE);  // delete from active list, it's Base + LRU_ACTIVE.
+		del_page_from_lru_list(page, lruvec,
+				       lru + LRU_ACTIVE); // delete from active list, it's Base + LRU_ACTIVE.
 		ClearPageActive(page);
-		ClearPageReferenced(page);  // [?] what's for ?
-		add_page_to_lru_list(page, lruvec, lru);		// add into deactive list.BASE always points to the inactive list.
+		ClearPageReferenced(page); // [?] what's for ?
+		add_page_to_lru_list(page, lruvec,
+				     lru); // add into deactive list.BASE always points to the inactive list.
 
 		__count_vm_event(PGDEACTIVATE);
 		update_page_reclaim_stat(lruvec, file, 0);
 	}
 }
-
 
 //
 // Semeru CPU
@@ -1395,44 +1304,44 @@ static void lru_deactivate_fn(struct page *page, struct lruvec *lruvec,
  * 
  * 
  */
-static void semeru_lru_flush_to_remote_fn(struct page *page, struct lruvec *lruvec,
-			    void *arg)
+static void semeru_lru_flush_to_remote_fn(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	if (PageLRU(page) && !PageUnevictable(page)) {
 		int file = page_is_file_cache(page);
-		int lru = page_lru_base_type(page);  // return the inactive list BASE type. 2 types: anony_base, file_base.
+		int lru =
+			page_lru_base_type(page); // return the inactive list BASE type. 2 types: anony_base, file_base.
 
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+		printk(KERN_INFO
+		       "Before enqueue, list_head 0x%llx, prev 0x%llx, next 0x%llx, \n  &(page->lru) 0x%llx, &(page->lru)->prev 0x%llx, &(page->lru)->next 0x%llx  \n",
+		       (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST], (u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].prev,
+		       (u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].next, (u64) & (page->lru), (u64)page->lru.prev,
+		       (u64)page->lru.next);
+#endif
 
-		#ifdef DEBUG_FLUSH_LIST_DETAIL 
-			printk(KERN_INFO "Before enqueue, list_head 0x%llx, prev 0x%llx, next 0x%llx, \n  &(page->lru) 0x%llx, &(page->lru)->prev 0x%llx, &(page->lru)->next 0x%llx  \n",  
-													(u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST],   	
-													(u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].prev,
-													(u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].next,
-													(u64)&(page->lru),
-													(u64)page->lru.prev,
-													(u64)page->lru.next);
-		#endif
+		if (PageActive(page)) {
+// Path#1, remove page from active list.
+#ifdef DEBUG_FLUSH_LIST
+			printk(KERN_INFO "%s, Transfer page 0x%llx from active list to flush list. \n", __func__,
+			       (u64)page);
+#endif
 
-		if(PageActive(page)){
-			// Path#1, remove page from active list.
-			#ifdef DEBUG_FLUSH_LIST
-			printk(KERN_INFO "%s, Transfer page 0x%llx from active list to flush list. \n", __func__, (u64)page);
-			#endif
-
-			del_page_from_lru_list(page, lruvec, lru + LRU_ACTIVE);  // delete from active list, it's Base + LRU_ACTIVE.
+			del_page_from_lru_list(page, lruvec,
+					       lru + LRU_ACTIVE); // delete from active list, it's Base + LRU_ACTIVE.
 			ClearPageActive(page);
-			ClearPageReferenced(page);  // [?] what's for ?
+			ClearPageReferenced(page); // [?] what's for ?
 			//add_page_to_lru_list(page, lruvec, SEMERU_LRU_FLUSH_LIST);		// add into deactive list.BASE always points to the inactive list.
 
 			__count_vm_event(PGDEACTIVATE);
 			update_page_reclaim_stat(lruvec, file, 0);
-		}else{
+		} else {
 			// Path#2, remove page from inactive list.
 			// if PageLRU(page) is true, it can only in active or inactive list.
 
-			#ifdef DEBUG_FLUSH_LIST
-				printk(KERN_INFO "%s, Transfer page 0x%llx from inactive list to flush list. \n", __func__, (u64)page);
-			#endif
+#ifdef DEBUG_FLUSH_LIST
+			printk(KERN_INFO "%s, Transfer page 0x%llx from inactive list to flush list. \n", __func__,
+			       (u64)page);
+#endif
 
 			// The page may NOT in LRU list.
 			del_page_from_lru_list(page, lruvec, lru); // Base points to inactive list.
@@ -1443,33 +1352,26 @@ static void semeru_lru_flush_to_remote_fn(struct page *page, struct lruvec *lruv
 			//update_page_reclaim_stat(lruvec, file, 0); // only update when deactive from active list.
 		}
 
+#ifdef DEBUG_FLUSH_LIST_DETAIL
+		printk(KERN_INFO
+		       "After enqueue, list_head 0x%llx, prev 0x%llx, next 0x%llx, \n  &(page->lru) 0x%llx, &(page->lru)->prev 0x%llx, &(page->lru)->next 0x%llx  \n",
+		       (u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST], (u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].prev,
+		       (u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].next, (u64) & (page->lru), (u64)page->lru.prev,
+		       (u64)page->lru.next);
+#endif
 
-		#ifdef DEBUG_FLUSH_LIST_DETAIL 
-			printk(KERN_INFO "After enqueue, list_head 0x%llx, prev 0x%llx, next 0x%llx, \n  &(page->lru) 0x%llx, &(page->lru)->prev 0x%llx, &(page->lru)->next 0x%llx  \n",  
-													(u64)&lruvec->lists[SEMERU_LRU_FLUSH_LIST],   	
-													(u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].prev,
-													(u64)lruvec->lists[SEMERU_LRU_FLUSH_LIST].next,
-													(u64)&(page->lru),
-													(u64)page->lru.prev,
-													(u64)page->lru.next);
-		#endif
-
-	}// page is in LRU list.
+	} // page is in LRU list.
 
 	// Add the page into Flush list, no matter if it's in LRU list.
 	add_page_to_lru_list(page, lruvec, SEMERU_LRU_FLUSH_LIST);
 	SetPageLRU(page);
 
 	// debug
-	// print current list's page 
+	// print current list's page
 	//print_lru_flush_list_minor(lruvec, "Enqueue a page to flush-list");
-
 }
 
-
-
 // Semeru End
-
 
 /*
  * Drain pages out of the cpu's pagevecs.
@@ -1501,16 +1403,14 @@ void lru_add_drain_cpu(int cpu)
 	if (pagevec_count(pvec))
 		pagevec_lru_move_fn(pvec, lru_deactivate_fn, NULL);
 
-	// Semeru CPU 
+	// Semeru CPU
 	// Drain the newly added lru_flush_to_remote_pvecs
 	pvec = &per_cpu(lru_flush_to_remote_pvecs, cpu);
 	if (pagevec_count(pvec))
 		pagevec_lru_move_fn(pvec, semeru_lru_flush_to_remote_fn, NULL);
 
-
 	activate_page_drain(cpu);
 }
-
 
 /**
  * deactivate_file_page - forcefully deactivate a file page
@@ -1548,13 +1448,15 @@ void deactivate_file_page(struct page *page)
  */
 void deactivate_page(struct page *page)
 {
-	if (PageLRU(page) && PageActive(page) && !PageUnevictable(page)) {  // Page is in active list
-		struct pagevec *pvec = &get_cpu_var(lru_deactivate_pvecs);  //get this cpu's inactive pagevec.
+	if (PageLRU(page) && PageActive(page) && !PageUnevictable(page)) { // Page is in active list
+		struct pagevec *pvec = &get_cpu_var(lru_deactivate_pvecs); //get this cpu's inactive pagevec.
 
-		get_page(page);  // [?] increase page->_refcount. both actiave_page/deactivate_page need to get_page() ??
-		if (!pagevec_add(pvec, page) || PageCompound(page))  // per-cpu pagevec is full, OR compound page, transfer the page into global inactive list.
+		get_page(page); // [?] increase page->_refcount. both actiave_page/deactivate_page need to get_page() ??
+		if (!pagevec_add(pvec, page) ||
+		    PageCompound(
+			    page)) // per-cpu pagevec is full, OR compound page, transfer the page into global inactive list.
 			pagevec_lru_move_fn(pvec, lru_deactivate_fn, NULL);
-		put_cpu_var(lru_deactivate_pvecs);	// release the per-cpu pagevec.
+		put_cpu_var(lru_deactivate_pvecs); // release the per-cpu pagevec.
 	}
 }
 
@@ -1572,18 +1474,18 @@ void deactivate_page(struct page *page)
  */
 void semeru_flush_page(struct page *page)
 {
-	if (PageLRU(page) && !PageUnevictable(page)) {  // active/inactive pages are both can be transffered flush-page-list
-		struct pagevec *pvec = &get_cpu_var(lru_flush_to_remote_pvecs);  //get this cpu's inactive pagevec.
+	if (PageLRU(page) &&
+	    !PageUnevictable(page)) { // active/inactive pages are both can be transffered flush-page-list
+		struct pagevec *pvec = &get_cpu_var(lru_flush_to_remote_pvecs); //get this cpu's inactive pagevec.
 
-		get_page(page);  // [?] Move a page from lru_cache to flush_list, need to get the page ??
-		if (!pagevec_add(pvec, page) || PageCompound(page))  // #1 Add the page into page vector first
-			pagevec_lru_move_fn(pvec, semeru_lru_flush_to_remote_fn, NULL); //#2 If the page vector is not Empty,transfer its page into the flush_list.
-		put_cpu_var(lru_flush_to_remote_pvecs);	// release the per-cpu pagevec.
+		get_page(page); // [?] Move a page from lru_cache to flush_list, need to get the page ??
+		if (!pagevec_add(pvec, page) || PageCompound(page)) // #1 Add the page into page vector first
+			pagevec_lru_move_fn(
+				pvec, semeru_lru_flush_to_remote_fn,
+				NULL); //#2 If the page vector is not Empty,transfer its page into the flush_list.
+		put_cpu_var(lru_flush_to_remote_pvecs); // release the per-cpu pagevec.
 	}
 }
-
-
-
 
 /*
  * Drain pages out of the cpu's pagevecs.
@@ -1594,37 +1496,30 @@ void lru_flush_list_drain_cpu(int cpu)
 {
 	struct pagevec *pvec;
 
-	// Semeru CPU 
+	// Semeru CPU
 	// Drain the newly added lru_flush_to_remote_pvecs
 	pvec = &per_cpu(lru_flush_to_remote_pvecs, cpu);
 	if (pagevec_count(pvec))
 		pagevec_lru_move_fn(pvec, semeru_lru_flush_to_remote_fn, NULL);
 
-
 	activate_page_drain(cpu);
 }
-
 
 // Drain current cpu's local pagevecs
 void lru_flush_list_drain(void)
 {
-	lru_flush_list_drain_cpu(get_cpu());  // disable preempt, and flush pagevecs
-	put_cpu();		// enable preempt
+	lru_flush_list_drain_cpu(get_cpu()); // disable preempt, and flush pagevecs
+	put_cpu(); // enable preempt
 }
-
-
 
 static void lru_flush_list_drain_per_cpu(struct work_struct *dummy)
 {
-	lru_flush_list_drain();  // drain current cpu's local variable
+	lru_flush_list_drain(); // drain current cpu's local variable
 }
 
 // define a work_struct for each cpu, name is lru_flush_list_drain_work
-// [?] What's the purpose of the work_struct 
-static DEFINE_PER_CPU(struct work_struct, lru_flush_list_drain_work); 
-
-
-
+// [?] What's the purpose of the work_struct
+static DEFINE_PER_CPU(struct work_struct, lru_flush_list_drain_work);
 
 /**
  * Flush all the cpu's local pagevec.
@@ -1632,7 +1527,6 @@ static DEFINE_PER_CPU(struct work_struct, lru_flush_list_drain_work);
  */
 void lru_flush_list_drain_all(void)
 {
-
 	static DEFINE_MUTEX(lock);
 	static struct cpumask has_work;
 	int cpu;
@@ -1645,28 +1539,25 @@ void lru_flush_list_drain_all(void)
 		return;
 
 	mutex_lock(&lock);
-	get_online_cpus();  // acquire all the online cpu
+	get_online_cpus(); // acquire all the online cpu
 	cpumask_clear(&has_work);
 
-	for_each_online_cpu(cpu) {
+	for_each_online_cpu (cpu) {
 		struct work_struct *work = &per_cpu(lru_flush_list_drain_work, cpu); // get hte work_struct of this cpu.
 
-		if (pagevec_count( &per_cpu(lru_flush_to_remote_pvecs, cpu)) ) {
-			INIT_WORK(work, lru_flush_list_drain_per_cpu);	// Assign the flush function to each work_struct
+		if (pagevec_count(&per_cpu(lru_flush_to_remote_pvecs, cpu))) {
+			INIT_WORK(work, lru_flush_list_drain_per_cpu); // Assign the flush function to each work_struct
 			queue_work_on(cpu, mm_percpu_wq, work);
 			cpumask_set_cpu(cpu, &has_work);
 		}
 	}
 
-	for_each_cpu(cpu, &has_work)
+	for_each_cpu (cpu, &has_work)
 		flush_work(&per_cpu(lru_flush_list_drain_work, cpu));
 
-	put_online_cpus();  // release all the online cpu
+	put_online_cpus(); // release all the online cpu
 	mutex_unlock(&lock);
 }
-
-
-
 
 /**
  * [x] Flush the pages in per-cpu pagevec into each memory zone global active/inactive list.
@@ -1675,8 +1566,8 @@ void lru_flush_list_drain_all(void)
  */
 void lru_add_drain(void)
 {
-	lru_add_drain_cpu(get_cpu());  // disable preempt, and flush pagevecs
-	put_cpu();		// enable preempt
+	lru_add_drain_cpu(get_cpu()); // disable preempt, and flush pagevecs
+	put_cpu(); // enable preempt
 }
 
 static void lru_add_drain_per_cpu(struct work_struct *dummy)
@@ -1684,7 +1575,8 @@ static void lru_add_drain_per_cpu(struct work_struct *dummy)
 	lru_add_drain();
 }
 
-static DEFINE_PER_CPU(struct work_struct, lru_add_drain_work); // define a work_struct for each cpu, name is lru_add_drain_work
+static DEFINE_PER_CPU(struct work_struct,
+		      lru_add_drain_work); // define a work_struct for each cpu, name is lru_add_drain_work
 
 void lru_add_drain_all(void)
 {
@@ -1703,21 +1595,19 @@ void lru_add_drain_all(void)
 	get_online_cpus();
 	cpumask_clear(&has_work);
 
-	for_each_online_cpu(cpu) {
+	for_each_online_cpu (cpu) {
 		struct work_struct *work = &per_cpu(lru_add_drain_work, cpu);
 
-		if (pagevec_count(&per_cpu(lru_add_pvec, cpu)) ||
-		    pagevec_count(&per_cpu(lru_rotate_pvecs, cpu)) ||
+		if (pagevec_count(&per_cpu(lru_add_pvec, cpu)) || pagevec_count(&per_cpu(lru_rotate_pvecs, cpu)) ||
 		    pagevec_count(&per_cpu(lru_deactivate_file_pvecs, cpu)) ||
-		    pagevec_count(&per_cpu(lru_deactivate_pvecs, cpu)) ||
-		    need_activate_page_drain(cpu)) {
+		    pagevec_count(&per_cpu(lru_deactivate_pvecs, cpu)) || need_activate_page_drain(cpu)) {
 			INIT_WORK(work, lru_add_drain_per_cpu);
 			queue_work_on(cpu, mm_percpu_wq, work);
 			cpumask_set_cpu(cpu, &has_work);
 		}
 	}
 
-	for_each_cpu(cpu, &has_work)
+	for_each_cpu (cpu, &has_work)
 		flush_work(&per_cpu(lru_add_drain_work, cpu));
 
 	put_online_cpus();
@@ -1769,7 +1659,7 @@ void release_pages(struct page **pages, int nr, bool cold)
 		//#1, decrease and test the _refcount, if no one is referencing it, free it.
 		//    [?] just decrease the _refcount, doesn't invoke the __put_page() to free it ?
 		page = compound_head(page);
-		if (!put_page_testzero(page)) 
+		if (!put_page_testzero(page))
 			continue;
 
 		if (PageCompound(page)) {
@@ -1781,15 +1671,14 @@ void release_pages(struct page **pages, int nr, bool cold)
 			continue;
 		}
 
-		 //#2, remove the pages from it lru list. It may be in active/inactive list.
-		 //    And then put it into the pages_to_free list.
-		if (PageLRU(page)) { 
+		//#2, remove the pages from it lru list. It may be in active/inactive list.
+		//    And then put it into the pages_to_free list.
+		if (PageLRU(page)) {
 			struct pglist_data *pgdat = page_pgdat(page);
 
 			if (pgdat != locked_pgdat) {
 				if (locked_pgdat)
-					spin_unlock_irqrestore(&locked_pgdat->lru_lock,
-									flags);
+					spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
 				lock_batch = 0;
 				locked_pgdat = pgdat;
 				spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
@@ -1814,7 +1703,7 @@ void release_pages(struct page **pages, int nr, bool cold)
 	//	 1) uncharge from this page's corresponding  cgroup
 	//   2) Add the page back to buddy allocator,
 	//		  per_cpu_pages list, and then the global free page list.
-	mem_cgroup_uncharge_list(&pages_to_free);		// uncharge from cgroup. Or will cause cgroup-OOM error.
+	mem_cgroup_uncharge_list(&pages_to_free); // uncharge from cgroup. Or will cause cgroup-OOM error.
 	free_hot_cold_page_list(&pages_to_free, cold); // [?] What's the meaning of hot/cold ?
 }
 EXPORT_SYMBOL(release_pages);
@@ -1839,16 +1728,14 @@ EXPORT_SYMBOL(__pagevec_release);
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 /* used by __split_huge_page_refcount() */
-void lru_add_page_tail(struct page *page, struct page *page_tail,
-		       struct lruvec *lruvec, struct list_head *list)
+void lru_add_page_tail(struct page *page, struct page *page_tail, struct lruvec *lruvec, struct list_head *list)
 {
 	const int file = 0;
 
 	VM_BUG_ON_PAGE(!PageHead(page), page);
 	VM_BUG_ON_PAGE(PageCompound(page_tail), page);
 	VM_BUG_ON_PAGE(PageLRU(page_tail), page);
-	VM_BUG_ON(NR_CPUS != 1 &&
-		  !spin_is_locked(&lruvec_pgdat(lruvec)->lru_lock));
+	VM_BUG_ON(NR_CPUS != 1 && !spin_is_locked(&lruvec_pgdat(lruvec)->lru_lock));
 
 	if (!list)
 		SetPageLRU(page_tail);
@@ -1882,8 +1769,7 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
  * Add the "page" into the specific active/inactive lru list, lruvec.
  *  
  */
-static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec,
-				 void *arg)
+static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec, void *arg)
 {
 	int file = page_is_file_cache(page);
 	int active = PageActive(page);
@@ -1927,13 +1813,10 @@ EXPORT_SYMBOL(__pagevec_lru_add);
  * pagevec_lookup_entries() returns the number of entries which were
  * found.
  */
-unsigned pagevec_lookup_entries(struct pagevec *pvec,
-				struct address_space *mapping,
-				pgoff_t start, unsigned nr_pages,
+unsigned pagevec_lookup_entries(struct pagevec *pvec, struct address_space *mapping, pgoff_t start, unsigned nr_pages,
 				pgoff_t *indices)
 {
-	pvec->nr = find_get_entries(mapping, start, nr_pages,
-				    pvec->pages, indices);
+	pvec->nr = find_get_entries(mapping, start, nr_pages, pvec->pages, indices);
 	return pagevec_count(pvec);
 }
 
@@ -1974,19 +1857,17 @@ void pagevec_remove_exceptionals(struct pagevec *pvec)
  *
  * pagevec_lookup() returns the number of pages which were found.
  */
-unsigned pagevec_lookup(struct pagevec *pvec, struct address_space *mapping,
-		pgoff_t start, unsigned nr_pages)
+unsigned pagevec_lookup(struct pagevec *pvec, struct address_space *mapping, pgoff_t start, unsigned nr_pages)
 {
 	pvec->nr = find_get_pages(mapping, start, nr_pages, pvec->pages);
 	return pagevec_count(pvec);
 }
 EXPORT_SYMBOL(pagevec_lookup);
 
-unsigned pagevec_lookup_tag(struct pagevec *pvec, struct address_space *mapping,
-		pgoff_t *index, int tag, unsigned nr_pages)
+unsigned pagevec_lookup_tag(struct pagevec *pvec, struct address_space *mapping, pgoff_t *index, int tag,
+			    unsigned nr_pages)
 {
-	pvec->nr = find_get_pages_tag(mapping, index, tag,
-					nr_pages, pvec->pages);
+	pvec->nr = find_get_pages_tag(mapping, index, tag, nr_pages, pvec->pages);
 	return pagevec_count(pvec);
 }
 EXPORT_SYMBOL(pagevec_lookup_tag);
@@ -2009,24 +1890,18 @@ void __init swap_setup(void)
 	 */
 }
 
-
-
 //
 // Semeru swap functions
 //
 
-
 static int semeru_test_walk(unsigned long start, unsigned long end, struct mm_walk *walk)
 {
- return 0;
+	return 0;
 }
 
 // define the swap out operations for each level
-static struct mm_walk semeru_swapout_walk_ops = {
- .pmd_entry = semeru_swapout_pmd_range,
- .test_walk = semeru_test_walk
-};
-
+static struct mm_walk semeru_swapout_walk_ops = { .pmd_entry = semeru_swapout_pmd_range,
+						  .test_walk = semeru_test_walk };
 
 /**
  * @brief 
@@ -2040,9 +1915,7 @@ static struct mm_walk semeru_swapout_walk_ops = {
  * 	0 : success.
  * 	non-zero : error code
  */
-int semeru_swapout_page_range(struct mmu_gather *tlb,
-			     struct mm_struct *mm,
-			     unsigned long addr, unsigned long end)
+int semeru_swapout_page_range(struct mmu_gather *tlb, struct mm_struct *mm, unsigned long addr, unsigned long end)
 {
 	struct semeru_swapout_walk_private walk_private = {
 		.pageout = true,
@@ -2062,10 +1935,6 @@ int semeru_swapout_page_range(struct mmu_gather *tlb,
 	return ret;
 }
 
-
-
-
-
 /**
  * @brief Swap out all the pages of a pmd entry.
  * 
@@ -2078,9 +1947,7 @@ int semeru_swapout_page_range(struct mmu_gather *tlb,
  * 	positive value: the page skipped.
  * 	negative : error
  */
-int semeru_swapout_pmd_range(pmd_t *pmd,
-				unsigned long addr, unsigned long end,
-				struct mm_walk *walk)
+int semeru_swapout_pmd_range(pmd_t *pmd, unsigned long addr, unsigned long end, struct mm_walk *walk)
 {
 	struct semeru_swapout_walk_private *private = walk->private;
 	struct mmu_gather *tlb = private->tlb;
@@ -2094,14 +1961,11 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 	size_t skipped_page = 0;
 	size_t reclaimed_page = 0;
 
-
- #if defined(DEBUG_MODE_BRIEF)
-	if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
-	pr_warn("%s, swap out range [0x%lx, 0x%lx)\n",
-		__func__, addr, end);
- #endif
-
-
+#if defined(DEBUG_MODE_BRIEF)
+	if ((addr >= 0x400100000000ULL && addr < 0x400108000000) ||
+	    (addr >= 0x400500000000ULL && addr < 0x400508000000))
+		pr_warn("%s, swap out range [0x%lx, 0x%lx)\n", __func__, addr, end);
+#endif
 
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
 
@@ -2111,7 +1975,6 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 
 		// warning message
 		pr_warn("%s, !! Disable transparanet huge page in madvise!!. not support yet.\n", __func__);
-
 
 		tlb_change_page_size(tlb, HPAGE_PMD_SIZE);
 		ptl = pmd_trans_huge_lock(pmd, vma);
@@ -2167,7 +2030,7 @@ int semeru_swapout_pmd_range(pmd_t *pmd,
 			}
 		} else
 			deactivate_page(page);
-huge_unlock:
+	huge_unlock:
 		spin_unlock(ptl);
 		if (pageout)
 			reclaim_pages(&page_list);
@@ -2178,10 +2041,10 @@ regular_page:
 	if (pmd_trans_unstable(pmd))
 		return 0;
 
-#endif  // end CONFIG_TRANSPARENT_HUGEPAGE
+#endif // end CONFIG_TRANSPARENT_HUGEPAGE
 
 	// tlb_change_page_size(tlb, PAGE_SIZE); // assign the page size info
-	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl);  // lock and get the pte
+	orig_pte = pte = pte_offset_map_lock(vma->vm_mm, pmd, addr, &ptl); // lock and get the pte
 	//flush_tlb_batched_pending(mm);
 	// flush the pending TLB entires ? can we delay this until unmap ?
 	// try_to_unmap_flush();
@@ -2194,12 +2057,13 @@ regular_page:
 			swp_entry_t entry = pte_to_swp_entry(ptent);
 			//int type = swp_type(entry);
 			pgoff_t offset = swp_offset(entry);
-			if (!non_swap_entry(entry) && offset < SWAP_ARRAY_LENGTH) { // yifan: assume this is a valid swap entry
+			if (!non_swap_entry(entry) &&
+			    offset < SWAP_ARRAY_LENGTH) { // yifan: assume this is a valid swap entry
 				struct address_space *swapper_space = swap_address_space(entry);
 				page = find_get_page(swapper_space, swp_offset(entry));
 				if (page) { // page in swap cache
 					// unsigned long rvaddr = retrieve_swap_remmaping_virt_addr_via_offset(offset);
-					// pr_err("YIFAN: %s:%d swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx", 
+					// pr_err("YIFAN: %s:%d swp entry %lx, type %d, offset 0x%lx, rvaddr 0x%lx",
 					// 	__func__, __LINE__, entry.val, type, offset, rvaddr);
 					put_page(page);
 					goto isolate_page;
@@ -2207,14 +2071,14 @@ regular_page:
 			}
 		}
 
-		if (pte_none(ptent)){
+		if (pte_none(ptent)) {
 			// print_skipped_page(ptent, addr, "semeru_swapout_pmd_range ptenone");
 			set_page_status(addr, 1, ptent);
 			skipped_page++;
 			continue;
 		}
 
-		if (!pte_present(ptent)){
+		if (!pte_present(ptent)) {
 			// print_skipped_page(ptent, addr, "semeru_swapout_pmd_range non pte present");
 			set_page_status(addr, 2, ptent);
 			skipped_page++;
@@ -2222,7 +2086,7 @@ regular_page:
 		}
 
 		page = vm_normal_page(vma, addr, ptent);
-		if (!page){
+		if (!page) {
 			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range no page");
 			// pr_warn("semeru_swapout_pmd_range no page, skip virt addr 0x%lx, pte val 0x%lx", addr, ptent.pte);
 			set_page_status(addr, 3, ptent);
@@ -2235,7 +2099,6 @@ regular_page:
 		 * are sure it's worth. Split it if we are only owner.
 		 */
 		if (PageTransCompound(page)) {
-
 			pr_err("%s, should NOT reach here #1.\n", __func__);
 			BUG_ON(1);
 
@@ -2262,7 +2125,7 @@ regular_page:
 		}
 
 		/* Do not interfere with other mappings of this page */
-		if (page_mapcount(page) != 1){
+		if (page_mapcount(page) != 1) {
 			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range page_mapcount");
 			set_page_status(addr, 4, ptent);
 			skipped_page++;
@@ -2273,14 +2136,13 @@ regular_page:
 
 		//the page is accessed and cached in TLB
 		if (pte_young(ptent)) {
-			ptent = ptep_get_and_clear_full(mm, addr, pte,
-							tlb->fullmm);
+			ptent = ptep_get_and_clear_full(mm, addr, pte, tlb->fullmm);
 			ptent = pte_mkold(ptent);
 			set_pte_at(mm, addr, pte, ptent);
 			tlb_remove_tlb_entry(tlb, pte, addr);
 		}
 
-isolate_page:
+	isolate_page:
 		/*
 		 * We are deactivating a page for accelerating reclaiming.
 		 * VM couldn't reclaim the page unless we clear PG_young.
@@ -2291,29 +2153,30 @@ isolate_page:
 		test_and_clear_page_young(page);
 		if (pageout) {
 			if (!isolate_lru_page(page)) {
-				if (PageUnevictable(page)){
+				if (PageUnevictable(page)) {
 					putback_lru_page(page);
-					print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-Unevictable pageunevictable");
+					print_skipped_page(ptent, addr,
+							   "semeru_swapout_pmd_range-Unevictable pageunevictable");
 					set_page_status(addr, 5, ptent);
 					skipped_page++;
-				}else{
+				} else {
 					list_add(&page->lru, &page_list);
 					reclaimed_page++;
 #if defined(DEBUG_MODE_BRIEF)
-if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
-					pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
-						__func__,addr, (size_t)page );
+					if ((addr >= 0x400100000000ULL && addr < 0x400108000000) ||
+					    (addr >= 0x400500000000ULL && addr < 0x400508000000))
+						pr_warn("%s, add page virt 0x%lx, page 0x%lx into reclaim-list \n",
+							__func__, addr, (size_t)page);
 #endif
 					set_page_status(addr, 6, ptent);
 				}
+			} else {
+				// if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
+				pr_warn("%s, enter this buggy path!!! 0x%lx, page 0x%lx\n", __func__, addr,
+					(size_t)page);
+				set_page_status(addr, 7, ptent);
 			}
-			else {
-// if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000ULL && addr < 0x400508000000))
-					pr_warn("%s, enter this buggy path!!! 0x%lx, page 0x%lx\n",
-						__func__,addr, (size_t)page );
-						set_page_status(addr, 7, ptent);
-			}
-		} else{
+		} else {
 			deactivate_page(page);
 			print_skipped_page(ptent, addr, "semeru_swapout_pmd_range-pageout false other");
 			set_page_status(addr, 8, ptent);
@@ -2324,26 +2187,25 @@ if((addr>=0x400100000000ULL && addr < 0x400108000000) || (addr>=0x400500000000UL
 	arch_leave_lazy_mmu_mode();
 	pte_unmap_unlock(orig_pte, ptl);
 
-// #if defined(DEBUG_MODE_BRIEF)
-// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
+	// #if defined(DEBUG_MODE_BRIEF)
+	// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
 	// pr_warn("%s, going to swap %lu pages, skipped %lu pages\n",
 	// 	__func__, reclaimed_page, skipped_page );
-// #endif
+	// #endif
 
 	if (pageout)
 		reclaimed_page = reclaim_pages(&page_list);
 	cond_resched();
-	
-// #if defined(DEBUG_MODE_BRIEF)
-// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
+
+	// #if defined(DEBUG_MODE_BRIEF)
+	// if(((size_t)end>=0x400100000000ULL && (size_t)end <= 0x400108000000) || ((size_t)end>=0x400500000000ULL && (size_t)end <= 0x400508000000))
 	// pr_warn("%s, actually reclaimed %lu pages. others are under writing or skipped.\n",
 	// 	__func__, reclaimed_page);
-// #endif
+	// #endif
 
 	// return skipped_page;
 	return 0;
 }
-
 
 // yifan: debug
 #include <linux/vmalloc.h>
@@ -2409,7 +2271,7 @@ void get_page_status(unsigned long addr)
 	pgoff_t pgoff;
 	if (idx == -1)
 		return;
-	
+
 	pte = PTE_STATUS[idx];
 	entry = pte_to_swp_entry(pte);
 	type = swp_type(entry);
@@ -2420,8 +2282,8 @@ void get_page_status(unsigned long addr)
 	if (unlikely(non_swap_entry(entry))) {
 		pr_err("YIFAN: non swap entry! pte %lx, entry %lx\n", pte.pte, entry.val);
 	}
-	pr_err("YIFAN: page %p: status %d, pte %lx, is_swp %d, swp_type %d, swp_offset %lu, rvaddr 0x%lx\n", 
-		(void *)addr, PAGE_STATUS[idx], pte.pte, is_swap_pte(pte), type, pgoff, rvaddr);
+	pr_err("YIFAN: page %p: status %d, pte %lx, is_swp %d, swp_type %d, swp_offset %lu, rvaddr 0x%lx\n",
+	       (void *)addr, PAGE_STATUS[idx], pte.pte, is_swap_pte(pte), type, pgoff, rvaddr);
 }
 
 bool check_range_eq(unsigned long stt, unsigned long end, int state)
@@ -2443,22 +2305,19 @@ bool check_range_eq(unsigned long stt, unsigned long end, int state)
 	for (i = stt_idx; i < end_idx; i++) {
 		if (PAGE_STATUS[i] != state) {
 			// yifan: this might be too verbose
-			pr_err("page %p state wrong! %d != %d",
-			       (void *)idx2addr(i), PAGE_STATUS[i], state);
+			pr_err("page %p state wrong! %d != %d", (void *)idx2addr(i), PAGE_STATUS[i], state);
 			ret = false;
 		}
 	}
 
 	if (ret) {
-		pr_err("%s range [%p, %p) check succeed!", __func__,
-		       (void *)stt, (void *)end);
+		pr_err("%s range [%p, %p) check succeed!", __func__, (void *)stt, (void *)end);
 	}
 
 	return ret;
 }
 
-bool check_range_neq(unsigned long stt, unsigned long end,
-		     int state)
+bool check_range_neq(unsigned long stt, unsigned long end, int state)
 {
 	return true;
 	bool ret = true;
@@ -2477,15 +2336,14 @@ bool check_range_neq(unsigned long stt, unsigned long end,
 	for (i = stt_idx; i < end_idx; i++) {
 		if (PAGE_STATUS[i] == state) {
 			// yifan: this might be too verbose
-			pr_err("%s - page %p state wrong! %d == %d", __func__,
-			       (void *)idx2addr(i), PAGE_STATUS[i], state);
+			pr_err("%s - page %p state wrong! %d == %d", __func__, (void *)idx2addr(i), PAGE_STATUS[i],
+			       state);
 			ret = false;
 		}
 	}
 
 	if (ret) {
-		pr_err("%s - range [%p, %p) check succeed!", __func__,
-		       (void *)stt, (void *)end);
+		pr_err("%s - range [%p, %p) check succeed!", __func__, (void *)stt, (void *)end);
 	}
 
 	return ret;
