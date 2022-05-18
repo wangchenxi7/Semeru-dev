@@ -14,10 +14,18 @@ SWAP_PARTITION_SIZE="44"
 
 
 # Cause of sudo, NOT use ${HOME}
-home_dir="/mnt/ssd/haoran"
-swap_file="${home_dir}/swapfile" 
+if [ -z "${HOME}" ]
+then
+	home_dir="/home/wcx"
+else
+	home_dir="${HOME}"
+fi
 
+#swap_file="${home_dir}/swapfile" 
 
+swap_file="/home2/wcx-home2/swapfile"
+echo "WARNING - ICT specific, update me:swap_file localtion: ${swap_file}"
+sleep 1
 
 ##
 # Do the action
